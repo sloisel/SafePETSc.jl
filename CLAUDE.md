@@ -48,10 +48,10 @@ This pattern allows `Pkg.test()` to work correctly by having `runtests.jl` call 
 The heart of the package, implementing a reference-counting garbage collection system for MPI-distributed objects.
 
 - **DistributedRefManager**: Manages reference counting across MPI ranks
-  - Rank 0 allocates unique IDs and recycles them; counters are mirrored on all ranks
+  - All ranks allocate IDs deterministically and recycle them via a shared `free_ids` vector; counters remain mirrored on all ranks
   - Finalizers enqueue local releases without MPI
   - At safe points (`check_and_destroy!`), ranks Allgather counts and then Allgatherv release IDs, update mirrored counters identically, and destroy ready objects collectively
-  - Uses `free_ids` for ID recycling to prevent unbounded growth (on rank 0)
+  - Uses `free_ids` for ID recycling to prevent unbounded growth (mirrored on all ranks)
 
 - **DRef{T}**: A wrapper around objects that need coordinated destruction
   - Only works with types that opt-in via the trait system
@@ -73,7 +73,7 @@ The package uses a trait-based approach to control which types can be managed:
 
 ### MPI Communication Flow
 
-1. **Object Creation**: Rank 0 allocates a unique ID, broadcasts to all ranks; all ranks insert an initial counter of 0
+1. **Object Creation**: Every rank runs the same deterministic ID allocation, inserts the new ID into its mirrored `counter_pool`, and initializes `free_ids` state identically
 2. **Automatic Release**: Finalizers enqueue local release IDs (no MPI calls in finalizers)
 3. **Destruction Check**: `check_and_destroy!()` performs a full GC, drains local queues, Allgathers counts and payload to all ranks, each rank updates counters, computes ready IDs, and all ranks destroy their local copies simultaneously (no additional broadcast needed)
 

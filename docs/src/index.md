@@ -40,7 +40,7 @@ SafePETSc consists of two main modules:
 The `SafeMPI` module implements the distributed reference management system:
 
 - **`DRef{T}`**: A distributed reference wrapper that tracks objects across MPI ranks
-- **`DistributedRefManager`**: Allocates IDs on rank 0, mirrors reference counters on all ranks, and performs collective cleanup via Allgather/Allgatherv
+- **`DistributedRefManager`**: Each rank allocates IDs deterministically, mirrors reference counters and the shared `free_ids` pool, and performs collective cleanup via Allgather/Allgatherv
 - **Trait-based destruction**: Types must opt-in to distributed management
 - **Automatic cleanup**: Finalizers enqueue releases locally; `check_and_destroy!` performs GC and collective Allgather at safe points
 

@@ -10,7 +10,7 @@ SafePETSc.jl wraps [PETSc](https://petsc.org/) functionality with automatic dist
 
 ## Features
 
-- **Distributed Reference Counting**: Automatic lifetime management for objects shared across MPI ranks (mirrored counters on all ranks)
+- **Distributed Reference Counting**: Automatic lifetime management for objects shared across MPI ranks (mirrored counters on all ranks, shared ID pool)
 - **Trait-Based Safety**: Explicit opt-in system prevents accidental misuse
 - **PETSc Integration**: Seamless wrapping of PETSc vectors, matrices, and linear solvers
 - **GPU-Friendly**: Prioritizes bulk operations that work efficiently on GPU devices
@@ -68,10 +68,10 @@ MPI.Finalize()
 The core of the package implements a reference-counting garbage collection system:
 
 - **DistributedRefManager**: Coordinates reference counting across MPI ranks
-  - Rank 0 allocates object IDs and recycles them; reference counters are mirrored on all ranks
+  - All ranks run the same ID allocation logic and keep the same `free_ids` vector, ensuring deterministic IDs without a dedicated root
   - Each rank enqueues local releases without MPI; at safe points, ranks collectively `Allgather` release IDs and update counters identically
   - Objects ready for destruction are identified deterministically on all ranks; destruction runs collectively without an extra broadcast
-  - Automatic ID recycling prevents unbounded growth (recycled on rank 0)
+  - Automatic ID recycling prevents unbounded growth via the shared `free_ids` vector
 
 - **DRef{T}**: Generic wrapper for distributed objects requiring coordinated destruction
   - Only works with types that explicitly opt-in via the trait system

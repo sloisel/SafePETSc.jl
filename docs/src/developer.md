@@ -19,19 +19,19 @@ The `SafeMPI` module implements reference counting across MPI ranks:
 │  creates DRef-wrapped objects               │
 └─────────────┬───────────────────────────────┘
               │
-┌─────────────▼───────────────────────────────┐
-│  SafeMPI.DRef{T}                            │
-│  - Wraps object                             │
-│  - Finalizer calls _release!                │
-│  - Enqueues release message                 │
-└─────────────┬───────────────────────────────┘
+┌─────────────▼────────────────────────────────┐
+│  SafeMPI.DRef{T}                             │
+│  - Wraps object                              │
+│  - Finalizer calls _release!                 │
+│  - Enqueues release ID locally (no MPI)      │
+└─────────────┬────────────────────────────────┘
               │
-┌─────────────▼───────────────────────────────┐
-│  DistributedRefManager (Rank 0)             │
-│  - Receives release messages                │
-│  - Tracks reference counts                  │
-│  - Broadcasts destroy commands              │
-└─────────────┬───────────────────────────────┘
+┌─────────────▼────────────────────────────────┐
+│  DistributedRefManager (mirrored on all ranks)│
+│  - Maintains identical counter_pool/free_ids │
+│  - Allgathers release IDs to update counters │
+│  - Pushes ready IDs back into `free_ids`     │
+└─────────────┬────────────────────────────────┘
               │
 ┌─────────────▼───────────────────────────────┐
 │  destroy_obj!(obj)                          │

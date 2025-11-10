@@ -69,21 +69,21 @@ destroy_trait(::Type) = CannotDestroy()
 
 Manages reference counting and collective destruction of distributed objects across MPI ranks.
 
-Rank 0 allocates object IDs and recycles them; a mirrored `counter_pool` is maintained on all ranks. Finalizers enqueue local release IDs without MPI. At safe points (`check_and_destroy!`), ranks collectively Allgather pending releases, update counters identically, and destroy any objects that are ready on all ranks. IDs are recycled on rank 0.
+Every rank keeps an identical `counter_pool`/`free_ids` state and runs the same ID allocation algorithm simultaneously, so there is no special root role. Finalizers simply enqueue release IDs locally. At safe points (`check_and_destroy!`), ranks Allgather pending releases, update mirrored counters deterministically, and destroy ready objects together, pushing the released IDs back into `free_ids` on every rank for reuse.
 
 See also: [`DRef`](@ref), [`check_and_destroy!`](@ref), [`default_manager`](@ref)
 """
 mutable struct DistributedRefManager
     counter_pool::Dict{Int, Int}
     objs::Dict{Int, Any}  # Store the actual objects, not the refs
-    free_ids::Set{Int}
+    free_ids::Vector{Int}
     next_id::Int
     check_count::Int
     pending_releases_lock::Base.Threads.SpinLock
     pending_releases::Vector{Int}
 
     function DistributedRefManager()
-        new(Dict{Int, Int}(), Dict{Int, Any}(), Set{Int}(), 1, 0, Base.Threads.SpinLock(), Int[])
+        new(Dict{Int, Int}(), Dict{Int, Any}(), Int[], 1, 0, Base.Threads.SpinLock(), Int[])
     end
 end
 
@@ -223,27 +223,13 @@ function _drain_pending_releases!(manager::DistributedRefManager)
 end
 
 function allocate_id!(manager::DistributedRefManager)
-    rank = MPI.Comm_rank(MPI.COMM_WORLD)
-    
-    if rank == 0
-        if !isempty(manager.free_ids)
-            counter_id = pop!(manager.free_ids)
-        else
-            counter_id = manager.next_id
-            manager.next_id += 1
-        end
-        manager.counter_pool[counter_id] = 0
+    if !isempty(manager.free_ids)
+        counter_id = pop!(manager.free_ids)
     else
-        counter_id = 0
+        counter_id = manager.next_id
+        manager.next_id += 1
     end
-    
-    # Broadcast chosen id to all ranks, then mirror counter state
-    counter_id = MPI.bcast(counter_id, 0, MPI.COMM_WORLD)
-    if rank != 0 && counter_id != 0
-        # Maintain a mirrored counter on all ranks so that destruction
-        # readiness decisions can be computed locally and deterministically
-        manager.counter_pool[counter_id] = 0
-    end
+    manager.counter_pool[counter_id] = 0
     return counter_id
 end
 
@@ -309,13 +295,10 @@ function _flush_releases!(manager::DistributedRefManager, comm::MPI.Comm)
                 destroy_obj!(obj)
                 delete!(manager.objs, counter_id)
 
-                # Remove from mirrored counter pool on all ranks; only root recycles the id
                 if haskey(manager.counter_pool, counter_id)
                     delete!(manager.counter_pool, counter_id)
                 end
-                if rank == 0
-                    push!(manager.free_ids, counter_id)
-                end
+                push!(manager.free_ids, counter_id)
             end
         end
 

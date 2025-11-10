@@ -31,7 +31,7 @@ y = v .+ 1.0
 
 ### Reference Counting
 
-1. **Mirrored Counters**: Rank 0 allocates a unique ID for each distributed object and broadcasts it; all ranks insert the ID into a mirrored `counter_pool`
+1. **Mirrored Counters**: Each rank runs the same deterministic ID allocation, keeping a mirrored `counter_pool` and shared `free_ids` stack; all ranks recycle IDs identically without a designated root
 2. **Automatic Release**: When a `DRef` is garbage collected, its finalizer enqueues the ID locally (no MPI in finalizers)
 3. **Cleanup Points**: At `check_and_destroy!` calls (automatically throttled at construction), SafePETSc:
    - Triggers garbage collection so finalizers run
@@ -161,7 +161,7 @@ end
 # Access the default manager
 manager = SafeMPI.default_manager[]
 
-# Inspect state (rank 0 only)
+# Inspect state (mirrored on all ranks)
 if MPI.Comm_rank(MPI.COMM_WORLD) == 0
     println("Active objects: ", length(manager.counter_pool))
     println("Free IDs: ", length(manager.free_ids))
@@ -182,7 +182,7 @@ SafeMPI.enable_assert[]  # true
 
 - **Cleanup Cost**: `check_and_destroy!` triggers a full GC and uses collective `Allgather/Allgatherv`
 - **Throttling**: The `max_check_count` parameter reduces overhead by skipping some cleanup points
-- **ID Recycling**: Released IDs are reused to prevent unbounded growth (recycled on rank 0)
+- **ID Recycling**: Released IDs are reused via the shared `free_ids` vector to prevent unbounded growth
 
 ## See Also
 
