@@ -1,5 +1,7 @@
 # SafePETSc.jl
 
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://sloisel.github.io/SafePETSc.jl/stable/) [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://sloisel.github.io/SafePETSc.jl/dev/) [![CI](https://github.com/sloisel/SafePETSc.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/sloisel/SafePETSc.jl/actions/workflows/CI.yml) [![codecov](https://codecov.io/gh/sloisel/SafePETSc.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/sloisel/SafePETSc.jl)
+
 A Julia package providing safe distributed reference management for MPI-based parallel computing with PETSc.
 
 ## Overview
@@ -26,7 +28,7 @@ Or in development mode:
 
 ```julia
 using Pkg
-Pkg.develop(url="https://github.com/yourusername/SafePETSc.jl")
+Pkg.develop(url="https://github.com/sloisel/SafePETSc.jl")
 ```
 
 ## Quick Start
