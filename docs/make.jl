@@ -8,7 +8,7 @@ makedocs(;
     warnonly=[:missing_docs, :cross_references, :docs_block],  # Don't fail on warnings
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://yourusername.github.io/SafePETSc.jl",
+        canonical="https://sloisel.github.io/SafePETSc.jl",
         assets=String[],
     ),
     pages=[
@@ -30,8 +30,7 @@ makedocs(;
     ],
 )
 
-# Uncomment and configure when you have a GitHub repository:
-# deploydocs(;
-#     repo="github.com/yourusername/SafePETSc.jl",
-#     devbranch="main",
-# )
+deploydocs(;
+    repo="github.com/sloisel/SafePETSc.jl",
+    devbranch="main",
+)
