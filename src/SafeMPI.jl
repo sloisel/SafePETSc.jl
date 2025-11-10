@@ -243,7 +243,7 @@ function _release!(ref::DRef)
     end
 
     # Check if object was already destroyed (prevents duplicate release messages)
-    if ref.manager.destroyed[ref.counter_id]
+    if get(ref.manager.destroyed, ref.counter_id, false)
         delete!(ref.manager.destroyed, ref.counter_id)
         return
     end
