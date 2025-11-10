@@ -11,7 +11,10 @@ using LinearAlgebra
 const CVec = Ptr{Cvoid}
 const CMat = Ptr{Cvoid}
 const CKSP = Ptr{Cvoid}
-const default_check = Ref{Int}(10)
+
+# Re-export default_check from SafeMPI for convenient access
+using .SafeMPI: default_check
+export default_check
 
 
 # PETSc constants for matrix operations

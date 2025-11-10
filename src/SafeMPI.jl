@@ -6,9 +6,24 @@ using Serialization
 
 export DistributedRefManager, DRef, check_and_destroy!, destroy_obj!, default_manager, enable_assert, set_assert
 export DestroySupport, CanDestroy, CannotDestroy, destroy_trait, mpi_any, mpierror, @mpiassert
+export default_check
 
 const RELEASE_TAG = 1001
 const RELEASE_DATA_TAG = 1002
+
+"""
+    default_check
+
+Reference to the default throttle count for `check_and_destroy!` calls.
+Set this to control how often automatic cleanup occurs during object creation.
+Default value is 10.
+
+Example:
+```julia
+SafePETSc.default_check[] = 100  # Only cleanup every 100 object creations
+```
+"""
+const default_check = Ref{Int}(10)
 
 """
     DestroySupport
@@ -167,7 +182,7 @@ end
 function _make_ref(obj::T, manager) where T
     # Check and destroy at constructor entry for semiregular collection
     # This consolidates cleanup that was previously scattered across constructors
-    check_and_destroy!(manager; max_check_count=10)
+    check_and_destroy!(manager; max_check_count=default_check[])
 
     counter_id = allocate_id!(manager)
     ref = DRef{T}(obj, manager, counter_id)
