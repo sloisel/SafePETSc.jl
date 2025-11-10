@@ -47,6 +47,7 @@ verify*.log
 
 # Development/scratch files
 dev/
+bench-results.md
 
 # Claude
 .claude/
