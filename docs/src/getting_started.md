@@ -20,6 +20,115 @@ julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) --project=. 
 
 This ensures the correct MPI implementation and Julia executable are used.
 
+### Using System MPI on HPC Clusters
+
+On HPC clusters, you typically need to use the cluster's native MPI library (not the one Julia ships with) for optimal performance and compatibility with the job scheduler. Here's how to configure this:
+
+#### Step 1: Load the MPI Module (Shell Command)
+
+First, load your cluster's MPI module. This is a **shell command** (run in your terminal):
+
+```bash
+# Example for clusters using the module system
+module load openmpi  # or module load mpich, module load intel-mpi, etc.
+```
+
+Check which MPI was loaded:
+
+```bash
+# Shell command
+which mpiexec
+```
+
+#### Step 2: Configure Julia to Use System MPI
+
+You need to tell Julia's MPI.jl package to use the system MPI library instead of its bundled version. This is done using **MPIPreferences.jl**.
+
+Run this **Julia code** (in a Julia REPL or as a script):
+
+```julia
+# Julia code - run this once per project
+using MPIPreferences
+MPIPreferences.use_system_binary()
+```
+
+Alternatively, if you want to specify the MPI library explicitly:
+
+```julia
+# Julia code - specify the exact MPI library path
+using MPIPreferences
+MPIPreferences.use_system_binary(
+    mpiexec = "/path/to/your/mpiexec",  # Get this from 'which mpiexec'
+    vendor = "OpenMPI"  # or "MPICH", "IntelMPI", etc.
+)
+```
+
+#### Step 3: Rebuild MPI.jl
+
+After configuring MPIPreferences, you **must** rebuild MPI.jl. Run this **Julia code**:
+
+```julia
+# Julia code - rebuild MPI.jl to use the system library
+using Pkg
+Pkg.build("MPI"; verbose=true)
+```
+
+#### Step 4: Verify the Configuration
+
+Check that MPI.jl is now using the system MPI. Run this **Julia code**:
+
+```julia
+# Julia code - verify MPI configuration
+using MPI
+MPI.versioninfo()
+```
+
+You should see your cluster's MPI library listed (e.g., OpenMPI 4.1.x, not MPItrampoline).
+
+#### Step 5: Run Your Code
+
+Now you can run your SafePETSc code. On clusters, you typically use the cluster's job scheduler:
+
+```bash
+# Shell command - example SLURM job submission
+sbatch my_job.sh
+```
+
+Example `my_job.sh` script:
+
+```bash
+#!/bin/bash
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=16
+#SBATCH --time=1:00:00
+
+# Load MPI module
+module load openmpi
+
+# Run Julia with MPI
+julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 32 $(Base.julia_cmd()) --project=. my_script.jl`)'
+```
+
+Or for PBS/Torque:
+
+```bash
+#!/bin/bash
+#PBS -l nodes=2:ppn=16
+#PBS -l walltime=1:00:00
+
+cd $PBS_O_WORKDIR
+module load openmpi
+
+julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 32 $(Base.julia_cmd()) --project=. my_script.jl`)'
+```
+
+#### Important Notes
+
+- **One-time setup**: Steps 1-3 only need to be done once per project/environment
+- **Module loading**: You must load the MPI module in your job scripts (Step 1) every time you submit a job
+- **Consistency**: Use the same MPI library that PETSc was built against on your cluster
+- **Project-specific**: The MPI configuration is stored in your project's `LocalPreferences.toml` file
+
 ## Basic Workflow
 
 ### 1. Initialize
@@ -147,6 +256,6 @@ julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) --project=. 
 ## Next Steps
 
 - Learn about [Distributed Reference Management](guide/distributed_refs.md)
-- Explore [Vector Operations](guide/vectors.md)
-- Understand [Matrix Operations](guide/matrices.md)
+- Explore [Vectors](guide/vectors.md)
+- Understand [Matrices](guide/matrices.md)
 - Use [Linear Solvers](guide/solvers.md)

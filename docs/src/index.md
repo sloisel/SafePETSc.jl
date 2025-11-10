@@ -61,7 +61,7 @@ Pkg.add("SafePETSc")
 
 ## Getting Started
 
-See the [Getting Started](@ref) guide for a tutorial on using SafePETSc.
+See the [Getting Started](getting_started.md) guide for a tutorial on using SafePETSc.
 
 ## Index
 
