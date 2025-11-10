@@ -155,4 +155,4 @@ Sébastien Loisel (S.Loisel@hw.ac.uk)
 
 ## License
 
-[Add license information]
+MIT License - see [LICENSE](LICENSE) for details.
