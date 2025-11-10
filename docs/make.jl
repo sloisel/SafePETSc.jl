@@ -1,5 +1,6 @@
 using Documenter
 using SafePETSc
+using SparseArrays
 
 makedocs(;
     modules=[SafePETSc, SafePETSc.SafeMPI],

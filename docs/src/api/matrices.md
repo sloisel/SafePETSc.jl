@@ -18,17 +18,16 @@ SafePETSc.Mat_sum
 ## Concatenation
 
 ```@docs
-Base.cat(::SafePETSc.Mat, ::Vararg{SafePETSc.Mat})
-Base.vcat(::SafePETSc.Mat...)
-Base.hcat(::SafePETSc.Mat...)
-SparseArrays.blockdiag(::SafePETSc.Mat...)
+Base.cat
+Base.vcat
+Base.hcat
+SparseArrays.blockdiag
 ```
 
 ## Sparse Diagonal Matrices
 
 ```@docs
-SparseArrays.spdiagm(::Pair{<:Integer, <:SafePETSc.Vec}...)
-SparseArrays.spdiagm(::Integer, ::Integer, ::Pair{<:Integer, <:SafePETSc.Vec}...)
+SparseArrays.spdiagm
 ```
 
 ## Operations
