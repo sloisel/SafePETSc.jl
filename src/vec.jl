@@ -1,12 +1,43 @@
+# -----------------------------------------------------------------------------
+# Vector Pooling Infrastructure
+# -----------------------------------------------------------------------------
+
 """
-    Vec_uniform(v::Vector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), prefix="") -> DRef{Vec{T}}
+    PooledVec{T}
+
+Stores a pooled PETSc vector along with its partition information for reuse.
+"""
+struct PooledVec{T}
+    vec::PETSc.Vec{T}
+    row_partition::Vector{Int}
+end
+
+"""
+    ENABLE_VEC_POOL
+
+Global flag to enable/disable vector pooling. Set to `false` to disable pooling.
+"""
+const ENABLE_VEC_POOL = Ref{Bool}(true)
+
+# Vector pool: Dict{(nglobal, prefix) => Vector{PooledVec{T}}}
+# Separate pool per PetscScalar type, initialized below
+PETSc.@for_libpetsc begin
+    const $(Symbol(:VEC_POOL_, PetscScalar)) = Dict{Tuple{Int,String}, Vector{PooledVec{$PetscScalar}}}()
+end
+
+# -----------------------------------------------------------------------------
+# Vector Construction
+# -----------------------------------------------------------------------------
+
+"""
+    Vec_uniform(v::Vector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), prefix="") -> Vec{T}
 
 Create a distributed PETSc vector from a Julia vector, asserting uniform distribution across ranks (on MPI.COMM_WORLD).
 
 - `v::Vector{T}` must be identical on all ranks (`mpi_uniform`).
-- `row_partition` is a Vector{Int} of length nranks+1 where partition[i] is the start row (1-indexed) for rank i-1.
-- `prefix` is an optional string prefix for VecSetOptionsPrefix() to set vector-specific command-line options.
-- Returns a DRef that will destroy the PETSc Vec collectively when all ranks release their reference.
+- `row_partition` is a Vector{Int} of length `nranks+1` with 1-based inclusive starts.
+- `prefix` sets `VecSetOptionsPrefix` for PETSc options.
+- Returns a `Vec{T}` (aka `DRef{_Vec{T}}`) managed collectively; by default vectors are returned to a reuse pool when released, not immediately destroyed. Use `ENABLE_VEC_POOL[] = false` or `clear_vec_pool!()` to force destruction.
 """
 function Vec_uniform(v::Vector{T};
                                row_partition::Vector{Int}=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)),
@@ -28,7 +59,7 @@ function Vec_uniform(v::Vector{T};
     nglobal = length(v)
 
     # Create distributed PETSc Vec (no finalizer; collective destroy via DRef)
-    petsc_vec = _vec_create_mpi_for_T(T, nlocal, nglobal, prefix)
+    petsc_vec = _vec_create_mpi_for_T(T, nlocal, nglobal, prefix, row_partition)
 
     # Fill local portion from v
     local_view = PETSc.unsafe_localarray(petsc_vec; read=true, write=true)
@@ -45,17 +76,17 @@ function Vec_uniform(v::Vector{T};
 end
 
 """
-    Vec_sum(v::SparseVector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), prefix="", own_rank_only=false) -> DRef{Vec{T}}
+    Vec_sum(v::SparseVector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), prefix="", own_rank_only=false) -> Vec{T}
 
 Create a distributed PETSc vector by summing sparse vectors across ranks (on MPI.COMM_WORLD).
 
-- `v::SparseVector{T}` can differ across ranks; nonzero entries are summed across all ranks.
-- `row_partition` is a Vector{Int} of length nranks+1 where partition[i] is the start row (1-indexed) for rank i-1.
-- `prefix` is an optional string prefix for VecSetOptionsPrefix() to set vector-specific command-line options.
+- `v::SparseVector{T}` can differ across ranks; nonzeros are summed across all ranks.
+- `row_partition` is a Vector{Int} of length `nranks+1` with 1-based inclusive starts.
+- `prefix` sets `VecSetOptionsPrefix` for PETSc options.
 - `own_rank_only::Bool` (default=false): if true, asserts that all nonzero indices fall within this rank's row partition.
-- Returns a DRef that will destroy the PETSc Vec collectively when all ranks release their reference.
+- Returns a `Vec{T}` managed collectively; by default vectors are returned to a reuse pool when released, not immediately destroyed. Use `ENABLE_VEC_POOL[] = false` or `clear_vec_pool!()` to force destruction.
 
-Uses VecSetValues with ADD_VALUES mode to sum contributions from all ranks.
+Uses `VecSetValues` with `ADD_VALUES` to sum contributions across ranks.
 """
 function Vec_sum(v::SparseVector{T};
                  row_partition::Vector{Int}=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)),
@@ -93,7 +124,7 @@ function Vec_sum(v::SparseVector{T};
     nglobal = length(v)
 
     # Create distributed PETSc Vec (no finalizer; collective destroy via DRef)
-    petsc_vec = _vec_create_mpi_for_T(T, nlocal, nglobal, prefix)
+    petsc_vec = _vec_create_mpi_for_T(T, nlocal, nglobal, prefix, row_partition)
 
     # Extract nonzero indices and values from sparse vector
     nz_indices, nz_values = findnz(v)
@@ -113,12 +144,39 @@ end
 
 # Create a distributed PETSc Vec for a given element type T by dispatching to the
 # underlying PETSc scalar variant via PETSc.@for_libpetsc
-function _vec_create_mpi_for_T(::Type{T}, nlocal::Integer, nglobal::Integer, prefix::String="") where {T}
-    return _vec_create_mpi_impl(T, nlocal, nglobal, prefix)
+# This function checks the pool first before creating a new vector
+function _vec_create_mpi_for_T(::Type{T}, nlocal::Integer, nglobal::Integer, prefix::String="", row_partition::Vector{Int}=Int[]) where {T}
+    return _vec_create_mpi_impl(T, nlocal, nglobal, prefix, row_partition)
+end
+
+# Return a vector to the pool for reuse
+function _return_vec_to_pool!(v::PETSc.Vec{T}, row_partition::Vector{Int}, prefix::String) where {T}
+    return _return_vec_to_pool_impl!(v, row_partition, prefix)
 end
 
 PETSc.@for_libpetsc begin
-    function _vec_create_mpi_impl(::Type{$PetscScalar}, nlocal::Integer, nglobal::Integer, prefix::String="")
+    function _vec_create_mpi_impl(::Type{$PetscScalar}, nlocal::Integer, nglobal::Integer, prefix::String="", row_partition::Vector{Int}=Int[])
+        # Try to get from pool first (only if row_partition is provided for matching)
+        if ENABLE_VEC_POOL[] && !isempty(row_partition)
+            pool = $(Symbol(:VEC_POOL_, PetscScalar))
+            pool_key = (Int(nglobal), prefix)
+            if haskey(pool, pool_key)
+                pool_list = pool[pool_key]
+                # Scan for matching row_partition
+                for (i, pooled) in enumerate(pool_list)
+                    if pooled.row_partition == row_partition
+                        # Found match - remove from pool and return
+                        deleteat!(pool_list, i)
+                        if isempty(pool_list)
+                            delete!(pool, pool_key)
+                        end
+                        return pooled.vec
+                    end
+                end
+            end
+        end
+
+        # Pool miss or pooling disabled - create new vector
         vec = PETSc.Vec{$PetscScalar}(C_NULL)
         PETSc.@chk ccall((:VecCreate, $libpetsc), PETSc.PetscErrorCode,
                          (MPI.MPI_Comm, Ptr{CVec}), MPI.COMM_WORLD, vec)
@@ -139,6 +197,32 @@ PETSc.@for_libpetsc begin
                              (Ptr{CVec},), v)
             v.ptr = C_NULL
         end
+        return nothing
+    end
+
+    function _return_vec_to_pool_impl!(v::PETSc.Vec{$PetscScalar}, row_partition::Vector{Int}, prefix::String)
+        # Don't pool if PETSc is finalizing
+        if PETSc.finalized($petsclib)
+            return nothing
+        end
+
+        # Zero out vector contents before returning to pool
+        PETSc.@chk ccall((:VecZeroEntries, $libpetsc), PETSc.PetscErrorCode,
+                         (CVec,), v)
+
+        # Get global size
+        nglobal = Ref{$PetscInt}(0)
+        PETSc.@chk ccall((:VecGetSize, $libpetsc), PETSc.PetscErrorCode,
+                         (CVec, Ptr{$PetscInt}), v, nglobal)
+
+        # Add to pool
+        pool = $(Symbol(:VEC_POOL_, PetscScalar))
+        pool_key = (Int(nglobal[]), prefix)
+        if !haskey(pool, pool_key)
+            pool[pool_key] = PooledVec{$PetscScalar}[]
+        end
+        push!(pool[pool_key], PooledVec{$PetscScalar}(v, row_partition))
+
         return nothing
     end
 
@@ -426,7 +510,7 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     col_hi = A.obj.col_partition[rank+2] - 1
     nlocal = col_hi - col_lo + 1
 
-    w_petsc = _vec_create_mpi_for_T(T, nlocal, n, v.obj.prefix)
+    w_petsc = _vec_create_mpi_for_T(T, nlocal, n, v.obj.prefix, A.obj.col_partition)
 
     # Perform w = A^T * v using PETSc
     _mat_mult_transpose_vec!(w_petsc, A.obj.A, v.obj.v)
@@ -469,4 +553,50 @@ PETSc.@for_libpetsc begin
                          A, v, w)
         return nothing
     end
+end
+
+# -----------------------------------------------------------------------------
+# Vector Pool Utility Functions
+# -----------------------------------------------------------------------------
+
+"""
+    clear_vec_pool!()
+
+Clear all vectors from the pool, destroying them immediately.
+Useful for testing or explicit memory management.
+"""
+function clear_vec_pool!()
+    # Clear all pools by iterating over each PetscScalar type
+    PETSc.@for_libpetsc begin
+        pool = $(Symbol(:VEC_POOL_, PetscScalar))
+        for (key, vec_list) in pool
+            for pooled in vec_list
+                _destroy_petsc_vec!(pooled.vec)
+            end
+        end
+        empty!(pool)
+    end
+    return nothing
+end
+
+"""
+    get_vec_pool_stats() -> Dict
+
+Return statistics about the current vector pool state.
+Returns a dictionary with keys (nglobal, prefix, type) => count.
+"""
+function get_vec_pool_stats()
+    stats = Dict{Tuple{Int,String,Type}, Int}()
+    # Gather stats from all pools using eval to access the pools
+    # We need to do this carefully because @for_libpetsc creates separate scopes
+    for petsc_scalar in [Float64, ComplexF64]  # Common PETSc scalar types
+        pool_name = Symbol(:VEC_POOL_, petsc_scalar)
+        if isdefined(@__MODULE__, pool_name)
+            pool = getfield(@__MODULE__, pool_name)
+            for (key, vec_list) in pool
+                stats[(key[1], key[2], petsc_scalar)] = length(vec_list)
+            end
+        end
+    end
+    return stats
 end

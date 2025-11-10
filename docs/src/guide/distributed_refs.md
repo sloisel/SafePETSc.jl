@@ -31,28 +31,26 @@ y = v .+ 1.0
 
 ### Reference Counting
 
-1. **Rank 0 as Coordinator**: Rank 0 maintains a reference count for each distributed object
-2. **Automatic Release**: When a `DRef` is garbage collected, its finalizer sends a "release" message to rank 0
-3. **Cleanup Points**: At `check_and_destroy!` calls (automatically inserted at object creation), SafePETSc:
-   - Triggers garbage collection
-   - Processes release messages
-   - Identifies objects where all ranks have released their references
-   - Broadcasts destruction commands
-   - All ranks destroy the object simultaneously
+1. **Mirrored Counters**: Rank 0 allocates a unique ID for each distributed object and broadcasts it; all ranks insert the ID into a mirrored `counter_pool`
+2. **Automatic Release**: When a `DRef` is garbage collected, its finalizer enqueues the ID locally (no MPI in finalizers)
+3. **Cleanup Points**: At `check_and_destroy!` calls (automatically throttled at construction), SafePETSc:
+   - Triggers garbage collection so finalizers run
+   - Drains each rank’s local release queue
+   - Allgathers counts and then Allgathervs the release IDs so every rank sees the same global sequence
+   - Each rank updates its mirrored counters identically and computes the same set of ready IDs
+   - All ranks destroy ready objects simultaneously
 
 ### Architecture
 
 ```
-Rank 0 (Coordinator)          Other Ranks
-┌─────────────────┐          ┌─────────────────┐
-│ counter_pool    │◄─────────│ Send release    │
-│ {id → count}    │ MPI msgs │ messages        │
-│                 │          │                 │
-│ When count ==   │          │                 │
-│ nranks:         │          │                 │
-│ Broadcast       │─────────►│ Receive &       │
-│ destroy command │          │ destroy object  │
-└─────────────────┘          └─────────────────┘
+All ranks (mirrored)
+┌──────────────────────────────────────────────────────────┐
+│ 1) Drain local release queue                             │
+│ 2) Allgather counts; if total==0, quiescent              │
+│ 3) Allgatherv payloads; everyone sees same release IDs   │
+│ 4) Update counters; when count == nranks, mark ready     │
+│ 5) Destroy ready objects on all ranks                    │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Trait-Based Opt-In
@@ -82,9 +80,9 @@ ref = DRef(MyDistributedObject(...))
 
 ## Controlling Cleanup
 
-### Automatic Cleanup
+### Automatic Cleanup and Pooling
 
-Cleanup happens automatically at object creation:
+Cleanup happens automatically at object creation (throttled by `default_check`). For PETSc vectors, the default behavior is to return released vectors to a reuse pool instead of destroying them. Disable pooling with `ENABLE_VEC_POOL[] = false` or call `clear_vec_pool!()` to free pooled vectors.
 
 ```julia
 # Every 10th object creation triggers cleanup
@@ -182,9 +180,9 @@ SafeMPI.enable_assert[]  # true
 
 ## Performance Considerations
 
-- **Cleanup Cost**: `check_and_destroy!` triggers a full GC and MPI synchronization
+- **Cleanup Cost**: `check_and_destroy!` triggers a full GC and uses collective `Allgather/Allgatherv`
 - **Throttling**: The `max_check_count` parameter reduces overhead by skipping some cleanup points
-- **ID Recycling**: Released IDs are reused to prevent integer overflow
+- **ID Recycling**: Released IDs are reused to prevent unbounded growth (recycled on rank 0)
 
 ## See Also
 

@@ -243,3 +243,11 @@ y = y + 1.0
 - [`zeros_like`](@ref)
 - [`ones_like`](@ref)
 - [`fill_like`](@ref)
+
+## Pooling and Cleanup
+
+By default, released PETSc vectors are returned to an internal pool for reuse instead of being destroyed immediately. This reduces allocation overhead in vector-heavy workflows.
+
+- Disable pooling: `ENABLE_VEC_POOL[] = false`
+- Manually free pooled vectors: `clear_vec_pool!()`
+- Cleanup points: `SafeMPI.check_and_destroy!()` performs GC and collective release processing; vectors in use remain valid, pooled vectors remain available for reuse

@@ -35,6 +35,11 @@ julia --project=. -e 'using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) 
 
 This pattern allows `Pkg.test()` to work correctly by having `runtests.jl` call `mpiexec` to spawn the test workers.
 
+### Git and github.
+
+- Do not automatically commit changes into git unless asked by the user.
+- Do not automatically push commits to github unless asked by the user.
+
 ## Architecture
 
 ### Core Components
@@ -43,13 +48,14 @@ This pattern allows `Pkg.test()` to work correctly by having `runtests.jl` call 
 The heart of the package, implementing a reference-counting garbage collection system for MPI-distributed objects.
 
 - **DistributedRefManager**: Manages reference counting across MPI ranks
-  - Rank 0 acts as the coordinator, tracking reference counts via `counter_pool`
-  - Other ranks send release messages to rank 0 using MPI tag `RELEASE_TAG = 1001`
-  - Uses `free_ids` for ID recycling to prevent unbounded growth
+  - Rank 0 allocates unique IDs and recycles them; counters are mirrored on all ranks
+  - Finalizers enqueue local releases without MPI
+  - At safe points (`check_and_destroy!`), ranks Allgather counts and then Allgatherv release IDs, update mirrored counters identically, and destroy ready objects collectively
+  - Uses `free_ids` for ID recycling to prevent unbounded growth (on rank 0)
 
 - **DRef{T}**: A wrapper around objects that need coordinated destruction
   - Only works with types that opt-in via the trait system
-  - Tracks whether the local reference has been released
+  - Local releases are gathered collectively at safe points
 
 ### Trait-Based Destruction System
 
@@ -67,9 +73,9 @@ The package uses a trait-based approach to control which types can be managed:
 
 ### MPI Communication Flow
 
-1. **Object Creation**: Rank 0 allocates a unique ID, broadcasts to all ranks
-2. **Automatic Release**: When a DistributedRef is garbage collected, its finalizer automatically calls `release!()`, which either increments the local counter (rank 0) or sends a message to rank 0
-3. **Destruction Check**: `check_and_destroy!()` polls for release messages, identifies objects ready for destruction (count == nranks), broadcasts IDs, and all ranks destroy their local copies simultaneously
+1. **Object Creation**: Rank 0 allocates a unique ID, broadcasts to all ranks; all ranks insert an initial counter of 0
+2. **Automatic Release**: Finalizers enqueue local release IDs (no MPI calls in finalizers)
+3. **Destruction Check**: `check_and_destroy!()` performs a full GC, drains local queues, Allgathers counts and payload to all ranks, each rank updates counters, computes ready IDs, and all ranks destroy their local copies simultaneously (no additional broadcast needed)
 
 ### Key Design Decisions
 

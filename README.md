@@ -6,15 +6,16 @@ A Julia package providing safe distributed reference management for MPI-based pa
 
 ## Overview
 
-SafePETSc.jl wraps [PETSc](https://petsc.org/) functionality with automatic distributed garbage collection, ensuring that objects distributed across MPI ranks are safely destroyed only when all ranks have released their references. This prevents common pitfalls in parallel computing such as premature destruction, memory leaks, and race conditions.
+SafePETSc.jl wraps [PETSc](https://petsc.org/) functionality with automatic distributed garbage collection, ensuring that objects distributed across MPI ranks are released only when all ranks have released their references. By default, PETSc vectors are pooled for reuse rather than destroyed immediately; you can disable pooling or clear the pool to free memory. This prevents common pitfalls in parallel computing such as premature destruction, memory leaks, and race conditions.
 
 ## Features
 
-- **Distributed Reference Counting**: Automatic lifetime management for objects shared across MPI ranks
+- **Distributed Reference Counting**: Automatic lifetime management for objects shared across MPI ranks (mirrored counters on all ranks)
 - **Trait-Based Safety**: Explicit opt-in system prevents accidental misuse
 - **PETSc Integration**: Seamless wrapping of PETSc vectors, matrices, and linear solvers
 - **GPU-Friendly**: Prioritizes bulk operations that work efficiently on GPU devices
-- **Finalizer-Based Cleanup**: Automatic resource release via Julia's garbage collector
+- **Finalizer-Based Cleanup**: Automatic resource release via Julia's garbage collector at safe points
+- **Vector Pooling**: Released vectors are returned to a reuse pool by default; disable with `ENABLE_VEC_POOL[] = false` or call `clear_vec_pool!()` to free pooled vectors
 - **ID Recycling**: Prevents integer overflow in long-running applications
 
 ## Installation
@@ -56,7 +57,7 @@ A = Mat_uniform(sparse([1.0 2.0; 3.0 4.0]))
 b = Vec_uniform([1.0, 2.0])
 x = A \ b
 
-# Resources are automatically cleaned up when references are released
+# Resources are automatically released at safe points; vectors are pooled by default
 MPI.Finalize()
 ```
 
@@ -67,9 +68,10 @@ MPI.Finalize()
 The core of the package implements a reference-counting garbage collection system:
 
 - **DistributedRefManager**: Coordinates reference counting across MPI ranks
-  - Rank 0 acts as coordinator, tracking counts via `counter_pool`
-  - Other ranks send release messages using MPI tag `RELEASE_TAG = 1001`
-  - Automatic ID recycling prevents unbounded growth
+  - Rank 0 allocates object IDs and recycles them; reference counters are mirrored on all ranks
+  - Each rank enqueues local releases without MPI; at safe points, ranks collectively `Allgather` release IDs and update counters identically
+  - Objects ready for destruction are identified deterministically on all ranks; destruction runs collectively without an extra broadcast
+  - Automatic ID recycling prevents unbounded growth (recycled on rank 0)
 
 - **DRef{T}**: Generic wrapper for distributed objects requiring coordinated destruction
   - Only works with types that explicitly opt-in via the trait system

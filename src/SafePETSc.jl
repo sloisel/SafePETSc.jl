@@ -68,8 +68,7 @@ end
 
 A distributed PETSc vector with element type `T`, managed by SafePETSc's reference counting system.
 
-`Vec{T}` is actually a type alias for `DRef{_Vec{T}}`, meaning vectors are automatically
-tracked across MPI ranks and destroyed collectively when all ranks release their references.
+`Vec{T}` is a type alias for `DRef{_Vec{T}}` and is released collectively when all ranks release their references. By default, released PETSc vectors are returned to an internal pool for reuse rather than destroyed immediately. To force destruction instead of pooling, set `ENABLE_VEC_POOL[] = false`, or call `clear_vec_pool!()` to free pooled vectors.
 
 # Construction
 
@@ -99,7 +98,7 @@ y = A * x           # Matrix-vector product
 LinearAlgebra.mul!(y, A, x)  # In-place version
 ```
 
-See also: [`Vec_uniform`](@ref), [`Vec_sum`](@ref), [`Mat`](@ref), [`zeros_like`](@ref)
+See also: [`Vec_uniform`](@ref), [`Vec_sum`](@ref), [`Mat`](@ref), [`zeros_like`](@ref), [`ENABLE_VEC_POOL`](@ref), [`clear_vec_pool!`](@ref)
 """
 const Vec{T} = SafeMPI.DRef{_Vec{T}}
 
@@ -168,6 +167,7 @@ export Mat, Mat_uniform, Mat_sum
 export Solver
 export petsc_options_insert_string
 export Init, Initialized
+export ENABLE_VEC_POOL, clear_vec_pool!, get_vec_pool_stats
 
 include("vec.jl")
 include("mat.jl")
@@ -177,8 +177,13 @@ include("ksp.jl")
 SafeMPI.destroy_trait(::Type{_Vec{T}}) where {T} = SafeMPI.CanDestroy()
 
 function SafeMPI.destroy_obj!(x::_Vec{T}) where {T}
-    # Collective destroy of the underlying PETSc Vec on MPI.COMM_WORLD
-    _destroy_petsc_vec!(x.v)
+    # Try to return to pool, otherwise destroy
+    if ENABLE_VEC_POOL[]
+        _return_vec_to_pool!(x.v, x.row_partition, x.prefix)
+    else
+        # Collective destroy of the underlying PETSc Vec on MPI.COMM_WORLD
+        _destroy_petsc_vec!(x.v)
+    end
     return nothing
 end
 

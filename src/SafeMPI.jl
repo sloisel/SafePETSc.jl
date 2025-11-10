@@ -69,15 +69,7 @@ destroy_trait(::Type) = CannotDestroy()
 
 Manages reference counting and collective destruction of distributed objects across MPI ranks.
 
-Rank 0 acts as the coordinator, tracking reference counts in `counter_pool`. Other ranks
-send release messages to rank 0 using MPI tag `RELEASE_TAG = 1001`. Released IDs are
-recycled via `free_ids` to prevent unbounded growth in long-running applications.
-
-# Fields
-- `destroy_early::Bool`: If `false` (default), objects are destroyed when all ranks release them.
-  If `true`, objects are destroyed as soon as any rank releases. **Warning**: Setting this to
-  `true` is safe for pure SPMD code, but unsafe when rank-dependent flow control leads to
-  different local storage of PETSc data structures across ranks.
+Rank 0 allocates object IDs and recycles them; a mirrored `counter_pool` is maintained on all ranks. Finalizers enqueue local release IDs without MPI. At safe points (`check_and_destroy!`), ranks collectively Allgather pending releases, update counters identically, and destroy any objects that are ready on all ranks. IDs are recycled on rank 0.
 
 See also: [`DRef`](@ref), [`check_and_destroy!`](@ref), [`default_manager`](@ref)
 """
@@ -89,11 +81,9 @@ mutable struct DistributedRefManager
     check_count::Int
     pending_releases_lock::Base.Threads.SpinLock
     pending_releases::Vector{Int}
-    destroy_early::Bool  # If true, destroy when counter_pool[id] >= 1; if false, when == nranks
-    destroyed::Dict{Int, Bool}  # Track which objects have been destroyed to prevent duplicate releases
 
     function DistributedRefManager()
-        new(Dict{Int, Int}(), Dict{Int, Any}(), Set{Int}(), 1, 0, Base.Threads.SpinLock(), Int[], false, Dict{Int, Bool}())
+        new(Dict{Int, Int}(), Dict{Int, Any}(), Set{Int}(), 1, 0, Base.Threads.SpinLock(), Int[])
     end
 end
 
@@ -187,7 +177,6 @@ function _make_ref(obj::T, manager) where T
     counter_id = allocate_id!(manager)
     ref = DRef{T}(obj, manager, counter_id)
     manager.objs[counter_id] = obj  # Store the object itself (strong reference)
-    manager.destroyed[counter_id] = false  # Initialize destroyed tracking
     # Add finalizer to automatically release when GC'd
     finalizer(_release!, ref)
     return ref
@@ -248,18 +237,19 @@ function allocate_id!(manager::DistributedRefManager)
         counter_id = 0
     end
     
-    return MPI.bcast(counter_id, 0, MPI.COMM_WORLD)
+    # Broadcast chosen id to all ranks, then mirror counter state
+    counter_id = MPI.bcast(counter_id, 0, MPI.COMM_WORLD)
+    if rank != 0 && counter_id != 0
+        # Maintain a mirrored counter on all ranks so that destruction
+        # readiness decisions can be computed locally and deterministically
+        manager.counter_pool[counter_id] = 0
+    end
+    return counter_id
 end
 
 function _release!(ref::DRef)
     # Check if MPI is still initialized (guards against calls after MPI_Finalize)
     if !MPI.Initialized() || MPI.Finalized()
-        return
-    end
-
-    # Check if object was already destroyed (prevents duplicate release messages)
-    if get(ref.manager.destroyed, ref.counter_id, false)
-        delete!(ref.manager.destroyed, ref.counter_id)
         return
     end
 
@@ -282,65 +272,34 @@ function _flush_releases!(manager::DistributedRefManager, comm::MPI.Comm)
         local_ids = _drain_pending_releases!(manager)
         local_n = length(local_ids)
         
-        # 2) Global check for quiescence
-        total_n = MPI.Allreduce(local_n, +, comm)
-        if total_n == 0
+        # 2) Allgather counts to all ranks and check for quiescence
+        counts = MPI.Allgather(local_n, comm)
+        total_ids = Int(sum(counts))
+        if total_ids == 0
             return nothing  # quiescent, done
         end
         
-        # 3) Gather counts on root
-        if rank == 0
-            counts = MPI.Gather(local_n, 0, comm)
-        else
-            MPI.Gather(local_n, 0, comm)  # participate in collective but don't use result
+        # 4) Allgatherv payloads so every rank has the global list of ids
+        counts32 = Int32.(counts)
+        displs32 = Vector{Int32}(undef, nranks)
+        displs32[1] = 0
+        @inbounds for i in 2:nranks
+            displs32[i] = displs32[i-1] + counts32[i-1]
         end
-        
-        # 4) Move payloads to root (collective Gatherv)
-        all_ids = Int[]
-        if rank == 0
-            # Build displacements from gathered counts
-            counts32 = Int32.(counts)
-            displs32 = Vector{Int32}(undef, nranks)
-            displs32[1] = 0
-            @inbounds for i in 2:nranks
-                displs32[i] = displs32[i-1] + counts32[i-1]
-            end
-            total = Int(sum(counts32))
-            recvbuf = Vector{Int}(undef, total)
-            MPI.Gatherv!(local_ids, MPI.VBuffer(recvbuf, counts32, displs32), 0, comm)
-            all_ids = recvbuf
+        recvbuf = Vector{Int}(undef, total_ids)
+        MPI.Allgatherv!(local_ids, MPI.VBuffer(recvbuf, counts32, displs32), comm)
+        all_ids = recvbuf
 
-            # 5) Process releases on root: update refcounts and build destroy commands
-            ready_ids = Int[]
-            threshold = manager.destroy_early ? 1 : nranks
-            for counter_id in all_ids
-                if haskey(manager.counter_pool, counter_id)
-                    manager.counter_pool[counter_id] += 1
-                    if manager.counter_pool[counter_id] >= threshold
-                        push!(ready_ids, counter_id)
-                    end
+        # 5) Process releases locally but deterministically: update refcounts and build destroy commands
+        ready_ids = Int[]
+        for counter_id in all_ids
+            if haskey(manager.counter_pool, counter_id)
+                manager.counter_pool[counter_id] += 1
+                if manager.counter_pool[counter_id] >= nranks
+                    push!(ready_ids, counter_id)
                 end
-                # Silently ignore stale/duplicate releases for IDs not in pool
             end
-            
-            # 6A) Broadcast decisions: first length, then payload
-            num_ready = length(ready_ids)
-            num_ready = MPI.bcast(num_ready, 0, comm)
-            if num_ready > 0
-                MPI.Bcast!(ready_ids, 0, comm)
-            end
-        else
-            # Non-root: contribute payload (possibly zero-length) to Gatherv
-            MPI.Gatherv!(local_ids, nothing, 0, comm)
-            
-            # 6A) Receive decisions
-            num_ready = MPI.bcast(0, 0, comm)  # receive length from root
-            if num_ready > 0
-                ready_ids = Vector{Int}(undef, num_ready)
-                MPI.Bcast!(ready_ids, 0, comm)
-            else
-                ready_ids = Int[]
-            end
+            # Silently ignore stale/duplicate releases for IDs not in pool
         end
         
         # 7) Execute destroy commands on all ranks
@@ -350,18 +309,16 @@ function _flush_releases!(manager::DistributedRefManager, comm::MPI.Comm)
                 destroy_obj!(obj)
                 delete!(manager.objs, counter_id)
 
-                if rank == 0
+                # Remove from mirrored counter pool on all ranks; only root recycles the id
+                if haskey(manager.counter_pool, counter_id)
                     delete!(manager.counter_pool, counter_id)
+                end
+                if rank == 0
                     push!(manager.free_ids, counter_id)
                 end
             end
         end
 
-        # Mark all ready_ids as destroyed (prevents duplicate releases from later finalizers)
-        for counter_id in ready_ids
-            manager.destroyed[counter_id] = true
-        end
-        
         # 8) Loop again to catch cascaded finalizers/releases
     #end
     
@@ -391,12 +348,11 @@ See also: [`DRef`](@ref), [`DistributedRefManager`](@ref)
 """
 function check_and_destroy!(manager=default_manager[]; max_check_count::Integer=1)
     manager.check_count += 1
-    if manager.check_count < max_check_count
-        return
+    if manager.check_count >= max_check_count
+        manager.check_count = 0
+        GC.gc(false)
     end
-    manager.check_count = 0
 
-    GC.gc(true)  # full GC
     # Flush all pending releases at this safe point
     _flush_releases!(manager, MPI.COMM_WORLD)
 

@@ -4,7 +4,7 @@ SafePETSc is a Julia package that provides distributed reference management for 
 
 ## Features
 
-- **Automatic Memory Management**: Distributed objects are automatically tracked and destroyed when all MPI ranks have released their references
+- **Automatic Memory Management**: Distributed objects are automatically tracked and released when all MPI ranks have released their references
 - **GPU-Friendly Operations**: Prioritizes PETSc's native GPU-compatible operations
 - **Type-Safe API**: Uses Julia's trait system to ensure only appropriate types are managed
 - **Efficient Cleanup**: Centralized cleanup with configurable throttling to reduce overhead
@@ -40,15 +40,15 @@ SafePETSc consists of two main modules:
 The `SafeMPI` module implements the distributed reference management system:
 
 - **`DRef{T}`**: A distributed reference wrapper that tracks objects across MPI ranks
-- **`DistributedRefManager`**: Coordinates reference counting with rank 0 as the coordinator
+- **`DistributedRefManager`**: Allocates IDs on rank 0, mirrors reference counters on all ranks, and performs collective cleanup via Allgather/Allgatherv
 - **Trait-based destruction**: Types must opt-in to distributed management
-- **Automatic cleanup**: Finalizers trigger cleanup, with explicit `check_and_destroy!` control points
+- **Automatic cleanup**: Finalizers enqueue releases locally; `check_and_destroy!` performs GC and collective Allgather at safe points
 
 ### SafePETSc
 
 The main module wraps PETSc functionality with safe distributed reference management:
 
-- **`Vec{T}`**: Distributed vectors with automatic memory management
+- **`Vec{T}`**: Distributed vectors with automatic memory management and pooling (vectors are returned to a reuse pool by default)
 - **`Mat{T}`**: Distributed matrices with GPU-friendly operations
 - **`Solver{T}`**: Linear solver objects that can be reused
 
