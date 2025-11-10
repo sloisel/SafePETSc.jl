@@ -58,6 +58,12 @@ Rank 0 acts as the coordinator, tracking reference counts in `counter_pool`. Oth
 send release messages to rank 0 using MPI tag `RELEASE_TAG = 1001`. Released IDs are
 recycled via `free_ids` to prevent unbounded growth in long-running applications.
 
+# Fields
+- `destroy_early::Bool`: If `false` (default), objects are destroyed when all ranks release them.
+  If `true`, objects are destroyed as soon as any rank releases. **Warning**: Setting this to
+  `true` is safe for pure SPMD code, but unsafe when rank-dependent flow control leads to
+  different local storage of PETSc data structures across ranks.
+
 See also: [`DRef`](@ref), [`check_and_destroy!`](@ref), [`default_manager`](@ref)
 """
 mutable struct DistributedRefManager
@@ -68,9 +74,11 @@ mutable struct DistributedRefManager
     check_count::Int
     pending_releases_lock::Base.Threads.SpinLock
     pending_releases::Vector{Int}
+    destroy_early::Bool  # If true, destroy when counter_pool[id] >= 1; if false, when == nranks
+    destroyed::Dict{Int, Bool}  # Track which objects have been destroyed to prevent duplicate releases
 
     function DistributedRefManager()
-        new(Dict{Int, Int}(), Dict{Int, Any}(), Set{Int}(), 1, 0, Base.Threads.SpinLock(), Int[])
+        new(Dict{Int, Int}(), Dict{Int, Any}(), Set{Int}(), 1, 0, Base.Threads.SpinLock(), Int[], false, Dict{Int, Bool}())
     end
 end
 
@@ -164,6 +172,7 @@ function _make_ref(obj::T, manager) where T
     counter_id = allocate_id!(manager)
     ref = DRef{T}(obj, manager, counter_id)
     manager.objs[counter_id] = obj  # Store the object itself (strong reference)
+    manager.destroyed[counter_id] = false  # Initialize destroyed tracking
     # Add finalizer to automatically release when GC'd
     finalizer(_release!, ref)
     return ref
@@ -233,6 +242,12 @@ function _release!(ref::DRef)
         return
     end
 
+    # Check if object was already destroyed (prevents duplicate release messages)
+    if ref.manager.destroyed[ref.counter_id]
+        delete!(ref.manager.destroyed, ref.counter_id)
+        return
+    end
+
     # Simply enqueue for processing at the next safe point (check_and_destroy!)
     # NO MPI CALLS HERE - this is safe to call from GC finalizers
     _enqueue_release!(ref.manager, ref.counter_id)
@@ -282,10 +297,11 @@ function _flush_releases!(manager::DistributedRefManager, comm::MPI.Comm)
 
             # 5) Process releases on root: update refcounts and build destroy commands
             ready_ids = Int[]
+            threshold = manager.destroy_early ? 1 : nranks
             for counter_id in all_ids
                 if haskey(manager.counter_pool, counter_id)
                     manager.counter_pool[counter_id] += 1
-                    if manager.counter_pool[counter_id] == nranks
+                    if manager.counter_pool[counter_id] >= threshold
                         push!(ready_ids, counter_id)
                     end
                 end
@@ -318,12 +334,17 @@ function _flush_releases!(manager::DistributedRefManager, comm::MPI.Comm)
                 obj = manager.objs[counter_id]
                 destroy_obj!(obj)
                 delete!(manager.objs, counter_id)
-                
+
                 if rank == 0
                     delete!(manager.counter_pool, counter_id)
                     push!(manager.free_ids, counter_id)
                 end
             end
+        end
+
+        # Mark all ready_ids as destroyed (prevents duplicate releases from later finalizers)
+        for counter_id in ready_ids
+            manager.destroyed[counter_id] = true
         end
         
         # 8) Loop again to catch cascaded finalizers/releases
