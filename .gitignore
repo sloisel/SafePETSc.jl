@@ -1,0 +1,52 @@
+# Julia
+Manifest.toml
+LocalPreferences.toml
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+deps/deps.jl
+deps/build.log
+deps/downloads/
+deps/usr/
+deps/src/
+
+# Test/debug output
+*.log
+out_*.txt
+out_*.log
+test_output*.txt
+spd*.log
+final*.log
+verify*.log
+
+# Compiled binaries and debug symbols
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.dSYM/
+*.out
+
+# Development/scratch files
+dev/
+
+# Claude
+.claude/
