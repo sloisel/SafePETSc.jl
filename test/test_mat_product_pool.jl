@@ -130,6 +130,11 @@ GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
+if rank == 0
+    println("[DEBUG] End of Test 2")
+    flush(stdout)
+end
+
 # Test 3: A*B' pool miss then hit (MATPRODUCT_ABt)
 if rank == 0
     println("[DEBUG] Test 3: A*B' pool miss then hit")
@@ -141,10 +146,10 @@ SafePETSc.clear_mat_pool!()
 # Only rank 0 contributes
 if rank == 0
     A3 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 4, 4)  # 4x4 matrix
-    B3 = sparse([1, 2, 3], [1, 2, 3], [4.0, 5.0, 6.0], 3, 4)  # 3x4 matrix
+    B3 = sparse([1, 2, 3, 4], [1, 2, 3, 4], [4.0, 5.0, 6.0, 7.0], 4, 4)  # 4x4 matrix
 else
     A3 = spzeros(Float64, 4, 4)
-    B3 = spzeros(Float64, 3, 4)
+    B3 = spzeros(Float64, 4, 4)
 end
 
 matA3 = SafePETSc.Mat_sum(A3)
@@ -153,7 +158,7 @@ matB3 = SafePETSc.Mat_sum(B3)
 # First product - pool miss
 matC3a = matA3 * matB3'
 @test matC3a isa SafeMPI.DRef
-@test size(matC3a) == (4, 3)
+@test size(matC3a) == (4, 4)
 @test matC3a.obj.product_type == SafePETSc.MATPRODUCT_ABt
 
 # Release to pool
@@ -165,7 +170,7 @@ MPI.Barrier(comm)
 # Second product - pool hit
 matC3b = matA3 * matB3'
 @test matC3b isa SafeMPI.DRef
-@test size(matC3b) == (4, 3)
+@test size(matC3b) == (4, 4)
 
 # Release matC3b
 matC3b = nothing

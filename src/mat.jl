@@ -308,11 +308,13 @@ PETSc.@for_libpetsc begin
 
         pool = $(Symbol(:MAT_POOL_PRODUCT_, PetscScalar))
         pool_key = (product_type, hash_A, hash_B)
+
         if !haskey(pool, pool_key)
             return nothing
         end
 
         pool_list = pool[pool_key]
+
         for (i, pooled) in enumerate(pool_list)
             if pooled.row_partition == row_partition && pooled.col_partition == col_partition
                 # Found match - remove from pool and return

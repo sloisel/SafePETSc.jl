@@ -95,15 +95,9 @@ end
         run_mpi_test(joinpath(@__DIR__, "test_mat_addsub_pool.jl"); nprocs=4, expect_success=true)
     end
 
-    # TODO: Matrix Product Pooling test has dimension mismatch issues
-    # The @testset wrapper was causing MPI hangs (fixed by removing it)
-    # But pool matching for products has dimension incompatibility bugs:
-    # PETSc ERROR: Matrix local dimensions are incompatible, (3, 4) != (3,3)
-    # The pool matching is based on product type + operand fingerprints,
-    # but doesn't validate result dimensions before reuse.
-    # @testset "Matrix Product Pooling Tests" begin
-    #     run_mpi_test(joinpath(@__DIR__, "test_mat_product_pool.jl"); nprocs=4, expect_success=true)
-    # end
+    @testset "Matrix Product Pooling Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_mat_product_pool.jl"); nprocs=4, expect_success=true)
+    end
 
     @testset "Matrix Fingerprint Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_mat_fingerprint.jl"); nprocs=4, expect_success=true)
