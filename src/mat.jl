@@ -537,14 +537,18 @@ function Base.:+(A::Mat{T}, B::Mat{T}) where {T}
                 A.obj.row_partition == B.obj.row_partition &&
                 A.obj.col_partition == B.obj.col_partition) "Matrix addition requires same prefix, identical sizes, and identical partitions"
 
-    # Compute union local structure and final fingerprint
-    nloc, iaU, jaU = _local_union_structure(A.obj.A, B.obj.A)
-    local_hash = _local_structure_hash(nloc, iaU, jaU)
-    fp = _structure_fingerprint(local_hash, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
+    # Skip expensive union structure and fingerprint computation when pooling is disabled
+    Cmat = nothing
+    if ENABLE_MAT_POOL[]
+        # Compute union local structure and final fingerprint
+        nloc, iaU, jaU = _local_union_structure(A.obj.A, B.obj.A)
+        local_hash = _local_structure_hash(nloc, iaU, jaU)
+        fp = _structure_fingerprint(local_hash, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
 
-    # Try to reuse from pool by fingerprint
-    Cmat = _try_get_from_nonproduct_pool_by_fingerprint(A.obj.row_partition, A.obj.col_partition,
-                                                        A.obj.prefix, fp, T)
+        # Try to reuse from pool by fingerprint
+        Cmat = _try_get_from_nonproduct_pool_by_fingerprint(A.obj.row_partition, A.obj.col_partition,
+                                                            A.obj.prefix, fp, T)
+    end
     # Create if miss
     if Cmat === nothing
         nr = MPI.Comm_rank(MPI.COMM_WORLD)
@@ -581,13 +585,17 @@ function Base.:-(A::Mat{T}, B::Mat{T}) where {T}
                 A.obj.row_partition == B.obj.row_partition &&
                 A.obj.col_partition == B.obj.col_partition) "Matrix subtraction requires same prefix, identical sizes, and identical partitions"
 
-    # Compute union local structure and final fingerprint
-    nloc, iaU, jaU = _local_union_structure(A.obj.A, B.obj.A)
-    local_hash = _local_structure_hash(nloc, iaU, jaU)
-    fp = _structure_fingerprint(local_hash, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
+    # Skip expensive union structure and fingerprint computation when pooling is disabled
+    Cmat = nothing
+    if ENABLE_MAT_POOL[]
+        # Compute union local structure and final fingerprint
+        nloc, iaU, jaU = _local_union_structure(A.obj.A, B.obj.A)
+        local_hash = _local_structure_hash(nloc, iaU, jaU)
+        fp = _structure_fingerprint(local_hash, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
 
-    Cmat = _try_get_from_nonproduct_pool_by_fingerprint(A.obj.row_partition, A.obj.col_partition,
+        Cmat = _try_get_from_nonproduct_pool_by_fingerprint(A.obj.row_partition, A.obj.col_partition,
                                                         A.obj.prefix, fp, T)
+    end
     if Cmat === nothing
         nr = MPI.Comm_rank(MPI.COMM_WORLD)
         nlocal_rows = A.obj.row_partition[nr+2] - A.obj.row_partition[nr+1]

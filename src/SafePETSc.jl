@@ -146,7 +146,8 @@ function _Mat{T}(A::PETSc.Mat{T}, row_partition::Vector{Int},
                  col_partition::Vector{Int}, prefix::String;
                  product_type::Cint=MATPRODUCT_UNSPECIFIED,
                  product_args::Vector{Vector{UInt8}}=Vector{UInt8}[]) where T
-    fingerprint = _matrix_fingerprint(A, row_partition, col_partition, prefix)
+    # Skip expensive fingerprint computation when pooling is disabled
+    fingerprint = ENABLE_MAT_POOL[] ? _matrix_fingerprint(A, row_partition, col_partition, prefix) : UInt8[]
     return _Mat{T}(A, row_partition, col_partition, prefix, fingerprint,
                    product_type, product_args)
 end
