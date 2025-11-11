@@ -445,35 +445,45 @@ M, N = 4, 6  # rectangular to exercise dimension swap
 A_data = reshape(Float64.(1:(M*N)), M, N)
 drA = SafePETSc.Mat_uniform(A_data; prefix="dense_")
 
-# Use the new constructor to materialize the adjoint: B = Mat(A')
-drB = Mat(drA')
+mat_type = SafePETSc._mat_type_string(drA.obj.A)
+if mat_type == "mpidense"
+    if rank == 0
+        println("[DEBUG] Test 19 skipped: MPIDENSE does not support transpose reuse")
+        flush(stdout)
+    end
+    SafeMPI.check_and_destroy!()
+    MPI.Barrier(comm)
+else
+    # Use the new constructor to materialize the adjoint: B = Mat(A')
+    drB = Mat(drA')
 
-# First transpose into preallocated B
-transpose!(drB, drA)
+    # First transpose into preallocated B
+    transpose!(drB, drA)
 
-# Compare B with A'
-B_local = SafePETSc._mat_to_local_sparse(drB)
-B_sum = zeros(N, M)
-MPI.Reduce!(Matrix(B_local), B_sum, +, 0, comm)
-if rank == 0
-    @test all(isapprox.(B_sum, A_data', rtol=1e-10))
+    # Compare B with A'
+    B_local = SafePETSc._mat_to_local_sparse(drB)
+    B_sum = zeros(N, M)
+    MPI.Reduce!(Matrix(B_local), B_sum, +, 0, comm)
+    if rank == 0
+        @test all(isapprox.(B_sum, A_data', rtol=1e-10))
+    end
+
+    # Modify A values without changing sparsity and transpose again, reusing B
+    PETSc.@chk ccall((:MatScale, PETSc.libpetsc), PETSc.PetscErrorCode,
+                     (PETSc.CMat, Float64), drA.obj.A, 2.0)
+    transpose!(drB, drA)
+
+    # Validate B now equals (2A)'
+    B_local2 = SafePETSc._mat_to_local_sparse(drB)
+    B_sum2 = zeros(N, M)
+    MPI.Reduce!(Matrix(B_local2), B_sum2, +, 0, comm)
+    if rank == 0
+        @test all(isapprox.(B_sum2, (2 .* A_data)', rtol=1e-10))
+    end
+
+    SafeMPI.check_and_destroy!()
+    MPI.Barrier(comm)
 end
-
-# Modify A values without changing sparsity and transpose again, reusing B
-PETSc.@chk ccall((:MatScale, PETSc.libpetsc), PETSc.PetscErrorCode,
-                 (PETSc.CMat, Float64), drA.obj.A, 2.0)
-transpose!(drB, drA)
-
-# Validate B now equals (2A)'
-B_local2 = SafePETSc._mat_to_local_sparse(drB)
-B_sum2 = zeros(N, M)
-MPI.Reduce!(Matrix(B_local2), B_sum2, +, 0, comm)
-if rank == 0
-    @test all(isapprox.(B_sum2, (2 .* A_data)', rtol=1e-10))
-end
-
-SafeMPI.check_and_destroy!()
-MPI.Barrier(comm)
 
 if rank == 0
     println("[DEBUG] All tests completed")
