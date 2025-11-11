@@ -119,7 +119,7 @@ struct BenchResult
     op::String
     kind::String
     assert_on::Bool
-    default_check::Int
+    pools_on::Bool
     seconds::Float64
 end
 
@@ -152,9 +152,10 @@ function warmup_and_avg_time(f::Function; target_seconds::Float64=0.05, max_reps
     return dt / nrep
 end
 
-function bench_create_vec(assert_on::Bool, dcheck::Int)
+function bench_create_vec(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "V"
     # Warmup + adaptive measure
     dt = warmup_and_avg_time(() -> begin
@@ -162,34 +163,37 @@ function bench_create_vec(assert_on::Bool, dcheck::Int)
         # keep v in scope; destruction happens after barrier
         nothing
     end)
-    return BenchResult("create_vec", "vec", assert_on, dcheck, dt)
+    return BenchResult("create_vec", "vec", assert_on, pools_on, dt)
 end
 
-function bench_create_mat_dense(assert_on::Bool, dcheck::Int)
+function bench_create_mat_dense(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "D"
     dt = warmup_and_avg_time(() -> begin
         A = make_dense_mat(prefix)
         nothing
     end)
-    return BenchResult("create_mat", "dense", assert_on, dcheck, dt)
+    return BenchResult("create_mat", "dense", assert_on, pools_on, dt)
 end
 
-function bench_create_mat_sparse(assert_on::Bool, dcheck::Int)
+function bench_create_mat_sparse(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "S"
     dt = warmup_and_avg_time(() -> begin
         A = make_sparse_diag_mat(prefix)
         nothing
     end)
-    return BenchResult("create_mat", "sparse_diag", assert_on, dcheck, dt)
+    return BenchResult("create_mat", "sparse_diag", assert_on, pools_on, dt)
 end
 
-function bench_matvec_dense(assert_on::Bool, dcheck::Int)
+function bench_matvec_dense(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "D"
     A = make_dense_mat(prefix)
     x = make_vec(prefix)
@@ -197,12 +201,13 @@ function bench_matvec_dense(assert_on::Bool, dcheck::Int)
         y = A * x
         nothing
     end)
-    return BenchResult("matvec", "dense", assert_on, dcheck, dt)
+    return BenchResult("matvec", "dense", assert_on, pools_on, dt)
 end
 
-function bench_matvec_sparse(assert_on::Bool, dcheck::Int)
+function bench_matvec_sparse(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "S"
     A = make_sparse_diag_mat(prefix)
     x = make_vec(prefix)
@@ -210,12 +215,13 @@ function bench_matvec_sparse(assert_on::Bool, dcheck::Int)
         y = A * x
         nothing
     end)
-    return BenchResult("matvec", "sparse_diag", assert_on, dcheck, dt)
+    return BenchResult("matvec", "sparse_diag", assert_on, pools_on, dt)
 end
 
-function bench_solve_dense(assert_on::Bool, dcheck::Int)
+function bench_solve_dense(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "D"
     # Use SPD matrix (identity) for robust solve
     rowp = make_rowpart(N)
@@ -227,12 +233,13 @@ function bench_solve_dense(assert_on::Bool, dcheck::Int)
         x = A \ b
         nothing
     end)
-    return BenchResult("solve", "dense_spd", assert_on, dcheck, dt)
+    return BenchResult("solve", "dense_spd", assert_on, pools_on, dt)
 end
 
-function bench_solve_sparse(assert_on::Bool, dcheck::Int)
+function bench_solve_sparse(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "S"
     # Use sparse SPD (diagonal ones)
     A = make_sparse_diag_mat(prefix)
@@ -241,12 +248,13 @@ function bench_solve_sparse(assert_on::Bool, dcheck::Int)
         x = A \ b
         nothing
     end)
-    return BenchResult("solve", "sparse_diag", assert_on, dcheck, dt)
+    return BenchResult("solve", "sparse_diag", assert_on, pools_on, dt)
 end
 
-function bench_matmat_dense(assert_on::Bool, dcheck::Int)
+function bench_matmat_dense(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "D"
     A = make_dense_mat(prefix)
     B = make_dense_mat(prefix)
@@ -254,12 +262,13 @@ function bench_matmat_dense(assert_on::Bool, dcheck::Int)
         C = A * B
         nothing
     end)
-    return BenchResult("matmat", "dense", assert_on, dcheck, dt)
+    return BenchResult("matmat", "dense", assert_on, pools_on, dt)
 end
 
-function bench_matmat_sparse(assert_on::Bool, dcheck::Int)
+function bench_matmat_sparse(assert_on::Bool, pools_on::Bool)
     SafeMPI.set_assert(assert_on)
-    SafePETSc.default_check[] = dcheck
+    SafePETSc.ENABLE_VEC_POOL[] = pools_on
+    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     prefix = "S"
     A = make_sparse_diag_mat(prefix)
     B = make_sparse_diag_mat(prefix)
@@ -267,7 +276,7 @@ function bench_matmat_sparse(assert_on::Bool, dcheck::Int)
         C = A * B
         nothing
     end)
-    return BenchResult("matmat", "sparse_diag", assert_on, dcheck, dt)
+    return BenchResult("matmat", "sparse_diag", assert_on, pools_on, dt)
 end
 
 # -----------------------------------------------------------------------------
@@ -279,20 +288,20 @@ function run_all_benchmarks()
     setup_mat_options(; dense_prefix="D", sparse_prefix="S")
 
     results = BenchResult[]
-    checks = [1, 3, 10, 100]
     asserts = [false, true]
+    pools = [false, true]
 
     for a in asserts
-        for c in checks
-            push!(results, bench_create_vec(a, c))
-            push!(results, bench_create_mat_dense(a, c))
-            push!(results, bench_create_mat_sparse(a, c))
-            push!(results, bench_matvec_dense(a, c))
-            push!(results, bench_matvec_sparse(a, c))
-            push!(results, bench_solve_dense(a, c))
-            push!(results, bench_solve_sparse(a, c))
-            push!(results, bench_matmat_dense(a, c))
-            push!(results, bench_matmat_sparse(a, c))
+        for p in pools
+            push!(results, bench_create_vec(a, p))
+            push!(results, bench_create_mat_dense(a, p))
+            push!(results, bench_create_mat_sparse(a, p))
+            push!(results, bench_matvec_dense(a, p))
+            push!(results, bench_matvec_sparse(a, p))
+            push!(results, bench_solve_dense(a, p))
+            push!(results, bench_solve_sparse(a, p))
+            push!(results, bench_matmat_dense(a, p))
+            push!(results, bench_matmat_sparse(a, p))
             # Drain between scenarios to keep memory stable
             SafeMPI.check_and_destroy!()
         end
@@ -323,27 +332,23 @@ function render_markdown(results::Vector{BenchResult})
     pairs = collect(keys(bypair))
     sort!(pairs)
 
-    checks = sort(unique(r.default_check for r in results))
-
     for (op, kind) in pairs
         println(out, @sprintf("## %s — %s", op, kind))
         println(out)
-        # Build lookup maps: assert_on => (default_check => seconds)
-        times = Dict{Bool, Dict{Int, Float64}}()
-        times[false] = Dict{Int, Float64}()
-        times[true]  = Dict{Int, Float64}()
+        # Build lookup map: (assert_on, pools_on) => seconds
+        times = Dict{Tuple{Bool,Bool}, Float64}()
 
         for r in bypair[(op, kind)]
-            times[r.assert_on][r.default_check] = r.seconds
+            times[(r.assert_on, r.pools_on)] = r.seconds
         end
 
-        println(out, "| default_check | assert=F | assert=T |")
-        println(out, "|---:|---:|---:|")
-        for c in checks
-            t_f = get(times[false], c, NaN)
-            t_t = get(times[true], c, NaN)
-            println(out, @sprintf("| %d | %.6f | %.6f |", c, t_f, t_t))
-        end
+        println(out, "| assert=F, pools=F | assert=F, pools=T | assert=T, pools=F | assert=T, pools=T |")
+        println(out, "|---:|---:|---:|---:|")
+        t_ff = get(times, (false, false), NaN)
+        t_ft = get(times, (false, true), NaN)
+        t_tf = get(times, (true, false), NaN)
+        t_tt = get(times, (true, true), NaN)
+        println(out, @sprintf("| %.6f | %.6f | %.6f | %.6f |", t_ff, t_ft, t_tf, t_tt))
         println(out)
     end
 
