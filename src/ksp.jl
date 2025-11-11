@@ -202,7 +202,7 @@ function Base.:\(A::Mat{T}, b::Vec{T}) where {T}
     row_hi = A.obj.row_partition[rank+2] - 1
     nlocal = row_hi - row_lo + 1
 
-    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, A.obj.prefix)
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, A.obj.prefix, A.obj.row_partition)
 
     # Solve
     _ksp_solve_vec!(ksp_obj.obj.ksp, x_petsc, b.obj.v)
@@ -357,7 +357,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, b::Vec{T}) where {T}
     col_hi = A.obj.col_partition[rank+2] - 1
     nlocal = col_hi - col_lo + 1
 
-    x_petsc = _vec_create_mpi_for_T(T, nlocal, n, A.obj.prefix)
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, n, A.obj.prefix, A.obj.col_partition)
 
     # Solve transpose
     _ksp_solve_transpose_vec!(ksp_obj.obj.ksp, x_petsc, b.obj.v)
@@ -428,7 +428,7 @@ function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     row_hi = A.obj.row_partition[rank+2] - 1
     nlocal = row_hi - row_lo + 1
 
-    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, A.obj.prefix)
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, A.obj.prefix, A.obj.row_partition)
 
     # Solve transpose (b'/A is equivalent to A'\b)
     _ksp_solve_transpose_vec!(ksp_obj.obj.ksp, x_petsc, b.obj.v)
@@ -553,7 +553,47 @@ PETSc.@for_libpetsc begin
         return unsafe_string(type_ptr[])
     end
 
-    function _mat_transpose(A::PETSc.Mat{$PetscScalar}, prefix::String="")
+    function _mat_transpose(A::PETSc.Mat{$PetscScalar}, prefix::String="",
+                           row_partition::Vector{Int}=Int[], col_partition::Vector{Int}=Int[])
+        # Try to get from pool first (if partitions are provided)
+        # Note: transpose swaps dimensions, so we look for (N, M, prefix) in the pool
+        if ENABLE_MAT_POOL[] && !isempty(row_partition) && !isempty(col_partition)
+            # Get dimensions of the result (transpose of A)
+            M_ref = Ref{$PetscInt}(0)
+            N_ref = Ref{$PetscInt}(0)
+            PETSc.@chk ccall((:MatGetSize, $libpetsc), PETSc.PetscErrorCode,
+                             (CMat, Ptr{$PetscInt}, Ptr{$PetscInt}), A, M_ref, N_ref)
+            M = Int(M_ref[])  # rows of A
+            N = Int(N_ref[])  # cols of A
+
+            # Result will be N×M
+            pool = $(Symbol(:MAT_POOL_NONPRODUCT_, PetscScalar))
+            pool_key = (N, M, prefix)
+            if haskey(pool, pool_key)
+                pool_list = pool[pool_key]
+                # Scan for matching partitions (swapped for transpose)
+                for (i, pooled) in enumerate(pool_list)
+                    if pooled.row_partition == row_partition && pooled.col_partition == col_partition
+                        # Found match - remove from pool and return
+                        deleteat!(pool_list, i)
+                        if isempty(pool_list)
+                            delete!(pool, pool_key)
+                        end
+                        # Still need to compute the transpose into this matrix
+                        # Use MAT_REUSE_MATRIX path
+                        C_ref = Ref{PETSc.CMat}(pooled.mat.ptr)
+                        PETSc.@chk ccall((:MatTransposeSetPrecursor, $libpetsc), PETSc.PetscErrorCode,
+                                         (PETSc.CMat, PETSc.CMat), pooled.mat, A)
+                        PETSc.@chk ccall((:MatTranspose, $libpetsc), PETSc.PetscErrorCode,
+                                         (PETSc.CMat, Cint, Ptr{PETSc.CMat}),
+                                         A, MAT_REUSE_MATRIX, C_ref)
+                        return pooled.mat
+                    end
+                end
+            end
+        end
+
+        # Pool miss or pooling disabled - create new matrix
         # Use PETSc MatTranspose with MAT_INITIAL_MATRIX to create a new matrix
         C_ptr = Ref{PETSc.CMat}(C_NULL)
         PETSc.@chk ccall((:MatTranspose, $libpetsc), PETSc.PetscErrorCode,
