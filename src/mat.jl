@@ -1167,6 +1167,10 @@ Each pair `k => v` places the vector `v` on the `k`-th diagonal:
 All vectors must have the same element type `T` and prefix. The matrix dimensions
 are inferred from the diagonal positions and vector lengths, or can be specified explicitly.
 
+Optional keyword arguments:
+- `row_partition`: override the default equal-row partitioning (length `nranks+1`, start at 1, end at `m+1`, non-decreasing). Defaults to `default_row_partition(m, nranks)`.
+- `col_partition`: override the default equal-column partitioning (length `nranks+1`, start at 1, end at `n+1`, non-decreasing). Defaults to `default_row_partition(n, nranks)`.
+
 # Examples
 ```julia
 # Create a tridiagonal matrix
@@ -1176,7 +1180,7 @@ A = spdiagm(-1 => lower, 0 => diag, 1 => upper)
 B = spdiagm(100, 100, 0 => v1, 1 => v2)
 ```
 """
-function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...) where {T}
+function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; row_partition::Vector{Int}=Int[], col_partition::Vector{Int}=Int[]) where {T}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
@@ -1203,16 +1207,29 @@ function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...) where {T}
         end
     end
 
-    return spdiagm(m, n, kv...)
+    return spdiagm(m, n, kv...; row_partition=row_partition, col_partition=col_partition)
 end
 
-function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...) where {T}
+function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
+                 row_partition::Vector{Int}=Int[], col_partition::Vector{Int}=Int[]) where {T}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
 
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    # Determine partitions (use defaults if none provided)
+    result_row_partition = isempty(row_partition) ? default_row_partition(m, nranks) : row_partition
+    result_col_partition = isempty(col_partition) ? default_row_partition(n, nranks) : col_partition
+    row_partition_valid = length(result_row_partition) == nranks + 1 &&
+                          result_row_partition[1] == 1 &&
+                          result_row_partition[end] == m + 1 &&
+                          all(r -> result_row_partition[r] <= result_row_partition[r+1], 1:nranks)
+    col_partition_valid = length(result_col_partition) == nranks + 1 &&
+                          result_col_partition[1] == 1 &&
+                          result_col_partition[end] == n + 1 &&
+                          all(c -> result_col_partition[c] <= result_col_partition[c+1], 1:nranks)
 
     # Validate all vectors have same prefix and correct lengths - single @mpiassert (pulled out of loop)
     first_prefix = kv[1].second.obj.prefix
@@ -1221,7 +1238,7 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...) where
         required_len = k >= 0 ? min(m, n - k) : min(m + k, n)
         length(v) <= required_len  # allow shorter vectors; remaining entries are treated as zeros
     end for (k, v) in kv)
-    @mpiassert (all_same_prefix && all_correct_lengths) "All vectors must have the same prefix and lengths not exceeding the allowed diagonal span"
+    @mpiassert (all_same_prefix && all_correct_lengths && row_partition_valid && col_partition_valid) "All vectors must have the same prefix, lengths not exceeding the allowed diagonal span, and row_partition/col_partition must each have length nranks+1, start at 1, end at m+1/n+1 respectively, and be non-decreasing"
 
     # Build local sparse contributions explicitly (I, J, V) using only locally-owned
     # entries from each distributed diagonal vector. This avoids global VecGetValues
@@ -1265,8 +1282,6 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...) where
     end
 
     # Add structural zeros for all diagonal positions in this rank's row partition
-    result_row_partition = default_row_partition(m, nranks)
-    result_col_partition = default_row_partition(n, nranks)
     row_lo = result_row_partition[rank+1]
     row_hi = result_row_partition[rank+2] - 1
 
