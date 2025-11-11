@@ -4,6 +4,8 @@ LocalPreferences.toml
 
 # Jupyter
 .ipynb_checkpoints/
+.ipynb_checkpoints/
+src/.ipynb_checkpoints/
 *.ipynb
 
 # IDE

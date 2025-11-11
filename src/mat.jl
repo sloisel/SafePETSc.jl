@@ -552,6 +552,7 @@ function Base.:+(A::Mat{T}, B::Mat{T}) where {T}
                                      size(A,1), size(A,2), A.obj.prefix,
                                      A.obj.row_partition, A.obj.col_partition)
         _mat_zero_entries!(Cmat)
+        PETSc.assemble(Cmat)  # Must assemble before MatAXPY
         structure = DIFFERENT_NONZERO_PATTERN
     else
         structure = SUBSET_NONZERO_PATTERN
@@ -593,6 +594,7 @@ function Base.:-(A::Mat{T}, B::Mat{T}) where {T}
                                      size(A,1), size(A,2), A.obj.prefix,
                                      A.obj.row_partition, A.obj.col_partition)
         _mat_zero_entries!(Cmat)
+        PETSc.assemble(Cmat)  # Must assemble before MatAXPY
         structure = DIFFERENT_NONZERO_PATTERN
     else
         structure = SUBSET_NONZERO_PATTERN
