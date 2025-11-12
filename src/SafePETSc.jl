@@ -184,8 +184,10 @@ function _Mat{T}(A::PETSc.Mat{T}, row_partition::Vector{Int},
               "row_partition=$row_partition, col_partition=$col_partition")
     end
 
-    # Skip expensive fingerprint computation when pooling is disabled
-    fingerprint = ENABLE_MAT_POOL[] ? _matrix_fingerprint(A, row_partition, col_partition, prefix) : UInt8[]
+    # Only compute fingerprints for product matrices (used for pooling)
+    # Non-product matrices (from Mat_sum/Mat_uniform) don't use pooling, so skip the expensive SHA-1 computation
+    fingerprint = (ENABLE_MAT_POOL[] && product_type != MATPRODUCT_UNSPECIFIED) ?
+                  _matrix_fingerprint(A, row_partition, col_partition, prefix) : UInt8[]
     return _Mat{T}(A, row_partition, col_partition, prefix, fingerprint,
                    product_type, product_args)
 end
