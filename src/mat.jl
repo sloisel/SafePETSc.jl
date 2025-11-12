@@ -21,11 +21,9 @@ Global flag to enable/disable matrix pooling. Set to `false` to disable pooling.
 """
 const ENABLE_MAT_POOL = Ref{Bool}(true)
 
-# Matrix pools: separate pools per PetscScalar type
-# Non-product pool: Dict{(M, N, prefix) => Vector{PooledMat{T}}}
+# Matrix pools: separate product pools per PetscScalar type
 # Product pool: Dict{(product_type, hash1, hash2) => Vector{PooledMat{T}}}
 PETSc.@for_libpetsc begin
-    const $(Symbol(:MAT_POOL_NONPRODUCT_, PetscScalar)) = Dict{Tuple{Int,Int,String}, Vector{PooledMat{$PetscScalar}}}()
     const $(Symbol(:MAT_POOL_PRODUCT_, PetscScalar)) = Dict{Tuple{Cint,Vector{UInt8},Vector{UInt8}}, Vector{PooledMat{$PetscScalar}}}()
 end
 
@@ -194,27 +192,7 @@ PETSc.@for_libpetsc begin
     function _mat_create_mpi_impl(::Type{$PetscScalar}, nlocal_rows::Integer, nlocal_cols::Integer,
                                   nglobal_rows::Integer, nglobal_cols::Integer, prefix::String="",
                                   row_partition::Vector{Int}=Int[], col_partition::Vector{Int}=Int[])
-        # Try to get from pool first (only if partitions are provided for matching)
-        if ENABLE_MAT_POOL[] && !isempty(row_partition) && !isempty(col_partition)
-            pool = $(Symbol(:MAT_POOL_NONPRODUCT_, PetscScalar))
-            pool_key = (Int(nglobal_rows), Int(nglobal_cols), prefix)
-            if haskey(pool, pool_key)
-                pool_list = pool[pool_key]
-                # Scan for matching row_partition and col_partition
-                for (i, pooled) in enumerate(pool_list)
-                    if pooled.row_partition == row_partition && pooled.col_partition == col_partition
-                        # Found match - remove from pool and return
-                        deleteat!(pool_list, i)
-                        if isempty(pool_list)
-                            delete!(pool, pool_key)
-                        end
-                        return pooled.mat
-                    end
-                end
-            end
-        end
-
-        # Pool miss or pooling disabled - create new matrix
+        # Always create new matrix (non-product pooling disabled)
         mat = PETSc.Mat{$PetscScalar}(C_NULL)
         PETSc.@chk ccall((:MatCreate, $libpetsc), PETSc.PetscErrorCode,
                          (MPI.MPI_Comm, Ptr{CMat}), MPI.COMM_WORLD, mat)
@@ -283,20 +261,6 @@ function _try_get_from_product_pool(product_type::Cint, hash_A::Vector{UInt8}, h
     return _try_get_from_product_pool_impl(product_type, hash_A, hash_B, row_partition, col_partition, T)
 end
 
-"""
-    _try_get_from_nonproduct_pool_by_fingerprint(row_partition, col_partition, prefix, fingerprint, ::Type{T})
-
-Try to retrieve a non-product pooled Mat matching the given partitions, prefix, and structure fingerprint.
-Returns a pooled PETSc.Mat{T} or nothing on miss.
-"""
-function _try_get_from_nonproduct_pool_by_fingerprint(row_partition::Vector{Int},
-                                                      col_partition::Vector{Int},
-                                                      prefix::String,
-                                                      fingerprint::Vector{UInt8},
-                                                      ::Type{T}) where {T}
-    return _try_get_from_nonproduct_pool_by_fingerprint_impl(row_partition, col_partition, prefix, fingerprint, T)
-end
-
 PETSc.@for_libpetsc begin
     # Implementation for specific PetscScalar type
     function _try_get_from_product_pool_impl(product_type::Cint, hash_A::Vector{UInt8}, hash_B::Vector{UInt8},
@@ -328,36 +292,6 @@ PETSc.@for_libpetsc begin
         return nothing
     end
 
-    function _try_get_from_nonproduct_pool_by_fingerprint_impl(row_partition::Vector{Int},
-                                                               col_partition::Vector{Int},
-                                                               prefix::String,
-                                                               fingerprint::Vector{UInt8},
-                                                               ::Type{$PetscScalar})
-        if !ENABLE_MAT_POOL[] || isempty(row_partition) || isempty(col_partition)
-            return nothing
-        end
-
-        M = row_partition[end] - 1
-        N = col_partition[end] - 1
-        pool = $(Symbol(:MAT_POOL_NONPRODUCT_, PetscScalar))
-        pool_key = (Int(M), Int(N), prefix)
-        if !haskey(pool, pool_key)
-            return nothing
-        end
-
-        pool_list = pool[pool_key]
-        for (i, pooled) in enumerate(pool_list)
-            if pooled.row_partition == row_partition && pooled.col_partition == col_partition && pooled.fingerprint == fingerprint
-                deleteat!(pool_list, i)
-                if isempty(pool_list)
-                    delete!(pool, pool_key)
-                end
-                return pooled.mat
-            end
-        end
-        return nothing
-    end
-
     function _return_mat_to_pool_impl!(m::PETSc.Mat{$PetscScalar}, row_partition::Vector{Int},
                                        col_partition::Vector{Int}, prefix::String,
                                        product_type::Cint, product_args::Vector{Vector{UInt8}})
@@ -373,36 +307,18 @@ PETSc.@for_libpetsc begin
         # Compute fingerprint for this matrix (structure + prefix + partitions)
         fp = _matrix_fingerprint(m, row_partition, col_partition, prefix)
 
-        # Get matrix dimensions
-        M_ref = Ref{$PetscInt}(0)
-        N_ref = Ref{$PetscInt}(0)
-        PETSc.@chk ccall((:MatGetSize, $libpetsc), PETSc.PetscErrorCode,
-                         (CMat, Ptr{$PetscInt}, Ptr{$PetscInt}), m, M_ref, N_ref)
-        M = Int(M_ref[])
-        N = Int(N_ref[])
-
-        # Determine which pool to use based on product_type
-        if product_type == MATPRODUCT_UNSPECIFIED
-            # Non-product matrix pool
-            pool = $(Symbol(:MAT_POOL_NONPRODUCT_, PetscScalar))
-            pool_key = (M, N, prefix)
+        # Only pool product matrices (matrix multiply results)
+        if product_type != MATPRODUCT_UNSPECIFIED && length(product_args) >= 2
+            pool = $(Symbol(:MAT_POOL_PRODUCT_, PetscScalar))
+            hash1 = product_args[1]
+            hash2 = product_args[2]
+            pool_key = (product_type, hash1, hash2)
             if !haskey(pool, pool_key)
                 pool[pool_key] = PooledMat{$PetscScalar}[]
             end
             push!(pool[pool_key], PooledMat{$PetscScalar}(m, row_partition, col_partition, fp))
-        else
-            # Product matrix pool
-            if length(product_args) >= 2
-                pool = $(Symbol(:MAT_POOL_PRODUCT_, PetscScalar))
-                hash1 = product_args[1]
-                hash2 = product_args[2]
-                pool_key = (product_type, hash1, hash2)
-                if !haskey(pool, pool_key)
-                    pool[pool_key] = PooledMat{$PetscScalar}[]
-                end
-                push!(pool[pool_key], PooledMat{$PetscScalar}(m, row_partition, col_partition, fp))
-            end
         end
+        # Non-product matrices (addition, subtraction) are not pooled and will be destroyed
 
         return nothing
     end
@@ -529,7 +445,7 @@ end
     Base.:+(A::Mat{T}, B::Mat{T}) -> Mat{T}
 
 Add two distributed PETSc matrices. Requires identical sizes, partitions, and prefix.
-Attempts to reuse a pooled matrix with matching union structure via fingerprint.
+Note: Does not use pooling due to PETSc MatAXPY internal state management issues.
 """
 function Base.:+(A::Mat{T}, B::Mat{T}) where {T}
     @mpiassert (A.obj.prefix == B.obj.prefix &&
@@ -537,36 +453,19 @@ function Base.:+(A::Mat{T}, B::Mat{T}) where {T}
                 A.obj.row_partition == B.obj.row_partition &&
                 A.obj.col_partition == B.obj.col_partition) "Matrix addition requires same prefix, identical sizes, and identical partitions"
 
-    # Skip expensive union structure and fingerprint computation when pooling is disabled
-    Cmat = nothing
-    if ENABLE_MAT_POOL[]
-        # Compute union local structure and final fingerprint
-        nloc, iaU, jaU = _local_union_structure(A.obj.A, B.obj.A)
-        local_hash = _local_structure_hash(nloc, iaU, jaU)
-        fp = _structure_fingerprint(local_hash, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
+    # Create fresh result matrix
+    nr = MPI.Comm_rank(MPI.COMM_WORLD)
+    nlocal_rows = A.obj.row_partition[nr+2] - A.obj.row_partition[nr+1]
+    nlocal_cols = A.obj.col_partition[nr+2] - A.obj.col_partition[nr+1]
+    Cmat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols,
+                                 size(A,1), size(A,2), A.obj.prefix,
+                                 A.obj.row_partition, A.obj.col_partition)
+    _mat_zero_entries!(Cmat)
+    PETSc.assemble(Cmat)  # Must assemble before MatAXPY
 
-        # Try to reuse from pool by fingerprint
-        Cmat = _try_get_from_nonproduct_pool_by_fingerprint(A.obj.row_partition, A.obj.col_partition,
-                                                            A.obj.prefix, fp, T)
-    end
-    # Create if miss
-    if Cmat === nothing
-        nr = MPI.Comm_rank(MPI.COMM_WORLD)
-        nlocal_rows = A.obj.row_partition[nr+2] - A.obj.row_partition[nr+1]
-        nlocal_cols = A.obj.col_partition[nr+2] - A.obj.col_partition[nr+1]
-        Cmat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols,
-                                     size(A,1), size(A,2), A.obj.prefix,
-                                     A.obj.row_partition, A.obj.col_partition)
-        _mat_zero_entries!(Cmat)
-        PETSc.assemble(Cmat)  # Must assemble before MatAXPY
-        structure = DIFFERENT_NONZERO_PATTERN
-    else
-        structure = SUBSET_NONZERO_PATTERN
-    end
-
-    # Accumulate C = A + B
-    _mat_axpy!(Cmat, one(T), A.obj.A, structure)
-    _mat_axpy!(Cmat, one(T), B.obj.A, structure)
+    # Accumulate C = A + B using MatAXPY
+    _mat_axpy!(Cmat, one(T), A.obj.A, DIFFERENT_NONZERO_PATTERN)
+    _mat_axpy!(Cmat, one(T), B.obj.A, DIFFERENT_NONZERO_PATTERN)
     PETSc.assemble(Cmat)
 
     obj = _Mat{T}(Cmat, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
@@ -577,7 +476,7 @@ end
     Base.:-(A::Mat{T}, B::Mat{T}) -> Mat{T}
 
 Subtract two distributed PETSc matrices. Requires identical sizes, partitions, and prefix.
-Attempts to reuse a pooled matrix with matching union structure via fingerprint.
+Note: Does not use pooling due to PETSc MatAXPY internal state management issues.
 """
 function Base.:-(A::Mat{T}, B::Mat{T}) where {T}
     @mpiassert (A.obj.prefix == B.obj.prefix &&
@@ -585,93 +484,24 @@ function Base.:-(A::Mat{T}, B::Mat{T}) where {T}
                 A.obj.row_partition == B.obj.row_partition &&
                 A.obj.col_partition == B.obj.col_partition) "Matrix subtraction requires same prefix, identical sizes, and identical partitions"
 
-    # Skip expensive union structure and fingerprint computation when pooling is disabled
-    Cmat = nothing
-    if ENABLE_MAT_POOL[]
-        # Compute union local structure and final fingerprint
-        nloc, iaU, jaU = _local_union_structure(A.obj.A, B.obj.A)
-        local_hash = _local_structure_hash(nloc, iaU, jaU)
-        fp = _structure_fingerprint(local_hash, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
+    # Create fresh result matrix
+    nr = MPI.Comm_rank(MPI.COMM_WORLD)
+    nlocal_rows = A.obj.row_partition[nr+2] - A.obj.row_partition[nr+1]
+    nlocal_cols = A.obj.col_partition[nr+2] - A.obj.col_partition[nr+1]
+    Cmat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols,
+                                 size(A,1), size(A,2), A.obj.prefix,
+                                 A.obj.row_partition, A.obj.col_partition)
+    _mat_zero_entries!(Cmat)
+    PETSc.assemble(Cmat)  # Must assemble before MatAXPY
 
-        Cmat = _try_get_from_nonproduct_pool_by_fingerprint(A.obj.row_partition, A.obj.col_partition,
-                                                        A.obj.prefix, fp, T)
-    end
-    if Cmat === nothing
-        nr = MPI.Comm_rank(MPI.COMM_WORLD)
-        nlocal_rows = A.obj.row_partition[nr+2] - A.obj.row_partition[nr+1]
-        nlocal_cols = A.obj.col_partition[nr+2] - A.obj.col_partition[nr+1]
-        Cmat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols,
-                                     size(A,1), size(A,2), A.obj.prefix,
-                                     A.obj.row_partition, A.obj.col_partition)
-        _mat_zero_entries!(Cmat)
-        PETSc.assemble(Cmat)  # Must assemble before MatAXPY
-        structure = DIFFERENT_NONZERO_PATTERN
-    else
-        structure = SUBSET_NONZERO_PATTERN
-    end
-
-    _mat_axpy!(Cmat, one(T), A.obj.A, structure)
-    _mat_axpy!(Cmat, -one(T), B.obj.A, structure)
+    # Accumulate C = A - B using MatAXPY
+    _mat_axpy!(Cmat, one(T), A.obj.A, DIFFERENT_NONZERO_PATTERN)
+    _mat_axpy!(Cmat, -one(T), B.obj.A, DIFFERENT_NONZERO_PATTERN)
     PETSc.assemble(Cmat)
 
     obj = _Mat{T}(Cmat, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
     return SafeMPI.DRef(obj)
 end
-
-"""
-    _local_union_structure(A::PETSc.Mat{T}, B::PETSc.Mat{T}) -> (nloc, iaU, jaU)
-
-Compute the union CSR structure for the local rows of A and B on this rank.
-Returns the number of local rows, row-pointer iaU (length nloc+1) and 0-based column
-indices jaU for hashing compatibility.
-If structure cannot be queried (e.g. dense types), returns zero-length arrays with nloc=0.
-"""
-function _local_union_structure(A::PETSc.Mat{T}, B::PETSc.Mat{T}) where {T}
-    try
-        # Query A
-        nA, iaA, jaA, iaA_ptr, jaA_ptr = _mat_get_rowij(A)
-        # Query B
-        nB, iaB, jaB, iaB_ptr, jaB_ptr = _mat_get_rowij(B)
-        @assert nA == nB
-        nloc = Int(nA)
-        iaU = Vector{Int64}(undef, nloc + 1)
-        iaU[1] = 0
-        jaU = Int64[]
-        @inbounds for i in 1:nloc
-            # Convert C-style offsets to Julia ranges
-            a_s = Int(iaA[i]) + 1; a_e = Int(iaA[i+1])
-            b_s = Int(iaB[i]) + 1; b_e = Int(iaB[i+1])
-            colsA = a_s <= a_e ? jaA[a_s:a_e] : Int[]
-            colsB = b_s <= b_e ? jaB[b_s:b_e] : Int[]
-            # Merge union of sorted arrays of 0-based columns
-            u = Vector{Int64}()
-            sizehint!(u, length(colsA) + length(colsB))
-            iax = 1; ibx = 1
-            while iax <= length(colsA) && ibx <= length(colsB)
-                a = Int64(colsA[iax]); b = Int64(colsB[ibx])
-                if a == b
-                    push!(u, a); iax += 1; ibx += 1
-                elseif a < b
-                    push!(u, a); iax += 1
-                else
-                    push!(u, b); ibx += 1
-                end
-            end
-            while iax <= length(colsA); push!(u, Int64(colsA[iax])); iax += 1; end
-            while ibx <= length(colsB); push!(u, Int64(colsB[ibx])); ibx += 1; end
-            append!(jaU, u)
-            iaU[i+1] = length(jaU)
-        end
-
-        # Restore
-        _mat_restore_rowij!(A, nA, iaA_ptr, jaA_ptr)
-        _mat_restore_rowij!(B, nB, iaB_ptr, jaB_ptr)
-        return (length(iaU) - 1, iaU, jaU)
-    catch
-        return (0, Int64[0], Int64[])
-    end
-end
-
 
 # Helper function to extract owned rows from a PETSc Mat to Julia SparseMatrixCSC
 function _mat_to_local_sparse(A::Mat{T}) where {T}
@@ -1338,45 +1168,12 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
             push!(cols_by_row[r], Int64(c-1))  # 0-based columns for hashing
         end
     end
-    # Sort and unique per-row
-    nloc = row_hi - row_lo + 1
-    ia = Vector{Int64}(undef, nloc + 1)
-    ia[1] = 0
-    ja = Int64[]
-    @inbounds for (i, r) in enumerate(row_lo:row_hi)
-        cs = cols_by_row[r]
-        sort!(cs); unique!(cs)
-        append!(ja, cs)
-        ia[i+1] = length(ja)
-    end
-    local_hash = _local_structure_hash(nloc, ia, ja)
-    fp = _structure_fingerprint(local_hash, result_row_partition, result_col_partition, first_prefix)
-
-    # Try reuse from non-product pool by fingerprint
-    pooled = _try_get_from_nonproduct_pool_by_fingerprint(result_row_partition, result_col_partition,
-                                                          first_prefix, fp, T)
-    if pooled === nothing
-        # Assemble via Mat_sum
-        return Mat_sum(local_result;
-                       row_partition=result_row_partition,
-                       col_partition=result_col_partition,
-                       prefix=first_prefix,
-                       own_rank_only=false)
-    else
-        # Assemble directly into pooled matrix using ADD_VALUES
-        rows_csc = rowvals(local_result)
-        vals_csc = nonzeros(local_result)
-        for col in 1:size(local_result, 2)
-            for idx in nzrange(local_result, col)
-                row = rows_csc[idx]
-                val = vals_csc[idx]
-                _mat_setvalues!(pooled, [row], [col], [val], PETSc.ADD_VALUES)
-            end
-        end
-        PETSc.assemble(pooled)
-        obj = _Mat{T}(pooled, result_row_partition, result_col_partition, first_prefix)
-        return SafeMPI.DRef(obj)
-    end
+    # Assemble result via Mat_sum (no pooling for concat operations)
+    return Mat_sum(local_result;
+                   row_partition=result_row_partition,
+                   col_partition=result_col_partition,
+                   prefix=first_prefix,
+                   own_rank_only=false)
 end
 
 PETSc.@for_libpetsc begin
@@ -1597,54 +1394,6 @@ PETSc.@for_libpetsc begin
 end
 
 """
-    _local_structure_hash(nrows::Integer, ia::AbstractVector{<:Integer}, ja::AbstractVector{<:Integer})
-
-Hash per-rank local CSR structure (row pointers ia of length nrows+1, column indices ja of length ia[end]).
-The ia/ja values are expected in PETSc's 0-based convention for consistency.
-Returns a 20-byte SHA-1 Vector{UInt8}.
-"""
-function _local_structure_hash(nrows::Integer, ia::AbstractVector{<:Integer}, ja::AbstractVector{<:Integer})
-    io = IOBuffer()
-    write(io, Int64(nrows))
-    @inbounds for i in 1:(Int(nrows) + 1)
-        write(io, Int64(ia[i]))
-    end
-    nnz = Int(ia[Int(nrows)+1])
-    @inbounds for i in 1:nnz
-        write(io, Int64(ja[i]))
-    end
-    return sha1(take!(io))
-end
-
-"""
-    _structure_fingerprint(local_hash::Vector{UInt8}, row_partition::Vector{Int}, col_partition::Vector{Int}, prefix::String)
-
-Compute a final 20-byte fingerprint from a per-rank local structure hash by Allgather'ing
-across ranks and combining with prefix and partitions, mirroring _matrix_fingerprint.
-"""
-function _structure_fingerprint(local_hash::Vector{UInt8},
-                                row_partition::Vector{Int},
-                                col_partition::Vector{Int},
-                                prefix::String)
-    nranks = MPI.Comm_size(MPI.COMM_WORLD)
-    # Allgather all hashes (each 20 bytes)
-    all_hashes = zeros(UInt8, 20 * nranks)
-    MPI.Allgather!(local_hash, MPI.UBuffer(all_hashes, 20), MPI.COMM_WORLD)
-
-    # Create final fingerprint
-    io = IOBuffer()
-    write(io, all_hashes)
-    write(io, prefix)
-    for x in row_partition
-        write(io, Int64(x))
-    end
-    for x in col_partition
-        write(io, Int64(x))
-    end
-    return sha1(take!(io))
-end
-
-"""
     _matrix_fingerprint(A::PETSc.Mat{T}, row_partition::Vector{Int}, col_partition::Vector{Int}, prefix::String) -> Vector{UInt8}
 
 Create a structural fingerprint of a distributed PETSc matrix.
@@ -1669,9 +1418,25 @@ col_partition[end]-1 = ncols).
 """
 function _matrix_fingerprint(A::PETSc.Mat{T}, row_partition::Vector{Int},
                               col_partition::Vector{Int}, prefix::String) where T
-    # Compute a local structure hash, then aggregate via _structure_fingerprint
+    # Compute local structure hash
     local_hash = _mat_hash_local_structure(A)
-    return _structure_fingerprint(local_hash, row_partition, col_partition, prefix)
+
+    # Allgather all hashes across ranks
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    all_hashes = zeros(UInt8, 20 * nranks)
+    MPI.Allgather!(local_hash, MPI.UBuffer(all_hashes, 20), MPI.COMM_WORLD)
+
+    # Create final fingerprint
+    io = IOBuffer()
+    write(io, all_hashes)
+    write(io, prefix)
+    for x in row_partition
+        write(io, Int64(x))
+    end
+    for x in col_partition
+        write(io, Int64(x))
+    end
+    return sha1(take!(io))
 end
 
 # -----------------------------------------------------------------------------
@@ -1681,22 +1446,12 @@ end
 """
     clear_mat_pool!()
 
-Clear all matrices from the pool, destroying them immediately.
+Clear all matrices from the product pool, destroying them immediately.
 Useful for testing or explicit memory management.
 """
 function clear_mat_pool!()
-    # Clear all pools by iterating over each PetscScalar type
+    # Clear product pools by iterating over each PetscScalar type
     PETSc.@for_libpetsc begin
-        # Clear non-product pool
-        pool_nonproduct = $(Symbol(:MAT_POOL_NONPRODUCT_, PetscScalar))
-        for (key, mat_list) in pool_nonproduct
-            for pooled in mat_list
-                _destroy_petsc_mat!(pooled.mat)
-            end
-        end
-        empty!(pool_nonproduct)
-
-        # Clear product pool
         pool_product = $(Symbol(:MAT_POOL_PRODUCT_, PetscScalar))
         for (key, mat_list) in pool_product
             for pooled in mat_list

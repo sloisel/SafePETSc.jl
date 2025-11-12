@@ -28,8 +28,8 @@ function _mat_uniform_tests_body()
         flush(stdout)
     end
 
-    # Test 1: Create a uniform matrix
-    A = ones(8, 8)  # All ranks have the same matrix
+    # Test 1: Create a uniform matrix (non-square to expose row/col bugs)
+    A = ones(6, 10)  # Non-square: 6 rows, 10 columns
     dr = SafePETSc.Mat_uniform(A)
 
     @test dr isa SafeMPI.DRef
@@ -43,17 +43,17 @@ function _mat_uniform_tests_body()
     SafeMPI.check_and_destroy!()
     MPI.Barrier(comm)
 
-    # Test 2: Check default row and column partitions
-    row_partition = SafePETSc.default_row_partition(8, nranks)
-    col_partition = SafePETSc.default_row_partition(8, nranks)
+    # Test 2: Check default row and column partitions (non-square)
+    row_partition = SafePETSc.default_row_partition(6, nranks)
+    col_partition = SafePETSc.default_row_partition(10, nranks)
 
     @test length(row_partition) == nranks + 1
     @test row_partition[1] == 1
-    @test row_partition[end] == 9
+    @test row_partition[end] == 7  # 6 rows + 1
 
     @test length(col_partition) == nranks + 1
     @test col_partition[1] == 1
-    @test col_partition[end] == 9
+    @test col_partition[end] == 11  # 10 cols + 1
 
     # Check coverage: all rows should be covered exactly once
     all_rows = Set()
@@ -65,12 +65,12 @@ function _mat_uniform_tests_body()
             push!(all_rows, row)
         end
     end
-    @test all_rows == Set(1:8)
+    @test all_rows == Set(1:6)
 
-    # Test 3: Custom row and column partitions
-    A = ones(8, 8)
+    # Test 3: Custom row and column partitions (non-square)
+    A = ones(8, 12)  # Non-square: 8 rows, 12 columns
     custom_row_partition = [1, 3, 5, 7, 9]
-    custom_col_partition = [1, 3, 5, 7, 9]
+    custom_col_partition = [1, 4, 7, 10, 13]  # Different for columns
 
     if nranks == 4
         dr = SafePETSc.Mat_uniform(A; row_partition=custom_row_partition, col_partition=custom_col_partition)
@@ -80,8 +80,8 @@ function _mat_uniform_tests_body()
         MPI.Barrier(comm)
     end
 
-    # Test 4: Verify mpi_uniform assertion works
-    A_uniform = ones(8, 8)
+    # Test 4: Verify mpi_uniform assertion works (non-square)
+    A_uniform = ones(5, 7)  # Non-square: 5 rows, 7 columns
     # This should not error
     dr = SafePETSc.Mat_uniform(A_uniform)
     @test dr.obj.A isa PETSc.Mat
@@ -98,15 +98,19 @@ function _mat_uniform_tests_body()
     SafeMPI.check_and_destroy!()
     MPI.Barrier(comm)
 
-    # Test 6: Identity matrix
-    A_eye = Matrix{Float64}(I, 8, 8)
+    # Test 6: Identity-like matrix (non-square with eye-like pattern)
+    # Create a 5×8 matrix with 1s on the "diagonal"
+    A_eye = zeros(5, 8)
+    for i in 1:min(5, 8)
+        A_eye[i, i] = 1.0
+    end
     dr_eye = SafePETSc.Mat_uniform(A_eye)
     @test dr_eye.obj.A isa PETSc.Mat
     SafeMPI.check_and_destroy!()
     MPI.Barrier(comm)
 
-    # Test 7: Matrix with different values
-    A_vals = reshape(Float64.(1:64), 8, 8)
+    # Test 7: Matrix with different values (non-square)
+    A_vals = reshape(Float64.(1:54), 6, 9)  # Non-square: 6×9
     dr_vals = SafePETSc.Mat_uniform(A_vals)
     @test dr_vals.obj.A isa PETSc.Mat
     SafeMPI.check_and_destroy!()

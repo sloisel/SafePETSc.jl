@@ -39,14 +39,15 @@ if rank == 0
     flush(stdout)
 end
 
-A_data = reshape(Float64.(1:16), 4, 4)
-B_data = reshape(Float64.(1:16), 4, 4)
+# Using non-square matrices: 3×7 * 7×4 = 3×4 to expose row/col bugs
+A_data = reshape(Float64.(1:21), 3, 7)  # 3×7 matrix
+B_data = reshape(Float64.(1:28), 7, 4)  # 7×4 matrix
 drA = SafePETSc.Mat_uniform(A_data)
 drB = SafePETSc.Mat_uniform(B_data)
 
 drC = drA * drB
 @test drC isa SafeMPI.DRef
-@test size(drC) == (4, 4)
+@test size(drC) == (3, 4)  # Result is 3×4
 
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
@@ -58,14 +59,15 @@ if rank == 0
     flush(stdout)
 end
 
-A_data = reshape(Float64.(1:16), 4, 4)
-x_data = Float64.(1:4)
+# Using non-square matrix: 5×3 matrix * 3-vector = 5-vector to expose row/col bugs
+A_data = reshape(Float64.(1:15), 5, 3)  # 5×3 matrix
+x_data = Float64.(1:3)  # 3-vector
 drA = SafePETSc.Mat_uniform(A_data)
 drx = SafePETSc.Vec_uniform(x_data)
 
 dry = drA * drx
 @test dry isa SafeMPI.DRef
-@test size(dry) == (4,)
+@test size(dry) == (5,)  # Result is 5-vector
 
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
@@ -76,8 +78,9 @@ if rank == 0
     flush(stdout)
 end
 
-v_data = Float64.(1:4)
-A_data = reshape(Float64.(1:16), 4, 4)
+# Using non-square matrix: 3-vector' * 3×6 matrix = 6-vector' to expose row/col bugs
+v_data = Float64.(1:3)
+A_data = reshape(Float64.(1:18), 3, 6)  # 3×6 matrix
 drv = SafePETSc.Vec_uniform(v_data)
 drA = SafePETSc.Mat_uniform(A_data)
 
@@ -236,13 +239,14 @@ if rank == 0
     flush(stdout)
 end
 
-A_data = reshape(Float64.(1:16), 4, 4)
-x_data = Float64.(1:4)
+# Using non-square matrix: 4×6 matrix * 6-vector = 4-vector to expose row/col bugs
+A_data = reshape(Float64.(1:24), 4, 6)  # 4×6 matrix
+x_data = Float64.(1:6)  # 6-vector
 drA = SafePETSc.Mat_uniform(A_data)
 drx = SafePETSc.Vec_uniform(x_data)
 
 # Pre-allocate output vector
-dry = SafePETSc.Vec_uniform(zeros(4))
+dry = SafePETSc.Vec_uniform(zeros(4))  # 4-vector
 
 # Call in-place version
 result = mul!(dry, drA, drx)
@@ -267,20 +271,21 @@ if rank == 0
     flush(stdout)
 end
 
-v_data = Float64.(1:4)
-A_data = reshape(Float64.(1:16), 4, 4)
+# Using non-square matrix: 5-vector' * 5×7 matrix = 7-vector to expose row/col bugs
+v_data = Float64.(1:5)
+A_data = reshape(Float64.(1:35), 5, 7)  # 5×7 matrix
 drv = SafePETSc.Vec_uniform(v_data)
 drA = SafePETSc.Mat_uniform(A_data)
 
 # Pre-allocate output vector (should have length matching A's column count)
-drw_preallocated = SafePETSc.Vec_uniform(zeros(4))
+drw_preallocated = SafePETSc.Vec_uniform(zeros(7))  # 7-vector
 
 # Call in-place version
 result = mul!(drw_preallocated, drv', drA)
 
 # Verify it returns the same object and has correct size
 @test result === drw_preallocated
-@test size(drw_preallocated) == (4,)
+@test size(drw_preallocated) == (7,)
 
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
@@ -406,8 +411,9 @@ if rank == 0
 end
 
 # Use dense prefix to ensure MPIDENSE structure which is compatible with MAT_REUSE_MATRIX
-A_data = reshape(Float64.(1:16), 4, 4)
-B_data = reshape(Float64.(1:16), 4, 4)
+# Using non-square matrices: 4×5 * 5×3 = 4×3 to expose row/col bugs
+A_data = reshape(Float64.(1:20), 4, 5)  # 4×5 matrix
+B_data = reshape(Float64.(1:15), 5, 3)  # 5×3 matrix
 drA = SafePETSc.Mat_uniform(A_data; prefix="dense_")
 drB = SafePETSc.Mat_uniform(B_data; prefix="dense_")
 
@@ -417,14 +423,14 @@ drC0 = drA * drB
 # Reuse the same output matrix to guarantee matching PETSc structure
 result = mul!(drC0, drA, drB)
 @test result === drC0
-@test size(drC0) == (4, 4)
+@test size(drC0) == (4, 3)  # Result is 4×3
 
 # Verify equality with a fresh out-of-place result
 C_ref = drA * drB
 C0_local = SafePETSc._mat_to_local_sparse(drC0)
 Cref_local = SafePETSc._mat_to_local_sparse(C_ref)
-C0_sum = zeros(4, 4)
-Cref_sum  = zeros(4, 4)
+C0_sum = zeros(4, 3)  # Updated to 4×3
+Cref_sum  = zeros(4, 3)  # Updated to 4×3
 MPI.Reduce!(Matrix(C0_local), C0_sum, +, 0, comm)
 MPI.Reduce!(Matrix(Cref_local),  Cref_sum,  +, 0, comm)
 if rank == 0

@@ -15,313 +15,198 @@ rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
 if rank == 0
-    println("[DEBUG] Matrix addition/subtraction pooling test starting")
+    println("[DEBUG] Matrix addition/subtraction with non-square matrices test starting")
     flush(stdout)
 end
 
-# Clear pool before tests
-clear_mat_pool!()
-
-# Test 1: Pool miss then pool hit for addition
+# Test 1: Addition with 5×3 non-square matrices
 if rank == 0
-    println("[DEBUG] Test 1: A+B pool miss then hit")
+    println("[DEBUG] Test 1: A+B with 5×3 matrices")
     flush(stdout)
 end
 
-# Create two matrices with specific structure (only rank 0 contributes)
+# Create two non-square matrices with specific structure (only rank 0 contributes)
+# Using 5×3 matrices to expose row/col bugs
 if rank == 0
-    A1 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 4, 4)
-    B1 = sparse([1, 2, 4], [1, 2, 4], [4.0, 5.0, 6.0], 4, 4)
+    A1 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 5, 3)  # 5×3 matrix
+    B1 = sparse([1, 2, 4], [1, 2, 3], [4.0, 5.0, 6.0], 5, 3)  # 5×3 matrix
 else
-    A1 = spzeros(Float64, 4, 4)
-    B1 = spzeros(Float64, 4, 4)
+    A1 = spzeros(Float64, 5, 3)
+    B1 = spzeros(Float64, 5, 3)
 end
 
 matA1 = SafePETSc.Mat_sum(A1)
 matB1 = SafePETSc.Mat_sum(B1)
 
-# First addition - should be a pool miss (creates new matrix)
+# Test addition
 matC1 = matA1 + matB1
 @test matC1 isa SafeMPI.DRef
-@test size(matC1) == (4, 4)
+@test size(matC1) == (5, 3)  # Result is 5×3
 
 # Verify correctness
 C1_local = SafePETSc._mat_to_local_sparse(matC1)
-C1_sum = zeros(4, 4)
+C1_sum = zeros(5, 3)
 MPI.Reduce!(Matrix(C1_local), C1_sum, +, 0, comm)
 if rank == 0
     expected = Matrix(A1 + B1)
     @test all(isapprox.(C1_sum, expected, atol=1e-10))
 end
 
-# Release C1 back to pool
-matC1 = nothing
-GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Check pool stats - should have one matrix in nonproduct pool
-stats = SafePETSc.get_mat_pool_stats()
+# Test 2: Addition with 6×4 non-square matrices
 if rank == 0
-    # Should have exactly one non-product matrix (count entries with :nonproduct)
-    nonproduct_count = sum(v for (k, v) in stats if length(k) >= 5 && k[end] == :nonproduct; init=0)
-    @test nonproduct_count == 1
-end
-
-# Second addition with same structure - should be a pool hit (reuses matrix)
-matC2 = matA1 + matB1
-@test matC2 isa SafeMPI.DRef
-
-# Verify correctness again after pool reuse
-C2_local = SafePETSc._mat_to_local_sparse(matC2)
-C2_sum = zeros(4, 4)
-MPI.Reduce!(Matrix(C2_local), C2_sum, +, 0, comm)
-if rank == 0
-    expected = Matrix(A1 + B1)
-    @test all(isapprox.(C2_sum, expected, atol=1e-10))
-end
-
-# Pool should be empty now (matrix was reused)
-stats = SafePETSc.get_mat_pool_stats()
-if rank == 0
-    nonproduct_count = sum(v for (k, v) in stats if length(k) >= 5 && k[end] == :nonproduct; init=0)
-    @test nonproduct_count == 0
-end
-
-# Release matC2
-matC2 = nothing
-GC.gc()
-SafeMPI.check_and_destroy!()
-MPI.Barrier(comm)
-
-# Test 2: Pool reuse for same-sized matrices
-if rank == 0
-    println("[DEBUG] Test 2: Pool reuse for same-sized matrices")
+    println("[DEBUG] Test 2: Multiple additions with 6×4 matrices")
     flush(stdout)
 end
 
-SafePETSc.clear_mat_pool!()
-
-# Only rank 0 contributes
+# Only rank 0 contributes (using 6×4 non-square matrices)
 if rank == 0
-    A2 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 4, 4)
-    B2 = sparse([1, 2, 4], [1, 2, 4], [4.0, 5.0, 6.0], 4, 4)
-    C2 = sparse([1, 3], [2, 4], [7.0, 8.0], 4, 4)
+    A2 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 6, 4)  # 6×4 matrix
+    B2 = sparse([1, 2, 4], [1, 2, 4], [4.0, 5.0, 6.0], 6, 4)  # 6×4 matrix
+    C2 = sparse([1, 3], [2, 4], [7.0, 8.0], 6, 4)  # 6×4 matrix
 else
-    A2 = spzeros(Float64, 4, 4)
-    B2 = spzeros(Float64, 4, 4)
-    C2 = spzeros(Float64, 4, 4)
+    A2 = spzeros(Float64, 6, 4)
+    B2 = spzeros(Float64, 6, 4)
+    C2 = spzeros(Float64, 6, 4)
 end
 
 matA2 = SafePETSc.Mat_sum(A2)
 matB2 = SafePETSc.Mat_sum(B2)
 matC2 = SafePETSc.Mat_sum(C2)
 
-# First addition
+# Test A+B
 matAB = matA2 + matB2
 @test matAB isa SafeMPI.DRef
 
-# Release to pool
-matAB = nothing
-GC.gc()
-SafeMPI.check_and_destroy!()
-MPI.Barrier(comm)
-
-# Pool should have one entry
-stats = SafePETSc.get_mat_pool_stats()
-if rank == 0
-    nonproduct_count = sum(v for (k, v) in stats if length(k) >= 5 && k[end] == :nonproduct; init=0)
-    @test nonproduct_count == 1
-end
-
-# Second addition with same size - pool will reuse the matrix
+# Test A+C
 matAC = matA2 + matC2
 @test matAC isa SafeMPI.DRef
 
-# Verify correctness
+# Verify correctness of A+C
 AC_local = SafePETSc._mat_to_local_sparse(matAC)
-AC_sum = zeros(4, 4)
+AC_sum = zeros(6, 4)
 MPI.Reduce!(Matrix(AC_local), AC_sum, +, 0, comm)
 if rank == 0
     expected = Matrix(A2 + C2)
     @test all(isapprox.(AC_sum, expected, atol=1e-10))
 end
 
-# Pool should now be empty (matrix was reused)
-stats = SafePETSc.get_mat_pool_stats()
-if rank == 0
-    nonproduct_count = sum(v for (k, v) in stats if length(k) >= 5 && k[end] == :nonproduct; init=0)
-    @test nonproduct_count == 0
-end
-
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Test 3: Subtraction pool miss then hit
+# Test 3: Subtraction with 3×7 non-square matrices
 if rank == 0
-    println("[DEBUG] Test 3: A-B pool miss then hit")
+    println("[DEBUG] Test 3: A-B with 3×7 matrices")
     flush(stdout)
 end
 
-SafePETSc.clear_mat_pool!()
-
-# Only rank 0 contributes
+# Only rank 0 contributes (using 3×7 non-square matrices)
 if rank == 0
-    A3 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 4, 4)
-    B3 = sparse([1, 2, 4], [1, 2, 4], [4.0, 5.0, 6.0], 4, 4)
+    A3 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 3, 7)  # 3×7 matrix
+    B3 = sparse([1, 2, 3], [1, 2, 4], [4.0, 5.0, 6.0], 3, 7)  # 3×7 matrix
 else
-    A3 = spzeros(Float64, 4, 4)
-    B3 = spzeros(Float64, 4, 4)
+    A3 = spzeros(Float64, 3, 7)
+    B3 = spzeros(Float64, 3, 7)
 end
 
 matA3 = SafePETSc.Mat_sum(A3)
 matB3 = SafePETSc.Mat_sum(B3)
 
-# First subtraction - pool miss
+# Test subtraction
 matD1 = matA3 - matB3
 @test matD1 isa SafeMPI.DRef
-@test size(matD1) == (4, 4)
+@test size(matD1) == (3, 7)  # Result is 3×7
 
 # Verify correctness
 D1_local = SafePETSc._mat_to_local_sparse(matD1)
-D1_sum = zeros(4, 4)
+D1_sum = zeros(3, 7)
 MPI.Reduce!(Matrix(D1_local), D1_sum, +, 0, comm)
 if rank == 0
     expected = Matrix(A3 - B3)
     @test all(isapprox.(D1_sum, expected, atol=1e-10))
 end
 
-# Release to pool
-matD1 = nothing
-GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Second subtraction with same structure - pool hit
-matD2 = matA3 - matB3
-@test matD2 isa SafeMPI.DRef
-
-# Verify correctness
-D2_local = SafePETSc._mat_to_local_sparse(matD2)
-D2_sum = zeros(4, 4)
-MPI.Reduce!(Matrix(D2_local), D2_sum, +, 0, comm)
+# Test 4: Mixed addition and subtraction with 4×8 matrices
 if rank == 0
-    expected = Matrix(A3 - B3)
-    @test all(isapprox.(D2_sum, expected, atol=1e-10))
-end
-
-SafeMPI.check_and_destroy!()
-MPI.Barrier(comm)
-
-# Test 4: Mixed addition and subtraction share pool
-if rank == 0
-    println("[DEBUG] Test 4: Addition and subtraction share pool")
+    println("[DEBUG] Test 4: Addition and subtraction with 4×8 matrices")
     flush(stdout)
 end
 
-SafePETSc.clear_mat_pool!()
-
-# Only rank 0 contributes
+# Only rank 0 contributes (using 4×8 non-square matrices)
 if rank == 0
-    A4 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 4, 4)
-    B4 = sparse([1, 2, 4], [1, 2, 4], [4.0, 5.0, 6.0], 4, 4)
+    A4 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 4, 8)  # 4×8 matrix
+    B4 = sparse([1, 2, 4], [1, 2, 4], [4.0, 5.0, 6.0], 4, 8)  # 4×8 matrix
 else
-    A4 = spzeros(Float64, 4, 4)
-    B4 = spzeros(Float64, 4, 4)
+    A4 = spzeros(Float64, 4, 8)
+    B4 = spzeros(Float64, 4, 8)
 end
 
 matA4 = SafePETSc.Mat_sum(A4)
 matB4 = SafePETSc.Mat_sum(B4)
 
-# Do addition first
+# Test addition
 matAdd = matA4 + matB4
 @test matAdd isa SafeMPI.DRef
 
-# Release to pool
-matAdd = nothing
-GC.gc()
-SafeMPI.check_and_destroy!()
-MPI.Barrier(comm)
-
-# Pool should have one entry
-stats = SafePETSc.get_mat_pool_stats()
-if rank == 0
-    nonproduct_count = sum(v for (k, v) in stats if length(k) >= 5 && k[end] == :nonproduct; init=0)
-    @test nonproduct_count == 1
-end
-
-# Do subtraction with same structure - should reuse from pool
+# Test subtraction
 matSub = matA4 - matB4
 @test matSub isa SafeMPI.DRef
 
-# Verify correctness
+# Verify correctness of subtraction
 Sub_local = SafePETSc._mat_to_local_sparse(matSub)
-Sub_sum = zeros(4, 4)
+Sub_sum = zeros(4, 8)
 MPI.Reduce!(Matrix(Sub_local), Sub_sum, +, 0, comm)
 if rank == 0
     expected = Matrix(A4 - B4)
     @test all(isapprox.(Sub_sum, expected, atol=1e-10))
 end
 
-# Pool should now be empty (matrix was reused)
-stats = SafePETSc.get_mat_pool_stats()
-if rank == 0
-    nonproduct_count = sum(v for (k, v) in stats if length(k) >= 5 && k[end] == :nonproduct; init=0)
-    @test nonproduct_count == 0
-end
-
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Test 5: Verify structure reuse flag (SUBSET_NONZERO_PATTERN vs DIFFERENT_NONZERO_PATTERN)
+# Test 5: Operations with 2×5 matrices
 if rank == 0
-    println("[DEBUG] Test 5: Verify correct structure flags used")
+    println("[DEBUG] Test 5: Multiple operations with 2×5 matrices")
     flush(stdout)
 end
 
-SafePETSc.clear_mat_pool!()
-
-# This test verifies the code paths use correct PETSc structure flags
-# Pool miss should use DIFFERENT_NONZERO_PATTERN
-# Pool hit should use SUBSET_NONZERO_PATTERN
-
-# Only rank 0 contributes
+# Only rank 0 contributes (using 2×5 non-square matrices)
 if rank == 0
-    A5 = sparse([1, 2], [1, 2], [1.0, 2.0], 3, 3)
-    B5 = sparse([2, 3], [2, 3], [3.0, 4.0], 3, 3)
+    A5 = sparse([1, 2], [1, 2], [1.0, 2.0], 2, 5)  # 2×5 matrix
+    B5 = sparse([1, 2], [2, 3], [3.0, 4.0], 2, 5)  # 2×5 matrix
 else
-    A5 = spzeros(Float64, 3, 3)
-    B5 = spzeros(Float64, 3, 3)
+    A5 = spzeros(Float64, 2, 5)
+    B5 = spzeros(Float64, 2, 5)
 end
 
 matA5 = SafePETSc.Mat_sum(A5)
 matB5 = SafePETSc.Mat_sum(B5)
 
-# First addition (pool miss path)
+# First addition
 matC5a = matA5 + matB5
 @test matC5a isa SafeMPI.DRef
 
 # Verify values are correct
 C5_local = SafePETSc._mat_to_local_sparse(matC5a)
-C5_sum = zeros(3, 3)
+C5_sum = zeros(2, 5)
 MPI.Reduce!(Matrix(C5_local), C5_sum, +, 0, comm)
 if rank == 0
     expected = Matrix(A5 + B5)
     @test all(isapprox.(C5_sum, expected, atol=1e-10))
 end
 
-# Release and re-compute (pool hit path)
-matC5a = nothing
-GC.gc()
-SafeMPI.check_and_destroy!()
-MPI.Barrier(comm)
-
+# Second addition (tests that multiple operations work correctly)
 matC5b = matA5 + matB5
 @test matC5b isa SafeMPI.DRef
 
-# Verify values are still correct after pool reuse
+# Verify values are still correct
 C5b_local = SafePETSc._mat_to_local_sparse(matC5b)
-C5b_sum = zeros(3, 3)
+C5b_sum = zeros(2, 5)
 MPI.Reduce!(Matrix(C5b_local), C5b_sum, +, 0, comm)
 if rank == 0
     expected = Matrix(A5 + B5)
@@ -332,7 +217,7 @@ SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
 if rank == 0
-    println("[DEBUG] All addition/subtraction pooling tests completed")
+    println("[DEBUG] All non-square matrix addition/subtraction tests completed")
     flush(stdout)
 end
 
@@ -340,6 +225,6 @@ end
 MPI.Barrier(comm)
 
 if rank == 0
-    println("[DEBUG] Matrix add/sub pooling test file completed successfully")
+    println("[DEBUG] Matrix add/sub test file completed successfully")
     flush(stdout)
 end

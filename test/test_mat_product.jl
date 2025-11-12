@@ -30,7 +30,8 @@ function _mat_product_tests_body()
     end
 
     # Test 1: Non-product matrices should have UNSPECIFIED type and empty args
-    A = sparse([1, 2, 3, 4], [1, 2, 3, 4], [1.0, 2.0, 3.0, 4.0], 4, 4)
+    # Using non-square 2×8 matrix to expose row/col bugs
+    A = sparse([1, 2], [1, 2], [1.0, 2.0], 2, 8)
     mat = SafePETSc.Mat_sum(A)
 
     @test mat.obj.product_type == SafePETSc.MATPRODUCT_UNSPECIFIED
@@ -45,8 +46,9 @@ function _mat_product_tests_body()
     end
 
     # Test 2: A * B should track product type and fingerprints
-    A1 = sparse([1, 2, 3], [1, 2, 3], [1.0, 2.0, 3.0], 4, 4)
-    B1 = sparse([1, 2, 3], [1, 2, 3], [4.0, 5.0, 6.0], 4, 4)
+    # Using extreme aspect ratio: 7×2 * 2×6 = 7×6 to expose row/col bugs
+    A1 = sparse([1, 2], [1, 2], [1.0, 2.0], 7, 2)  # Very tall matrix
+    B1 = sparse([1, 2], [1, 2], [4.0, 5.0], 2, 6)  # Wide matrix
 
     matA = SafePETSc.Mat_sum(A1)
     matB = SafePETSc.Mat_sum(B1)
@@ -132,8 +134,9 @@ function _mat_product_tests_body()
     end
 
     # Test 6: Verify fingerprints are different for different matrices
-    A5 = sparse([1, 2], [1, 2], [1.0, 2.0], 4, 4)
-    A6 = sparse([1, 3], [1, 3], [1.0, 2.0], 4, 4)  # Different structure
+    # Using non-square 5×3 matrices to expose row/col bugs
+    A5 = sparse([1, 2], [1, 2], [1.0, 2.0], 5, 3)
+    A6 = sparse([1, 3], [1, 3], [1.0, 2.0], 5, 3)  # Different structure
 
     matA5 = SafePETSc.Mat_sum(A5)
     matA6 = SafePETSc.Mat_sum(A6)
@@ -149,16 +152,17 @@ function _mat_product_tests_body()
     end
 
     # Test 7: Nested products - (A*B)*C
-    A7 = sparse([1, 2], [1, 2], [1.0, 2.0], 3, 3)
-    B7 = sparse([1, 2], [1, 2], [3.0, 4.0], 3, 3)
-    C7 = sparse([1, 2], [1, 2], [5.0, 6.0], 3, 3)
+    # Using non-square matrices: (3×5)*(5×4)*(4×2) = 3×2 to expose row/col bugs
+    A7 = sparse([1, 2], [1, 2], [1.0, 2.0], 3, 5)  # 3×5
+    B7 = sparse([1, 2], [1, 2], [3.0, 4.0], 5, 4)  # 5×4
+    C7 = sparse([1, 2], [1, 2], [5.0, 6.0], 4, 2)  # 4×2
 
     matA7 = SafePETSc.Mat_sum(A7)
     matB7 = SafePETSc.Mat_sum(B7)
     matC7 = SafePETSc.Mat_sum(C7)
 
-    matAB = matA7 * matB7
-    matABC = matAB * matC7
+    matAB = matA7 * matB7  # 3×5 * 5×4 = 3×4
+    matABC = matAB * matC7  # 3×4 * 4×2 = 3×2
 
     # matAB should track A and B
     @test matAB.obj.product_type == SafePETSc.MATPRODUCT_AB

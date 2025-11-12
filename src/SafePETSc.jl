@@ -146,6 +146,44 @@ function _Mat{T}(A::PETSc.Mat{T}, row_partition::Vector{Int},
                  col_partition::Vector{Int}, prefix::String;
                  product_type::Cint=MATPRODUCT_UNSPECIFIED,
                  product_args::Vector{Vector{UInt8}}=Vector{UInt8}[]) where T
+    # Verify that row_partition and col_partition match the actual PETSc matrix's dimensions
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    expected_local_rows = row_partition[rank+2] - row_partition[rank+1]
+    expected_local_cols = col_partition[rank+2] - col_partition[rank+1]
+    expected_global_rows = row_partition[end] - 1
+    expected_global_cols = col_partition[end] - 1
+
+    # Query actual dimensions from PETSc matrix
+    # Note: PETSc uses Int64 for indices (configured with --with-64-bit-indices=1)
+    actual_local_rows_ref = Ref{Int64}(0)
+    actual_local_cols_ref = Ref{Int64}(0)
+    actual_global_rows_ref = Ref{Int64}(0)
+    actual_global_cols_ref = Ref{Int64}(0)
+
+    PETSc.@chk ccall((:MatGetLocalSize, PETSc.libpetsc), PETSc.PetscErrorCode,
+                     (PETSc.CMat, Ptr{Int64}, Ptr{Int64}),
+                     A, actual_local_rows_ref, actual_local_cols_ref)
+    PETSc.@chk ccall((:MatGetSize, PETSc.libpetsc), PETSc.PetscErrorCode,
+                     (PETSc.CMat, Ptr{Int64}, Ptr{Int64}),
+                     A, actual_global_rows_ref, actual_global_cols_ref)
+
+    actual_local_rows = Int(actual_local_rows_ref[])
+    actual_local_cols = Int(actual_local_cols_ref[])
+    actual_global_rows = Int(actual_global_rows_ref[])
+    actual_global_cols = Int(actual_global_cols_ref[])
+
+    if actual_local_rows != expected_local_rows || actual_local_cols != expected_local_cols
+        error("[Rank $rank] _Mat constructor: PETSc matrix local dimensions $(actual_local_rows)×$(actual_local_cols) " *
+              "do not match row_partition/col_partition which specify $(expected_local_rows)×$(expected_local_cols). " *
+              "row_partition=$row_partition, col_partition=$col_partition")
+    end
+
+    if actual_global_rows != expected_global_rows || actual_global_cols != expected_global_cols
+        error("[Rank $rank] _Mat constructor: PETSc matrix global dimensions $(actual_global_rows)×$(actual_global_cols) " *
+              "do not match row_partition/col_partition which specify $(expected_global_rows)×$(expected_global_cols). " *
+              "row_partition=$row_partition, col_partition=$col_partition")
+    end
+
     # Skip expensive fingerprint computation when pooling is disabled
     fingerprint = ENABLE_MAT_POOL[] ? _matrix_fingerprint(A, row_partition, col_partition, prefix) : UInt8[]
     return _Mat{T}(A, row_partition, col_partition, prefix, fingerprint,
