@@ -179,10 +179,12 @@ export Solver
 export petsc_options_insert_string
 export Init, Initialized
 export ENABLE_VEC_POOL, clear_vec_pool!, get_vec_pool_stats
+export BlockProduct, calculate!
 
 include("vec.jl")
 include("mat.jl")
 include("ksp.jl")
+include("blockproduct.jl")
 
 # Opt-in internal _Vec to DRef-managed destruction
 SafeMPI.destroy_trait(::Type{_Vec{T}}) where {T} = SafeMPI.CanDestroy()

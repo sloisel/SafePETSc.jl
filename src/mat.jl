@@ -748,6 +748,77 @@ function LinearAlgebra.mul!(C::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
     return C
 end
 
+# Scalar-matrix multiplication implemented using PETSc.@for_libpetsc
+PETSc.@for_libpetsc begin
+    # Scalar-matrix multiplication: α * A
+    function Base.:*(α::Number, A::Mat{$PetscScalar})
+        # Duplicate the matrix
+        result_mat_ref = Ref{PETSc.CMat}(C_NULL)
+        PETSc.@chk ccall(
+            (:MatDuplicate, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, Cint, Ptr{PETSc.CMat}),
+            A.obj.A,
+            Cint(0),  # MAT_COPY_VALUES
+            result_mat_ref
+        )
+        result_mat = PETSc.Mat{$PetscScalar}(result_mat_ref[])
+
+        # Scale the duplicate
+        PETSc.@chk ccall(
+            (:MatScale, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, $PetscScalar),
+            result_mat,
+            $PetscScalar(α)
+        )
+
+        # Wrap in our _Mat type
+        obj = _Mat{$PetscScalar}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition), A.obj.prefix)
+        return SafeMPI.DRef(obj)
+    end
+
+    # Matrix-scalar multiplication: A * α
+    Base.:*(A::Mat{$PetscScalar}, α::Number) = α * A
+
+    # Scalar-matrix addition: α + A (adds scalar to diagonal)
+    # This is equivalent to A + α*I where I is the identity
+    function Base.:+(α::Number, A::Mat{$PetscScalar})
+        # For a square matrix, A + α*I means shift all diagonal elements by α
+        # For non-square matrices, this operation is not well-defined mathematically
+        # We'll implement it by creating a copy and using MatShift
+        @mpiassert size(A, 1) == size(A, 2) "Scalar-matrix addition requires square matrix"
+
+        # Duplicate the matrix
+        result_mat_ref = Ref{PETSc.CMat}(C_NULL)
+        PETSc.@chk ccall(
+            (:MatDuplicate, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, Cint, Ptr{PETSc.CMat}),
+            A.obj.A,
+            Cint(0),  # MAT_COPY_VALUES
+            result_mat_ref
+        )
+        result_mat = PETSc.Mat{$PetscScalar}(result_mat_ref[])
+
+        # Shift the diagonal (A := A + α*I)
+        PETSc.@chk ccall(
+            (:MatShift, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, $PetscScalar),
+            result_mat,
+            $PetscScalar(α)
+        )
+
+        # Wrap in our _Mat type
+        obj = _Mat{$PetscScalar}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition), A.obj.prefix)
+        return SafeMPI.DRef(obj)
+    end
+
+    # Matrix-scalar addition: A + α
+    Base.:+(A::Mat{$PetscScalar}, α::Number) = α + A
+end
+
 # PETSc matrix-matrix multiplication wrapper
 PETSc.@for_libpetsc begin
     function _mat_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, prefix::String="")

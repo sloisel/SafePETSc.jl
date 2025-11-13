@@ -90,4 +90,8 @@ end
     @testset "Matrix Add/Sub Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_mat_addsub_pool.jl"); nprocs=4, expect_success=true)
     end
+
+    @testset "BlockProduct Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_blockproduct.jl"); nprocs=4, expect_success=true)
+    end
 end
