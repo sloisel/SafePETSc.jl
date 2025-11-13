@@ -87,23 +87,7 @@ end
         run_mpi_test(joinpath(@__DIR__, "test_vec_pool_edge.jl"); nprocs=4, expect_success=true)
     end
 
-    @testset "Matrix Product Tracking Tests" begin
-        run_mpi_test(joinpath(@__DIR__, "test_mat_product.jl"); nprocs=4, expect_success=true)
-    end
-
-    @testset "Matrix Add/Sub Pooling Tests" begin
+    @testset "Matrix Add/Sub Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_mat_addsub_pool.jl"); nprocs=4, expect_success=true)
-    end
-
-    @testset "Matrix Product Pooling Tests" begin
-        run_mpi_test(joinpath(@__DIR__, "test_mat_product_pool.jl"); nprocs=4, expect_success=true)
-    end
-
-    @testset "Matrix Fingerprint Tests" begin
-        run_mpi_test(joinpath(@__DIR__, "test_mat_fingerprint.jl"); nprocs=4, expect_success=true)
-    end
-
-    @testset "Matrix Pool Simple Tests" begin
-        run_mpi_test(joinpath(@__DIR__, "test_mat_pool_simple.jl"); nprocs=4, expect_success=true)
     end
 end

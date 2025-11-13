@@ -156,7 +156,6 @@ end
 function bench_create_vec(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "V"
     # Warmup + adaptive measure
@@ -171,7 +170,6 @@ end
 function bench_create_mat_dense(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "D"
     dt = warmup_and_avg_time(() -> begin
@@ -184,7 +182,6 @@ end
 function bench_create_mat_sparse(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "S"
     dt = warmup_and_avg_time(() -> begin
@@ -197,7 +194,6 @@ end
 function bench_matvec_dense(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "D"
     A = make_dense_mat(prefix)
@@ -212,7 +208,6 @@ end
 function bench_matvec_sparse(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "S"
     A = make_sparse_diag_mat(prefix)
@@ -227,7 +222,6 @@ end
 function bench_solve_dense(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "D"
     # Use SPD matrix (identity) for robust solve
@@ -246,7 +240,6 @@ end
 function bench_solve_sparse(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "S"
     # Use sparse SPD (diagonal ones)
@@ -262,7 +255,6 @@ end
 function bench_matmat_dense(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "D"
     A = make_dense_mat(prefix)
@@ -277,7 +269,6 @@ end
 function bench_matmat_sparse(assert_on::Bool, pools_on::Bool, dcheck::Int)
     SafeMPI.set_assert(assert_on)
     SafePETSc.ENABLE_VEC_POOL[] = pools_on
-    SafePETSc.ENABLE_MAT_POOL[] = pools_on
     SafePETSc.default_check[] = dcheck
     prefix = "S"
     A = make_sparse_diag_mat(prefix)
