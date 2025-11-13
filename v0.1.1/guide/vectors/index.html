@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Vectors · SafePETSc.jl</title><meta name="title" content="Vectors · SafePETSc.jl"/><meta property="og:title" content="Vectors · SafePETSc.jl"/><meta property="twitter:title" content="Vectors · SafePETSc.jl"/><meta name="description" content="Documentation for SafePETSc.jl."/><meta property="og:description" content="Documentation for SafePETSc.jl."/><meta property="twitter:description" content="Documentation for SafePETSc.jl."/><meta property="og:url" content="https://sloisel.github.io/SafePETSc.jl/guide/vectors/"/><meta property="twitter:url" content="https://sloisel.github.io/SafePETSc.jl/guide/vectors/"/><link rel="canonical" href="https://sloisel.github.io/SafePETSc.jl/guide/vectors/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">SafePETSc.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../distributed_refs/">Distributed Reference Management</a></li><li class="is-active"><a class="tocitem" href>Vectors</a><ul class="internal"><li><a class="tocitem" href="#Creating-Vectors"><span>Creating Vectors</span></a></li><li><a class="tocitem" href="#Vector-Operations"><span>Vector Operations</span></a></li><li><a class="tocitem" href="#Partitioning"><span>Partitioning</span></a></li><li><a class="tocitem" href="#Properties"><span>Properties</span></a></li><li><a class="tocitem" href="#PETSc-Options"><span>PETSc Options</span></a></li><li><a class="tocitem" href="#Examples"><span>Examples</span></a></li><li><a class="tocitem" href="#Performance-Tips"><span>Performance Tips</span></a></li><li><a class="tocitem" href="#See-Also"><span>See Also</span></a></li></ul></li><li><a class="tocitem" href="../matrices/">Matrices</a></li><li><a class="tocitem" href="../solvers/">Linear Solvers</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/safempi/">SafeMPI</a></li><li><a class="tocitem" href="../../api/vectors/">Vectors</a></li><li><a class="tocitem" href="../../api/matrices/">Matrices</a></li><li><a class="tocitem" href="../../api/solvers/">Solvers</a></li></ul></li><li><a class="tocitem" href="../../developer/">Developer Guide</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">User Guide</a></li><li class="is-active"><a href>Vectors</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Vectors</a></li></ul></nav><div class="docs-right"><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Vectors"><a class="docs-heading-anchor" href="#Vectors">Vectors</a><a id="Vectors-1"></a><a class="docs-heading-anchor-permalink" href="#Vectors" title="Permalink"></a></h1><p>SafePETSc provides distributed vectors through the <code>Vec{T}</code> type, which wraps PETSc&#39;s distributed vector functionality with automatic memory management.</p><h2 id="Creating-Vectors"><a class="docs-heading-anchor" href="#Creating-Vectors">Creating Vectors</a><a id="Creating-Vectors-1"></a><a class="docs-heading-anchor-permalink" href="#Creating-Vectors" title="Permalink"></a></h2><h3 id="Uniform-Distribution"><a class="docs-heading-anchor" href="#Uniform-Distribution">Uniform Distribution</a><a id="Uniform-Distribution-1"></a><a class="docs-heading-anchor-permalink" href="#Uniform-Distribution" title="Permalink"></a></h3><p>Use <code>Vec_uniform</code> when all ranks have the same data:</p><pre><code class="language-julia hljs"># Create a vector from uniform data
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+
+# With custom partition
+partition = [1, 3, 5]  # rank 0: rows 1-2, rank 1: rows 3-4
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0]; row_partition=partition)
+
+# With PETSc options prefix
+v = Vec_uniform([1.0, 2.0]; prefix=&quot;my_vec_&quot;)</code></pre><h3 id="Sum-Distribution"><a class="docs-heading-anchor" href="#Sum-Distribution">Sum Distribution</a><a id="Sum-Distribution-1"></a><a class="docs-heading-anchor-permalink" href="#Sum-Distribution" title="Permalink"></a></h3><p>Use <code>Vec_sum</code> when ranks contribute sparse entries:</p><pre><code class="language-julia hljs">using SparseArrays
+
+# Each rank contributes different entries
+# All contributions are summed
+rank = MPI.Comm_rank(MPI.COMM_WORLD)
+indices = [rank * 2 + 1, rank * 2 + 2]
+values = [1.0, 2.0]
+v = Vec_sum(sparsevec(indices, values, 10))</code></pre><h3 id="Helper-Constructors"><a class="docs-heading-anchor" href="#Helper-Constructors">Helper Constructors</a><a id="Helper-Constructors-1"></a><a class="docs-heading-anchor-permalink" href="#Helper-Constructors" title="Permalink"></a></h3><p>Create vectors similar to existing ones:</p><pre><code class="language-julia hljs"># Zero vector with same size/partition as x
+y = zeros_like(x)
+
+# Ones vector
+y = ones_like(x)
+
+# Filled with specific value
+y = fill_like(x, 3.14)
+
+# With different element type
+y = zeros_like(x; T2=Float32)</code></pre><h2 id="Vector-Operations"><a class="docs-heading-anchor" href="#Vector-Operations">Vector Operations</a><a id="Vector-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Vector-Operations" title="Permalink"></a></h2><h3 id="Broadcasting"><a class="docs-heading-anchor" href="#Broadcasting">Broadcasting</a><a id="Broadcasting-1"></a><a class="docs-heading-anchor-permalink" href="#Broadcasting" title="Permalink"></a></h3><p>Vectors support Julia&#39;s broadcasting syntax:</p><pre><code class="language-julia hljs"># Element-wise operations
+y = x .+ 1.0
+y = 2.0 .* x
+y = x .^ 2
+
+# Vector-vector operations
+z = x .+ y
+z = x .* y
+
+# In-place operations
+y .= x .+ 1.0
+y .= 2.0 .* x .+ y</code></pre><h3 id="Arithmetic"><a class="docs-heading-anchor" href="#Arithmetic">Arithmetic</a><a id="Arithmetic-1"></a><a class="docs-heading-anchor-permalink" href="#Arithmetic" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Addition and subtraction
+z = x + y
+z = x - y
+
+# Mixed with scalars
+z = x + 1.0
+z = 2.0 - x
+
+# Unary operations
+z = -x
+z = +x</code></pre><h3 id="Linear-Algebra"><a class="docs-heading-anchor" href="#Linear-Algebra">Linear Algebra</a><a id="Linear-Algebra-1"></a><a class="docs-heading-anchor-permalink" href="#Linear-Algebra" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Adjoint (transpose)
+x_adj = x&#39;
+
+# Adjoint-matrix multiplication
+result = x&#39; * A  # Returns adjoint vector</code></pre><h2 id="Partitioning"><a class="docs-heading-anchor" href="#Partitioning">Partitioning</a><a id="Partitioning-1"></a><a class="docs-heading-anchor-permalink" href="#Partitioning" title="Permalink"></a></h2><p>Vectors are partitioned across ranks to distribute work and memory.</p><h3 id="Default-Partitioning"><a class="docs-heading-anchor" href="#Default-Partitioning">Default Partitioning</a><a id="Default-Partitioning-1"></a><a class="docs-heading-anchor-permalink" href="#Default-Partitioning" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Equal distribution
+n = 100
+nranks = MPI.Comm_size(MPI.COMM_WORLD)
+partition = default_row_partition(n, nranks)
+
+# For n=100, nranks=4:
+# partition = [1, 26, 51, 76, 101]
+# rank 0: rows 1-25 (25 elements)
+# rank 1: rows 26-50 (25 elements)
+# rank 2: rows 51-75 (25 elements)
+# rank 3: rows 76-100 (25 elements)</code></pre><h3 id="Custom-Partitioning"><a class="docs-heading-anchor" href="#Custom-Partitioning">Custom Partitioning</a><a id="Custom-Partitioning-1"></a><a class="docs-heading-anchor-permalink" href="#Custom-Partitioning" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Unequal distribution
+partition = [1, 10, 30, 101]  # Different sizes per rank
+v = Vec_uniform(data; row_partition=partition)</code></pre><h3 id="Partition-Requirements"><a class="docs-heading-anchor" href="#Partition-Requirements">Partition Requirements</a><a id="Partition-Requirements-1"></a><a class="docs-heading-anchor-permalink" href="#Partition-Requirements" title="Permalink"></a></h3><ul><li>Length <code>nranks + 1</code></li><li>First element is <code>1</code></li><li>Last element is <code>n + 1</code> (where <code>n</code> is vector length)</li><li>Strictly increasing</li></ul><h2 id="Properties"><a class="docs-heading-anchor" href="#Properties">Properties</a><a id="Properties-1"></a><a class="docs-heading-anchor-permalink" href="#Properties" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Element type
+T = eltype(v)  # e.g., Float64
+
+# Size
+n = length(v)
+n = size(v, 1)
+
+# Partition information
+partition = v.obj.row_partition
+prefix = v.obj.prefix</code></pre><h2 id="PETSc-Options"><a class="docs-heading-anchor" href="#PETSc-Options">PETSc Options</a><a id="PETSc-Options-1"></a><a class="docs-heading-anchor-permalink" href="#PETSc-Options" title="Permalink"></a></h2><p>Use prefixes to configure PETSc behavior:</p><pre><code class="language-julia hljs"># Set options globally
+petsc_options_insert_string(&quot;-my_vec_type cuda&quot;)
+
+# Create vector with prefix
+v = Vec_uniform(data; prefix=&quot;my_vec_&quot;)
+
+# Now PETSc will use the &quot;cuda&quot; type for this vector</code></pre><h2 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h2><h3 id="Parallel-Computation"><a class="docs-heading-anchor" href="#Parallel-Computation">Parallel Computation</a><a id="Parallel-Computation-1"></a><a class="docs-heading-anchor-permalink" href="#Parallel-Computation" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SafePETSc
+using MPI
+
+SafePETSc.Init()
+
+rank = MPI.Comm_rank(MPI.COMM_WORLD)
+nranks = MPI.Comm_size(MPI.COMM_WORLD)
+
+# Each rank creates local data
+n_global = 1000
+partition = default_row_partition(n_global, nranks)
+lo = partition[rank + 1]
+hi = partition[rank + 2] - 1
+
+# Generate data based on rank
+data = collect(range(1.0, length=n_global))
+
+# Create distributed vector
+v = Vec_uniform(data)
+
+# Compute: y = 2x + 1
+y = 2.0 .* v .+ 1.0
+
+if rank == 0
+    println(&quot;Computation complete&quot;)
+end</code></pre><h3 id="Sparse-Contributions"><a class="docs-heading-anchor" href="#Sparse-Contributions">Sparse Contributions</a><a id="Sparse-Contributions-1"></a><a class="docs-heading-anchor-permalink" href="#Sparse-Contributions" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SafePETSc
+using SparseArrays
+using MPI
+
+SafePETSc.Init()
+
+rank = MPI.Comm_rank(MPI.COMM_WORLD)
+n = 100
+
+# Each rank contributes to different parts
+# Use own_rank_only=true to assert local contributions
+lo = rank * 25 + 1
+hi = (rank + 1) * 25
+indices = collect(lo:hi)
+values = ones(length(indices)) * (rank + 1)
+
+v = Vec_sum(sparsevec(indices, values, n); own_rank_only=true)</code></pre><h2 id="Performance-Tips"><a class="docs-heading-anchor" href="#Performance-Tips">Performance Tips</a><a id="Performance-Tips-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Tips" title="Permalink"></a></h2><ol><li><strong>Use Broadcasting</strong>: In-place broadcasting (<code>y .= ...</code>) avoids allocations</li><li><strong>Batch Operations</strong>: Combine multiple operations in one broadcast</li><li><strong>Avoid Extraction</strong>: Keep data in distributed vectors; don&#39;t extract to Julia arrays</li><li><strong>GPU-Aware</strong>: Set PETSc options for GPU execution</li></ol><pre><code class="language-julia hljs"># Good: in-place, batched
+y .= 2.0 .* x .+ 3.0 .* z .+ 1.0
+
+# Less good: multiple allocations
+y = 2.0 * x
+y = y + 3.0 * z
+y = y + 1.0</code></pre><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="../../api/vectors/#SafePETSc.Vec_uniform"><code>Vec_uniform</code></a></li><li><a href="../../api/vectors/#SafePETSc.Vec_sum"><code>Vec_sum</code></a></li><li><a href="../../api/vectors/#SafePETSc.zeros_like"><code>zeros_like</code></a></li><li><a href="../../api/vectors/#SafePETSc.ones_like"><code>ones_like</code></a></li><li><a href="../../api/vectors/#SafePETSc.fill_like"><code>fill_like</code></a></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../distributed_refs/">« Distributed Reference Management</a><a class="docs-footer-nextpage" href="../matrices/">Matrices »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.15.0 on <span class="colophon-date" title="Thursday 13 November 2025 10:05">Thursday 13 November 2025</span>. Using Julia version 1.12.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
