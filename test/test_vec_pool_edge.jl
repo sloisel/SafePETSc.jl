@@ -282,6 +282,52 @@ end
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
+# Test 7: Direct destruction when pooling is disabled
+if rank == 0
+    println("[DEBUG] Test 7: Direct PETSc destruction when pooling disabled")
+    flush(stdout)
+end
+
+# Disable pooling
+old_pool_setting = SafePETSc.ENABLE_VEC_POOL[]
+SafePETSc.ENABLE_VEC_POOL[] = false
+
+# Create vector - should be destroyed directly when released, not pooled
+v_direct = ones(16)
+dr_direct = SafePETSc.Vec_uniform(v_direct; prefix="direct_")
+
+# Release the vector (should destroy directly via _destroy_petsc_vec!)
+dr_direct = nothing
+GC.gc()
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Pool should remain empty
+stats = SafePETSc.get_vec_pool_stats()
+@test isempty(stats)
+
+# Re-enable pooling
+SafePETSc.ENABLE_VEC_POOL[] = old_pool_setting
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 8: Broadcast error path for unsupported types
+if rank == 0
+    println("[DEBUG] Test 8: Broadcast error for unsupported types")
+    flush(stdout)
+end
+
+v_test = ones(16)
+dr_test = SafePETSc.Vec_uniform(v_test; prefix="err_")
+
+# Try to broadcast with a Matrix (unsupported type) - should error
+unsupported_array = [1.0 2.0; 3.0 4.0]
+@test_throws DimensionMismatch dr_test .+ unsupported_array
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
 if rank == 0
     println("[DEBUG] All vec pooling edge case tests completed")
     flush(stdout)
