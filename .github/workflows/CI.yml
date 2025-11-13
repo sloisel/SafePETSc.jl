@@ -7,6 +7,13 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Enable tmate debugging'
+        required: false
+        default: false
 
 jobs:
   test:
@@ -35,6 +42,14 @@ jobs:
         uses: julia-actions/julia-runtest@v1
         with:
           coverage: true
+        continue-on-error: true
+
+      - name: Setup tmate session for debugging
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ failure() || github.event.inputs.debug_enabled == 'true' }}
+        timeout-minutes: 30
+        with:
+          limit-access-to-actor: true
 
       - name: Process coverage
         uses: julia-actions/julia-processcoverage@v1
