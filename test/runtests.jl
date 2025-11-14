@@ -98,4 +98,8 @@ end
     @testset "BlockProduct Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_blockproduct.jl"); nprocs=4, expect_success=true)
     end
+
+    @testset "Conversion and Display Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_conversions.jl"); nprocs=4, expect_success=true)
+    end
 end
