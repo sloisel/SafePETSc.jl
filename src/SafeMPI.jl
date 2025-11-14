@@ -174,7 +174,7 @@ function _make_ref(obj::T, manager) where T
     # This consolidates cleanup that was previously scattered across constructors
     check_and_destroy!(manager; max_check_count=default_check[])
 
-    counter_id = allocate_id!(manager)
+    counter_id = _allocate_id!(manager)
     ref = DRef{T}(obj, manager, counter_id)
     manager.objs[counter_id] = obj  # Store the object itself (strong reference)
     # Add finalizer to automatically release when GC'd
@@ -222,7 +222,7 @@ function _drain_pending_releases!(manager::DistributedRefManager)
     return ids
 end
 
-function allocate_id!(manager::DistributedRefManager)
+function _allocate_id!(manager::DistributedRefManager)
     if !isempty(manager.free_ids)
         counter_id = pop!(manager.free_ids)
     else
