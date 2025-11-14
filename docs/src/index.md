@@ -35,7 +35,8 @@ b = Vec_uniform([1.0, 2.0])
 # Solve the linear system
 x = A \ b
 
-# Objects are automatically cleaned up when they go out of scope
+# Display the solution (only on rank 0)
+println(io0(), x)
 ```
 
 ## Core Types
