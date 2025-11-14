@@ -209,9 +209,9 @@ end
 
 ### Cleanup Overhead
 
-- `check_and_destroy!` triggers full GC and MPI synchronization
-- Default: cleanup every 10 object creations (`max_check_count=10` in `_make_ref`)
-- Tune based on application: more frequent cleanup = less memory, more overhead
+- `check_and_destroy!` uses collective `Allgather/Allgatherv` operations and periodically triggers partial GC
+- Default: partial GC every 10 object creations (controlled by `SafePETSc.default_check[]`)
+- Tune `default_check[]` based on application: lower values = less memory, more overhead
 
 ### Memory Management
 

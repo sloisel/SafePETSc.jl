@@ -33,25 +33,12 @@ y = v .+ 1.0
 
 1. **Mirrored Counters**: Each rank runs the same deterministic ID allocation, keeping a mirrored `counter_pool` and shared `free_ids` stack; all ranks recycle IDs identically without a designated root
 2. **Automatic Release**: When a `DRef` is garbage collected, its finalizer enqueues the ID locally (no MPI in finalizers)
-3. **Cleanup Points**: At `check_and_destroy!` calls (automatically throttled at construction), SafePETSc:
-   - Triggers garbage collection so finalizers run
-   - Drains each rank’s local release queue
+3. **Cleanup Points**: At `check_and_destroy!` calls (automatically invoked at object creation), SafePETSc:
+   - Periodically triggers partial garbage collection (`GC.gc(false)`) so finalizers run
+   - Drains each rank's local release queue
    - Allgathers counts and then Allgathervs the release IDs so every rank sees the same global sequence
    - Each rank updates its mirrored counters identically and computes the same set of ready IDs
    - All ranks destroy ready objects simultaneously
-
-### Architecture
-
-```
-All ranks (mirrored)
-┌──────────────────────────────────────────────────────────┐
-│ 1) Drain local release queue                             │
-│ 2) Allgather counts; if total==0, quiescent              │
-│ 3) Allgatherv payloads; everyone sees same release IDs   │
-│ 4) Update counters; when count == nranks, mark ready     │
-│ 5) Destroy ready objects on all ranks                    │
-└──────────────────────────────────────────────────────────┘
-```
 
 ## Trait-Based Opt-In
 
@@ -82,13 +69,16 @@ ref = DRef(MyDistributedObject(...))
 
 ### Automatic Cleanup and Pooling
 
-Cleanup happens automatically at object creation (throttled by `default_check`). For PETSc vectors, the default behavior is to return released vectors to a reuse pool instead of destroying them. Disable pooling with `ENABLE_VEC_POOL[] = false` or call `clear_vec_pool!()` to free pooled vectors.
+Cleanup is triggered automatically at object creation. Every `SafePETSc.default_check[]` object creations (default: 10), a partial garbage collection (`GC.gc(false)`) runs to trigger finalizers, and pending releases are processed via MPI communication. This throttling reduces cleanup overhead.
+
+For PETSc vectors, the default behavior is to return released vectors to a reuse pool instead of destroying them. Disable pooling with `ENABLE_VEC_POOL[] = false` or call `clear_vec_pool!()` to free pooled vectors.
+
+To guarantee all objects are destroyed (not just those finalized by partial GC), call `GC.gc(true)` followed by `SafeMPI.check_and_destroy!()`:
 
 ```julia
-# Every 10th object creation triggers cleanup
-v1 = Vec_uniform([1.0, 2.0])  # May trigger cleanup
-v2 = Vec_uniform([3.0, 4.0])  # May trigger cleanup
-# ...
+# Force complete cleanup
+GC.gc(true)  # Full garbage collection
+SafeMPI.check_and_destroy!()  # Process all finalizers
 ```
 
 ### Explicit Cleanup
@@ -96,12 +86,14 @@ v2 = Vec_uniform([3.0, 4.0])  # May trigger cleanup
 You can manually trigger cleanup:
 
 ```julia
-# Force immediate cleanup
+# Trigger cleanup (does partial GC if throttle count reached)
 SafeMPI.check_and_destroy!()
 
-# Or with throttling
+# With custom throttle count
 SafeMPI.check_and_destroy!(max_check_count=10)
 ```
+
+The `max_check_count` parameter controls how often partial GC runs: `check_and_destroy!` only calls `GC.gc(false)` every `max_check_count` invocations, but MPI communication to process pending releases happens on every call.
 
 ### Disabling Assertions
 
@@ -164,9 +156,8 @@ SafeMPI.enable_assert[]  # true
 
 ## Performance Considerations
 
-- **Cleanup Cost**: `check_and_destroy!` triggers a full GC and uses collective `Allgather/Allgatherv`
-- **Throttling**: The `max_check_count` parameter reduces overhead by skipping some cleanup points
-- **ID Recycling**: Released IDs are reused via the shared `free_ids` vector to prevent unbounded growth
+- **Cleanup Cost**: `check_and_destroy!` uses collective `Allgather/Allgatherv` operations and periodically triggers partial garbage collection
+- **Throttling**: Adjust `SafePETSc.default_check[]` to control automatic cleanup frequency (default: 10). Higher values reduce overhead but increase memory usage
 
 ## See Also
 
