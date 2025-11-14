@@ -14,7 +14,6 @@ SafePETSc.jl lets you write natural Julia expressions like `A * B + C`, `A \ b`,
 - **Broadcasting**: Full support for `.+`, `.*`, `.=` and function broadcasting `f.(x)`
 - **Standard Constructors**: `spdiagm`, `vcat`, `hcat`, `blockdiag` work on distributed matrices
 - **Linear Algebra**: Matrix multiplication, solving (`\`, `/`), transpose, in-place operations
-- **GPU-Friendly**: Bulk operations that work efficiently on GPU devices
 - **Automatic Memory Management**: Objects are cleaned up automatically across MPI ranks
 - **Vector Pooling**: Temporary vectors are reused for efficiency (configurable with `ENABLE_VEC_POOL[]`)
 - **Iteration**: Use `eachrow(A)` for row-wise processing
@@ -71,45 +70,22 @@ ldiv!(x, A, v)      # x = A \ v (solve in-place)
 MPI.Finalize()
 ```
 
-## Architecture (Implementation Details)
+## Core Types
 
-*This section describes the internal implementation for developers and contributors. Users don't need to understand these details to use SafePETSc effectively.*
+SafePETSc provides three main distributed types that wrap PETSc objects:
 
-### SafeMPI Module
+- **Vec{T}**: Distributed vectors with automatic lifetime management and pooling
+- **Mat{T}**: Distributed matrices supporting dense and sparse formats
+- **Solver**: Linear solver contexts for efficient repeated solves
 
-The package implements a reference-counting garbage collection system for distributed objects:
+### Memory Management
 
-- **DistributedRefManager**: Coordinates reference counting across MPI ranks
-  - All ranks run the same ID allocation logic and keep the same `free_ids` vector, ensuring deterministic IDs without a dedicated root
-  - Each rank enqueues local releases without MPI; at safe points, ranks collectively `Allgather` release IDs and update counters identically
-  - Objects ready for destruction are identified deterministically on all ranks; destruction runs collectively without an extra broadcast
-  - Automatic ID recycling prevents unbounded growth via the shared `free_ids` vector
-
-- **DRef{T}**: Generic wrapper for distributed objects requiring coordinated destruction
-  - Only works with types that explicitly opt-in via the trait system
-  - Finalizers automatically call `release!()` when garbage collected
-
-### SafePETSc Module
-
-Provides safe wrappers around PETSc functionality:
-
-- **Vec{T}**: Distributed vectors with automatic lifetime management
-- **Mat{T}**: Distributed matrices with GPU-friendly operations
-- **KSP{T}**: Linear solver contexts
-
-### Trait-Based Destruction System
-
-Types must explicitly opt-in to distributed management:
+PETSc objects are automatically cleaned up when they go out of scope. To accelerate resource recovery, you can manually trigger cleanup:
 
 ```julia
-# Enable distributed management
-destroy_trait(::Type{YourType}) = CanDestroy()
-
-# Implement cleanup logic
-destroy_obj!(obj::YourType) = ...
+GC.gc()                              # Trigger garbage collection
+SafePETSc.SafeMPI.check_and_destroy!()  # Perform collective cleanup
 ```
-
-This prevents accidental misuse and provides clear error messages when attempting to wrap unsupported types.
 
 ## Testing
 
@@ -128,16 +104,6 @@ The test suite includes:
 - Matrix and vector operations
 - Linear solver correctness
 - Resource cleanup verification
-
-## GPU Support
-
-SafePETSc prioritizes GPU-compatible operations by using PETSc's native bulk functions:
-
-- `MatConvert`: Type conversion (e.g., sparse to dense) preserving GPU storage
-- `MatTranspose`: Efficient GPU-based transposition
-- `MatMatMult`: GPU-accelerated matrix multiplication
-
-Avoid element-by-element extraction patterns which cause excessive GPU↔CPU transfers.
 
 ## Development
 
