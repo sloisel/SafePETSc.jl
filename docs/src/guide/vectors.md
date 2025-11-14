@@ -234,6 +234,95 @@ y = y + 3.0 * z
 y = y + 1.0
 ```
 
+## Converting to Julia Arrays
+
+You can convert a distributed `Vec` to a native Julia `Vector` using the `Vector()` constructor. This is useful for interoperability with other Julia packages, data export, or analysis.
+
+```julia
+# Create a distributed vector
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+
+# Convert to Julia Vector
+v_julia = Vector(v)  # Returns Vector{Float64}
+```
+
+### Important: Collective Operation
+
+**The conversion is a collective operation** - all ranks must call it:
+
+```julia
+# ✓ CORRECT - All ranks participate
+v_julia = Vector(v)  # All ranks get the complete vector
+
+# ❌ WRONG - Will hang MPI!
+if rank == 0
+    v_julia = Vector(v)  # Only rank 0 calls, others wait forever
+end
+```
+
+After conversion, **all ranks receive the complete vector**. The data is gathered from all ranks using MPI collective operations.
+
+### When to Use Conversions
+
+**Good use cases:**
+- **Interoperability**: Pass data to packages that don't support PETSc
+- **Small-scale analysis**: Compute properties on small vectors
+- **Data export**: Save results to files
+- **Visualization**: Convert for plotting libraries
+
+```julia
+using Plots
+
+# Solve distributed system
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+b = Vec_uniform([1.0, 2.0])
+x = A \ b
+
+# Convert for plotting (small vector, so conversion is cheap)
+x_julia = Vector(x)
+plot(x_julia, label="Solution")
+```
+
+**Avoid conversions for:**
+- **Large datasets**: Gathers all data to all ranks (expensive!)
+- **Intermediate computations**: Keep data in PETSc format
+- **Repeated access**: Don't convert in loops
+
+```julia
+# ❌ BAD - Expensive conversion in loop
+for i in 1:1000
+    v_julia = Vector(v)  # Wasteful! Gathers data every iteration
+    process(v_julia[1])
+end
+
+# ✓ BETTER - Convert once if needed
+v_julia = Vector(v)
+for i in 1:1000
+    process(v_julia[1])
+end
+```
+
+### Working with Converted Vectors
+
+After conversion, you have a standard Julia array:
+
+```julia
+using Statistics
+using LinearAlgebra
+
+x = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+x_julia = Vector(x)
+
+# Use with any Julia package
+μ = mean(x_julia)     # Statistics
+σ = std(x_julia)
+n = norm(x_julia)     # LinearAlgebra
+
+println(io0(), "Mean: $μ, Std: $σ, Norm: $n")
+```
+
+See [Converting to Native Julia Arrays](io.md#converting-to-native-julia-arrays) for more details and examples.
+
 ## See Also
 
 - [`Vec_uniform`](@ref)
@@ -241,7 +330,7 @@ y = y + 1.0
 - [`zeros_like`](@ref)
 - [`ones_like`](@ref)
 - [`fill_like`](@ref)
-- [Converting to Native Julia Arrays](io.md#converting-to-native-julia-arrays) - Convert `Vec` to `Vector`
+- [Input/Output and Display](io.md) - Display and conversion operations
 
 ## Pooling and Cleanup
 
