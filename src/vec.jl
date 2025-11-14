@@ -718,3 +718,66 @@ function get_vec_pool_stats()
     end
     return stats
 end
+
+# -----------------------------------------------------------------------------
+# Conversion to Julia Vector
+# -----------------------------------------------------------------------------
+
+"""
+    Vector(x::Vec{T}) -> Vector{T}
+
+Convert a distributed PETSc Vec to a Julia Vector by gathering all data to all ranks.
+This is a collective operation - all ranks must call it and will receive the complete vector.
+
+This is primarily used for display purposes or small vectors. For large vectors, this
+operation can be expensive as it gathers all data to all ranks.
+"""
+function Base.Vector(x::Vec{T}) where T
+    comm = MPI.COMM_WORLD
+    nranks = MPI.Comm_size(comm)
+    rank = MPI.Comm_rank(comm)
+
+    # Get local portion
+    row_lo = x.obj.row_partition[rank+1]
+    row_hi = x.obj.row_partition[rank+2] - 1
+    nlocal = row_hi - row_lo + 1
+    nglobal = length(x)
+
+    # Extract local data
+    local_view = PETSc.unsafe_localarray(x.obj.v; read=true)
+    local_data = try
+        copy(local_view)
+    finally
+        Base.finalize(local_view)
+    end
+
+    # Prepare for Allgatherv
+    counts = [x.obj.row_partition[i+2] - x.obj.row_partition[i+1] for i in 0:nranks-1]
+    displs = [x.obj.row_partition[i+1] - 1 for i in 0:nranks-1]  # 0-based displacements
+
+    # Gather to all ranks
+    result = Vector{T}(undef, nglobal)
+    MPI.Allgatherv!(local_data, MPI.VBuffer(result, counts, displs), comm)
+
+    return result
+end
+
+"""
+    Base.show(io::IO, x::Vec{T})
+
+Display a distributed PETSc Vec by converting to Julia Vector and showing it.
+
+This is a collective operation - all ranks must call it and will display the same vector.
+To print only on rank 0, use: `println(io0(), v)`
+"""
+Base.show(io::IO, x::Vec{T}) where T = show(io, Vector(x))
+
+"""
+    Base.show(io::IO, mime::MIME, x::Vec{T})
+
+Display a distributed PETSc Vec with a specific MIME type by converting to Julia Vector.
+
+This is a collective operation - all ranks must call it and will display the same vector.
+To print only on rank 0, use: `show(io0(), mime, v)`
+"""
+Base.show(io::IO, mime::MIME, x::Vec{T}) where T = show(io, mime, Vector(x))

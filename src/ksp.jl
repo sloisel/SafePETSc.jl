@@ -545,14 +545,6 @@ end
 
 # Matrix transpose wrapper
 PETSc.@for_libpetsc begin
-    # Debug helper: return PETSc MatType string
-    function _mat_type_string(A::PETSc.Mat{$PetscScalar})
-        type_ptr = Ref{Ptr{Cchar}}(C_NULL)
-        PETSc.@chk ccall((:MatGetType, $libpetsc), PETSc.PetscErrorCode,
-                         (CMat, Ptr{Ptr{Cchar}}), A, type_ptr)
-        return unsafe_string(type_ptr[])
-    end
-
     function _mat_transpose(A::PETSc.Mat{$PetscScalar}, prefix::String="",
                            row_partition::Vector{Int}=Int[], col_partition::Vector{Int}=Int[])
         # Create new transpose matrix using PETSc MatTranspose with MAT_INITIAL_MATRIX

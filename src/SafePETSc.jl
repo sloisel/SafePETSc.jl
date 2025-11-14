@@ -180,6 +180,33 @@ export petsc_options_insert_string
 export Init, Initialized
 export ENABLE_VEC_POOL, clear_vec_pool!, get_vec_pool_stats
 export BlockProduct, calculate!
+export io0
+
+"""
+    io0(io=stdout; r=0)
+
+Return `io` on rank `r`, and `devnull` on all other ranks.
+
+This is useful for printing output only on a specific rank to avoid duplicate output.
+
+# Examples
+```julia
+# Print only on rank 0
+println(io0(), "This prints only on rank 0")
+
+# Print only on rank 2
+println(io0(r=2), "This prints only on rank 2")
+
+# Write to file only on rank 1
+open("output.txt", "w") do f
+    println(io0(f, r=1), "This writes only on rank 1")
+end
+```
+"""
+function io0(io=stdout; r=0)
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    return rank == r ? io : devnull
+end
 
 include("vec.jl")
 include("mat.jl")

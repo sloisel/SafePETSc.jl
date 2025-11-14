@@ -1106,6 +1106,31 @@ PETSc.@for_libpetsc begin
                          (PETSc.CMat, Ptr{Ptr{$PetscScalar}}), A, parr)
         return nothing
     end
+
+    # MatGetRow - extract a single row from a sparse matrix
+    # Returns (ncols, col_indices, values) where col_indices and values are pointers
+    function _mat_get_row(A::PETSc.Mat{$PetscScalar}, row::Int)
+        row_c = $PetscInt(row - 1)  # Convert to 0-based
+        ncols = Ref{$PetscInt}(0)
+        cols_ptr = Ref{Ptr{$PetscInt}}(C_NULL)
+        vals_ptr = Ref{Ptr{$PetscScalar}}(C_NULL)
+        PETSc.@chk ccall((:MatGetRow, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CMat, $PetscInt, Ptr{$PetscInt}, Ptr{Ptr{$PetscInt}}, Ptr{Ptr{$PetscScalar}}),
+                         A, row_c, ncols, cols_ptr, vals_ptr)
+        return (Int(ncols[]), cols_ptr[], vals_ptr[])
+    end
+
+    # MatRestoreRow - must be called after MatGetRow to free resources
+    function _mat_restore_row(A::PETSc.Mat{$PetscScalar}, row::Int, ncols::Int, cols_ptr::Ptr{$PetscInt}, vals_ptr::Ptr{$PetscScalar})
+        row_c = $PetscInt(row - 1)  # Convert to 0-based
+        ncols_c = $PetscInt(ncols)
+        cols_ref = Ref{Ptr{$PetscInt}}(cols_ptr)
+        vals_ref = Ref{Ptr{$PetscScalar}}(vals_ptr)
+        PETSc.@chk ccall((:MatRestoreRow, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CMat, $PetscInt, Ptr{$PetscInt}, Ptr{Ptr{$PetscInt}}, Ptr{Ptr{$PetscScalar}}),
+                         A, row_c, Ref(ncols_c), cols_ref, vals_ref)
+        return nothing
+    end
 end
 
 function _eachrow_dense(A::Mat{T}) where {T}
@@ -1218,4 +1243,207 @@ function Base.getindex(A::DRef{_Mat{T}}, ::Colon, k::Int) where {T}
     obj = _Vec{T}(petsc_vec, A.obj.row_partition, A.obj.prefix)
     return SafeMPI.DRef(obj)
 end
+
+# -----------------------------------------------------------------------------
+# Matrix Type Query and Conversion to Julia Arrays
+# -----------------------------------------------------------------------------
+
+# Get PETSc MatType string
+PETSc.@for_libpetsc begin
+    function _mat_type_string(A::PETSc.Mat{$PetscScalar})
+        type_ptr = Ref{Ptr{Cchar}}(C_NULL)
+        PETSc.@chk ccall((:MatGetType, $libpetsc), PETSc.PetscErrorCode,
+                         (CMat, Ptr{Ptr{Cchar}}), A, type_ptr)
+        return unsafe_string(type_ptr[])
+    end
+end
+
+"""
+    is_dense(x::Mat{T}) -> Bool
+
+Check if a PETSc matrix is a dense matrix type.
+
+This checks the PETSc matrix type string and returns true if it contains "dense"
+(case-insensitive). This handles various dense types like "seqdense", "mpidense",
+and vendor-specific dense matrix types.
+"""
+function is_dense(x::Mat{T}) where T
+    mat_type = _mat_type_string(x.obj.A)
+    return occursin("dense", lowercase(mat_type))
+end
+
+"""
+    Matrix(x::Mat{T}) -> Matrix{T}
+
+Convert a distributed PETSc Mat to a Julia Matrix by gathering all data to all ranks.
+This is a collective operation - all ranks must call it and will receive the complete matrix.
+
+For dense matrices, this uses efficient MatDenseGetArrayRead. For other matrix types,
+it uses MatGetRow to extract each row.
+
+This is primarily used for display purposes or small matrices. For large matrices, this
+operation can be expensive as it gathers all data to all ranks.
+"""
+function Base.Matrix(x::Mat{T}) where T
+    comm = MPI.COMM_WORLD
+    nranks = MPI.Comm_size(comm)
+    rank = MPI.Comm_rank(comm)
+
+    m, n = size(x)
+    row_lo = x.obj.row_partition[rank+1]
+    row_hi = x.obj.row_partition[rank+2] - 1
+    nlocal = row_hi - row_lo + 1
+
+    # Extract local rows as dense matrix
+    if is_dense(x)
+        # Efficient dense extraction
+        p = _matdense_get_array_read(x.obj.A)
+        try
+            # PETSc stores dense matrices column-major, same as Julia
+            local_data = unsafe_wrap(Array, p, (nlocal, n); own=false)
+            local_dense = copy(local_data)  # Copy to own the data
+        finally
+            _matdense_restore_array_read(x.obj.A, p)
+        end
+    else
+        # General case: use MatGetRow
+        local_dense = Matrix{T}(undef, nlocal, n)
+        for i in 1:nlocal
+            global_row = row_lo + i - 1
+
+            # Get row from PETSc
+            ncols, cols_ptr, vals_ptr = _mat_get_row(x.obj.A, global_row)
+            try
+                # Convert to Julia arrays (PETSc uses 0-based indexing)
+                if ncols > 0
+                    cols = unsafe_wrap(Array, cols_ptr, ncols; own=false)
+                    vals = unsafe_wrap(Array, vals_ptr, ncols; own=false)
+
+                    # Fill row with zeros and set nonzero values
+                    local_dense[i, :] .= zero(T)
+                    for j in 1:ncols
+                        col_idx = Int(cols[j]) + 1  # Convert to 1-based
+                        local_dense[i, col_idx] = vals[j]
+                    end
+                else
+                    # Empty row
+                    local_dense[i, :] .= zero(T)
+                end
+            finally
+                _mat_restore_row(x.obj.A, global_row, ncols, cols_ptr, vals_ptr)
+            end
+        end
+    end
+
+    # Prepare for Allgatherv (gather rows)
+    counts = [x.obj.row_partition[i+2] - x.obj.row_partition[i+1] for i in 0:nranks-1]
+    counts_elems = counts .* n  # Total elements per rank
+    displs_elems = [sum(counts_elems[1:i]) for i in 1:nranks]
+    pushfirst!(displs_elems, 0)
+    pop!(displs_elems)
+
+    # Gather to all ranks
+    local_flat = Vector{T}(vec(local_dense'))  # Flatten column-major, ensure plain Vector
+    result_flat = Vector{T}(undef, m * n)
+    MPI.Allgatherv!(local_flat, MPI.VBuffer(result_flat, counts_elems, displs_elems), comm)
+
+    # Reshape back to matrix (column-major)
+    result = reshape(result_flat, n, m)'  # Transpose because we flattened row-wise
+    return Matrix{T}(result)  # Ensure it's a plain Matrix, not an adjoint
+end
+
+"""
+    SparseArrays.sparse(x::Mat{T}) -> SparseMatrixCSC{T, Int}
+
+Convert a distributed PETSc Mat to a Julia SparseMatrixCSC by gathering all data to all ranks.
+This is a collective operation - all ranks must call it and will receive the complete sparse matrix.
+
+Uses MatGetRow to extract the sparse structure efficiently, preserving sparsity.
+
+This is primarily used for display purposes or small matrices. For large matrices, this
+operation can be expensive as it gathers all data to all ranks.
+"""
+function SparseArrays.sparse(x::Mat{T}) where T
+    comm = MPI.COMM_WORLD
+    nranks = MPI.Comm_size(comm)
+    rank = MPI.Comm_rank(comm)
+
+    m, n = size(x)
+    row_lo = x.obj.row_partition[rank+1]
+    row_hi = x.obj.row_partition[rank+2] - 1
+    nlocal = row_hi - row_lo + 1
+
+    # Extract local sparse data
+    local_I = Int[]
+    local_J = Int[]
+    local_V = T[]
+
+    for i in 1:nlocal
+        global_row = row_lo + i - 1
+
+        # Get row from PETSc
+        ncols, cols_ptr, vals_ptr = _mat_get_row(x.obj.A, global_row)
+        try
+            if ncols > 0
+                # Convert to Julia arrays (PETSc uses 0-based indexing)
+                cols = unsafe_wrap(Array, cols_ptr, ncols; own=false)
+                vals = unsafe_wrap(Array, vals_ptr, ncols; own=false)
+
+                # Add to local sparse arrays
+                for j in 1:ncols
+                    col_idx = Int(cols[j]) + 1  # Convert to 1-based
+                    push!(local_I, global_row)
+                    push!(local_J, col_idx)
+                    push!(local_V, vals[j])
+                end
+            end
+        finally
+            _mat_restore_row(x.obj.A, global_row, ncols, cols_ptr, vals_ptr)
+        end
+    end
+
+    # Gather counts from all ranks
+    local_nnz = length(local_I)
+    all_nnz = MPI.Allgather(local_nnz, comm)
+
+    # Prepare for Allgatherv
+    total_nnz = sum(all_nnz)
+    displs = [sum(all_nnz[1:i]) for i in 1:nranks]
+    pushfirst!(displs, 0)
+    pop!(displs)
+
+    # Gather I, J, V arrays
+    global_I = Vector{Int}(undef, total_nnz)
+    global_J = Vector{Int}(undef, total_nnz)
+    global_V = Vector{T}(undef, total_nnz)
+
+    MPI.Allgatherv!(local_I, MPI.VBuffer(global_I, all_nnz, displs), comm)
+    MPI.Allgatherv!(local_J, MPI.VBuffer(global_J, all_nnz, displs), comm)
+    MPI.Allgatherv!(local_V, MPI.VBuffer(global_V, all_nnz, displs), comm)
+
+    # Create sparse matrix
+    return sparse(global_I, global_J, global_V, m, n)
+end
+
+"""
+    Base.show(io::IO, x::Mat{T})
+
+Display a distributed PETSc Mat by converting to Julia Matrix or SparseMatrixCSC and showing it.
+
+Dense matrices are converted to Matrix, other matrices are converted to SparseMatrixCSC.
+This is a collective operation - all ranks must call it and will display the same matrix.
+To print only on rank 0, use: `println(io0(), A)`
+"""
+Base.show(io::IO, x::Mat{T}) where T = show(io, is_dense(x) ? Matrix(x) : sparse(x))
+
+"""
+    Base.show(io::IO, mime::MIME, x::Mat{T})
+
+Display a distributed PETSc Mat with a specific MIME type by converting to Julia Matrix or SparseMatrixCSC.
+
+Dense matrices are converted to Matrix, other matrices are converted to SparseMatrixCSC.
+This is a collective operation - all ranks must call it and will display the same matrix.
+To print only on rank 0, use: `show(io0(), mime, A)`
+"""
+Base.show(io::IO, mime::MIME, x::Mat{T}) where T = show(io, mime, is_dense(x) ? Matrix(x) : sparse(x))
 
