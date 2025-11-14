@@ -30,6 +30,20 @@ SparseArrays.blockdiag
 SparseArrays.spdiagm
 ```
 
+## Conversion and Display
+
+Convert distributed matrices to Julia arrays for inspection and display:
+
+```@docs
+Base.Matrix(::SafePETSc.Mat)
+SparseArrays.sparse(::SafePETSc.Mat)
+SafePETSc.is_dense
+```
+
+Display methods (automatically used by `println`, `display`, etc.):
+- `show(io::IO, A::Mat)` - Display matrix contents (uses dense or sparse format based on type)
+- `show(io::IO, mime::MIME, A::Mat)` - Display with MIME type support
+
 ## Operations
 
 ### Linear Algebra

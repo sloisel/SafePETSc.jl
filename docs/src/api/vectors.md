@@ -37,6 +37,24 @@ SafePETSc.clear_vec_pool!
 SafePETSc.get_vec_pool_stats
 ```
 
+## Conversion and Display
+
+Convert distributed vectors to Julia arrays for inspection and display:
+
+```@docs
+Base.Vector(::SafePETSc.Vec)
+```
+
+Display methods (automatically used by `println`, `display`, etc.):
+- `show(io::IO, v::Vec)` - Display vector contents
+- `show(io::IO, mime::MIME, v::Vec)` - Display with MIME type support
+
+## Utilities
+
+```@docs
+SafePETSc.io0
+```
+
 ## Operations
 
 ### Arithmetic
