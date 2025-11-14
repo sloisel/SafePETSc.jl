@@ -53,6 +53,10 @@ y = A * v           # Matrix-vector product
 x = A \ v           # Linear solve
 z = A' * v          # Transpose multiply
 
+# Display results (io0() prints only on rank 0 to avoid duplicate output)
+println(io0(), "Solution: ", x)
+println(io0(), "Result vector: ", y)
+
 # Broadcasting
 w = 2.0 .* v .+ 3.0      # Scalar operations
 result = v .+ w          # Element-wise addition
@@ -77,6 +81,26 @@ SafePETSc provides three main distributed types that wrap PETSc objects:
 - **Vec{T}**: Distributed vectors with automatic lifetime management and pooling
 - **Mat{T}**: Distributed matrices supporting dense and sparse formats
 - **Solver**: Linear solver contexts for efficient repeated solves
+
+### Printing and Display
+
+When printing distributed objects in MPI applications, use `io0()` to avoid duplicate output from all ranks:
+
+```julia
+# Print only on rank 0 (default)
+println(io0(), "Solution: ", x)
+println(io0(), v)  # Displays vector contents
+
+# Print on a specific rank
+println(io0(r=2), "Message from rank 2")
+
+# Write to file only on rank 0
+open("results.txt", "w") do f
+    println(io0(f), "Results: ", x)
+end
+```
+
+The `io0()` function returns the provided IO stream (default `stdout`) on the specified rank, and `devnull` on all other ranks. This ensures output appears only once while allowing all ranks to execute the same code.
 
 ### Memory Management
 
