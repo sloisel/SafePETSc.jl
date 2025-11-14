@@ -180,6 +180,185 @@ display(A)  # Uses MIME"text/plain"
 # show(io, MIME"text/plain"(), v)
 ```
 
+## Converting to Native Julia Arrays
+
+SafePETSc provides constructors to explicitly convert distributed PETSc objects to native Julia arrays. This is useful for interoperability with other Julia packages, data export, or small-scale analysis.
+
+### Available Conversions
+
+```julia
+# Vector: Convert Vec to Julia Vector
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+v_julia = Vector(v)  # Returns Vector{Float64}
+
+# Matrix: Convert Mat to Julia Matrix (dense)
+A = Mat_uniform([1.0 2.0; 3.0 4.0])
+A_dense = Matrix(A)  # Returns Matrix{Float64}
+
+# Sparse: Convert Mat to SparseMatrixCSC
+using SparseArrays
+A_sparse = Mat_uniform(sparse([1, 2], [1, 2], [1.0, 4.0], 10, 10))
+A_csc = sparse(A_sparse)  # Returns SparseMatrixCSC{Float64, Int}
+```
+
+### Important: Collective Operations
+
+**All conversion functions are collective operations** - every rank must call them:
+
+```julia
+# ✓ CORRECT - All ranks participate
+v_julia = Vector(v)  # All ranks get the complete vector
+
+# ❌ WRONG - Will hang MPI!
+if rank == 0
+    v_julia = Vector(v)  # Only rank 0 calls, others wait forever
+end
+```
+
+After conversion, **all ranks receive the complete array**. This is necessary because the conversion gathers distributed data from all ranks.
+
+### When to Use Conversions
+
+**Good use cases:**
+1. **Interoperability**: Pass data to packages that don't support PETSc
+2. **Small-scale analysis**: Compute properties on small matrices/vectors
+3. **Data export**: Save results to files in native Julia formats
+4. **Visualization**: Convert for plotting libraries
+
+```julia
+using Plots
+
+# Solve distributed system
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+b = Vec_uniform([1.0, 2.0])
+x = A \ b
+
+# Convert for plotting (small vector, so conversion is cheap)
+x_julia = Vector(x)
+plot(x_julia, label="Solution")
+savefig(io0(), "solution.png")  # Only rank 0 saves
+```
+
+**When to avoid:**
+1. **Large datasets**: Conversion gathers all data to all ranks (expensive!)
+2. **Intermediate computations**: Keep data in PETSc format for efficiency
+3. **Repeated access**: Don't convert in loops
+
+```julia
+# ❌ BAD - Expensive conversion in loop
+for i in 1:1000
+    v_julia = Vector(v)  # Wasteful! Gathers data every iteration
+    process(v_julia[1])
+end
+
+# ✓ BETTER - Convert once if needed
+v_julia = Vector(v)
+for i in 1:1000
+    process(v_julia[1])
+end
+
+# ✓ BEST - Don't convert at all if possible
+# Use PETSc operations directly instead
+```
+
+### Performance Considerations
+
+Conversion performance scales with:
+- **Data size**: Larger vectors/matrices take longer to gather
+- **Rank count**: More ranks means more communication
+- **Network**: Collective operations require all-to-all communication
+
+```julia
+# Small: fast conversion (< 1ms)
+v_small = Vec_uniform(ones(100))
+v_julia = Vector(v_small)
+
+# Large: expensive conversion (can be seconds!)
+v_large = Vec_uniform(ones(10_000_000))
+v_julia = Vector(v_large)  # All 10M elements sent to all ranks
+```
+
+### Working with Converted Data
+
+After conversion, you have standard Julia arrays:
+
+```julia
+using LinearAlgebra
+using Statistics
+
+# Convert PETSc objects
+x = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+
+x_julia = Vector(x)
+A_julia = Matrix(A)
+
+# Use with any Julia package
+μ = mean(x_julia)           # Statistics
+σ = std(x_julia)
+λ = eigvals(A_julia)        # LinearAlgebra
+det_A = det(A_julia)
+
+println(io0(), "Mean: $μ, Std: $σ")
+println(io0(), "Eigenvalues: ", λ)
+```
+
+### Sparse Matrix Conversion
+
+For sparse matrices, use `sparse()` to preserve sparsity:
+
+```julia
+using SparseArrays
+
+# Create large sparse matrix
+n = 10_000
+I = [1:n; 1:n-1; 2:n]
+J = [1:n; 2:n; 1:n-1]
+V = [2.0*ones(n); -ones(n-1); -ones(n-1)]
+A = Mat_sum(sparse(I, J, V, n, n))
+
+# Convert to CSC format (preserves sparsity)
+A_csc = sparse(A)  # SparseMatrixCSC - efficient!
+
+# Don't use Matrix() for sparse matrices!
+A_dense = Matrix(A)  # Creates 10000×10000 dense array - wasteful!
+
+# Work with sparse format
+nnz_A = nnz(A_csc)
+println(io0(), "Nonzeros: $nnz_A out of $(n^2) entries")
+```
+
+### Example: Data Export
+
+```julia
+using SafePETSc
+using MPI
+using SparseArrays
+using DelimitedFiles  # For writedlm
+
+SafePETSc.Init()
+
+# Solve system
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+b = Vec_uniform([1.0, 2.0])
+x = A \ b
+
+# Convert to Julia arrays (collective operation)
+x_julia = Vector(x)
+A_julia = Matrix(A)
+
+# Write to files (only rank 0)
+open("solution.txt", "w") do f
+    writedlm(io0(f), x_julia)
+end
+
+open("matrix.txt", "w") do f
+    writedlm(io0(f), A_julia)
+end
+
+println(io0(), "Data exported to solution.txt and matrix.txt")
+```
+
 ## Advanced IO Patterns
 
 ### Per-Rank Output Files

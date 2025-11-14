@@ -241,6 +241,7 @@ y = y + 1.0
 - [`zeros_like`](@ref)
 - [`ones_like`](@ref)
 - [`fill_like`](@ref)
+- [Converting to Native Julia Arrays](io.md#converting-to-native-julia-arrays) - Convert `Vec` to `Vector`
 
 ## Pooling and Cleanup
 

@@ -296,3 +296,4 @@ A = Mat_sum(local_matrix)
 - [`Mat_sum`](@ref)
 - [`spdiagm`](@ref)
 - [`vcat`](@ref), [`hcat`](@ref), [`blockdiag`](@ref)
+- [Converting to Native Julia Arrays](io.md#converting-to-native-julia-arrays) - Convert `Mat` to `Matrix` or `SparseMatrixCSC`
