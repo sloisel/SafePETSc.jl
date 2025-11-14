@@ -149,7 +149,7 @@ end
 
 MPI.Barrier(comm)
 
-if rank == 0 && (global_counts[2] > 0 || global_counts[3] > 0)
+if global_counts[2] > 0 || global_counts[3] > 0
     Base.exit(1)
 end
 
@@ -161,6 +161,7 @@ if rank == 0
     flush(stdout)
 end
 end # !_VERBOSE
+
 
 # Note: We don't call MPI.Finalize() here because Julia's MPI.jl
 # automatically finalizes MPI at exit via atexit hook

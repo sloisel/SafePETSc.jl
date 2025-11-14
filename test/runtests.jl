@@ -62,7 +62,11 @@ end
     @testset "Mat_sum Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_mat_sum.jl"); nprocs=4, expect_success=true)
     end
-    
+
+    @testset "Mat getindex Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_mat_getindex.jl"); nprocs=4, expect_success=true)
+    end
+
     @testset "Mat cat Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_mat_cat.jl"); nprocs=4, expect_success=true)
     end

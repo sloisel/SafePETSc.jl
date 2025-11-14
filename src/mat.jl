@@ -1160,3 +1160,60 @@ function Base.eachrow(A::Mat{T}) where {T}
     return _eachrow_dense(A)
 end
 
+# -----------------------------------------------------------------------------
+# Column Extraction
+# -----------------------------------------------------------------------------
+
+"""
+    Base.getindex(A::Mat{T}, ::Colon, k::Int) -> Vec{T}
+
+Extract column k from matrix A, returning a distributed vector.
+
+Each rank extracts its owned rows from column k. The resulting vector has the same
+row partition as matrix A. This operation is intended for dense matrices; the user
+is responsible for ensuring A is dense.
+
+# Example
+```julia
+A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0])
+v = A[:, 2]  # Extract second column: [2.0, 5.0]
+```
+"""
+function Base.getindex(A::DRef{_Mat{T}}, ::Colon, k::Int) where {T}
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    m, n = size(A)
+
+    # Check bounds
+    @assert 1 <= k <= n "Column index $k out of bounds for matrix of size $(m)×$(n)"
+
+    # Get local row range
+    row_lo = A.obj.row_partition[rank+1]
+    row_hi = A.obj.row_partition[rank+2] - 1
+    nlocal_rows = row_hi - row_lo + 1
+
+    # Extract local portion of column k
+    local_data = Vector{T}(undef, nlocal_rows)
+    for i in 1:nlocal_rows
+        global_row = row_lo + i - 1
+        local_data[i] = _mat_getvalue(A.obj.A, global_row, k)
+    end
+
+    # Create distributed PETSc Vec
+    petsc_vec = _vec_create_mpi_for_T(T, nlocal_rows, m, A.obj.prefix, A.obj.row_partition)
+
+    # Fill local portion
+    local_view = PETSc.unsafe_localarray(petsc_vec; read=true, write=true)
+    try
+        @inbounds local_view[:] = local_data
+    finally
+        Base.finalize(local_view)
+    end
+    PETSc.assemble(petsc_vec)
+
+    # Wrap and return
+    obj = _Vec{T}(petsc_vec, A.obj.row_partition, A.obj.prefix)
+    return SafeMPI.DRef(obj)
+end
+

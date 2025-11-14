@@ -357,6 +357,96 @@ result2 = calculate!(bp)
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
+# Test 12: Block product with A' * B
+if rank == 0
+    println("[DEBUG] Test 12: BlockProduct with A' * B")
+    flush(stdout)
+end
+
+M1 = SafePETSc.Mat_uniform([1.0 2.0; 3.0 4.0])
+M2 = SafePETSc.Mat_uniform([2.0 0.0; 0.0 2.0])
+
+A_block = reshape([M1'], 1, 1)  # A'
+B_block = reshape([M2], 1, 1)   # B
+
+bp = BlockProduct([A_block, B_block])
+result = calculate!(bp)
+
+@test size(result) == (1, 1)
+@test result[1,1] isa SafePETSc.Mat{Float64}
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 13: Block product with A * B'
+if rank == 0
+    println("[DEBUG] Test 13: BlockProduct with A * B'")
+    flush(stdout)
+end
+
+M3 = SafePETSc.Mat_uniform([1.0 2.0; 3.0 4.0])
+M4 = SafePETSc.Mat_uniform([2.0 0.0; 0.0 2.0])
+
+A_block = reshape([M3], 1, 1)    # A
+B_block = reshape([M4'], 1, 1)   # B'
+
+bp = BlockProduct([A_block, B_block])
+result = calculate!(bp)
+
+@test size(result) == (1, 1)
+@test result[1,1] isa SafePETSc.Mat{Float64}
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 14: Block product with A' * B'
+if rank == 0
+    println("[DEBUG] Test 14: BlockProduct with A' * B'")
+    flush(stdout)
+end
+
+M5 = SafePETSc.Mat_uniform([1.0 2.0; 3.0 4.0])
+M6 = SafePETSc.Mat_uniform([2.0 0.0; 0.0 2.0])
+
+A_block = reshape([M5'], 1, 1)   # A'
+B_block = reshape([M6'], 1, 1)   # B'
+
+bp = BlockProduct([A_block, B_block])
+result = calculate!(bp)
+
+@test size(result) == (1, 1)
+@test result[1,1] isa SafePETSc.Mat{Float64}
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 15: Mixed block with all transpose combinations
+if rank == 0
+    println("[DEBUG] Test 15: BlockProduct with mixed Mat and Mat' blocks")
+    flush(stdout)
+end
+
+M7 = SafePETSc.Mat_uniform([1.0 0.0; 0.0 1.0])  # Identity
+M8 = SafePETSc.Mat_uniform([0.0 1.0; 1.0 0.0])  # Swap matrix
+
+# Block matrix with all combinations: [M7   M8']
+#                                     [M7'  M8 ]
+A_block = [M7 M8'; M7' M8]
+B_block = [M7 M7; M7 M7]
+
+bp = BlockProduct([A_block, B_block])
+result = calculate!(bp)
+
+@test size(result) == (2, 2)
+# Verify all results are Mat objects (not scalars)
+@test result[1,1] isa SafePETSc.Mat{Float64}
+@test result[1,2] isa SafePETSc.Mat{Float64}
+@test result[2,1] isa SafePETSc.Mat{Float64}
+@test result[2,2] isa SafePETSc.Mat{Float64}
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
 end  # end testset
 
 # Aggregate per-rank counts and print a single summary on root
@@ -378,7 +468,7 @@ end
 
 MPI.Barrier(comm)
 
-if rank == 0 && (global_counts[2] > 0 || global_counts[3] > 0)
+if global_counts[2] > 0 || global_counts[3] > 0
     Base.exit(1)
 end
 
