@@ -13,7 +13,7 @@ println("Solution: ", x)  # Prints 4 times with 4 ranks!
 
 ## The io0() Helper
 
-SafePETSc provides the `io0()` function to easily control which rank produces output:
+SafePETSc provides the `io0()` function to easily control which ranks produce output:
 
 ```julia
 # ✓ Good: Prints only on rank 0
@@ -22,21 +22,22 @@ println(io0(), "Solution: ", x)
 
 ### How io0() Works
 
-`io0()` returns the provided IO stream on the specified rank, and `devnull` on all other ranks:
+`io0()` returns the provided IO stream if the current rank is in the set of selected ranks, and `devnull` on all other ranks:
 
 ```julia
-io0(io=stdout; r=0)
+io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)
 ```
 
 **Parameters:**
 - `io`: The IO stream to use (default: `stdout`)
-- `r`: The rank that should produce output (default: `0`)
+- `r`: Set of ranks that should produce output (default: `Set{Int}([0])`)
+- `dn`: The IO stream to return for non-selected ranks (default: `devnull`)
 
 **Return value:**
-- Returns `io` on rank `r`
-- Returns `devnull` on all other ranks
+- Returns `io` if the current rank is in `r`
+- Returns `dn` otherwise
 
-This allows all ranks to execute the same code, but only the specified rank actually writes output.
+This allows all ranks to execute the same code, but only the selected ranks actually write output.
 
 ### Basic Usage
 
@@ -58,21 +59,24 @@ println(io0(), x)  # Displays the vector
 
 ### Selecting Different Ranks
 
-You can specify which rank should produce output:
+You can specify which ranks should produce output:
 
 ```julia
 comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-# Print from rank 0
-println(io0(r=0), "This is from rank 0")
+# Print from rank 0 (default)
+println(io0(), "This is from rank 0")
 
 # Print from rank 1
-println(io0(r=1), "This is from rank 1")
+println(io0(r=Set([1])), "This is from rank 1")
 
 # Print from the last rank
-println(io0(r=nranks-1), "This is from the last rank")
+println(io0(r=Set([nranks-1])), "This is from the last rank")
+
+# Print from multiple ranks (e.g., ranks 0 and 2)
+println(io0(r=Set([0, 2])), "This is from ranks 0 and 2")
 ```
 
 ### Writing to Files
@@ -125,6 +129,27 @@ println(io0(), v)
 # 2. All ranks: show(io0(), v_julia)  (rank 0 shows, others write to devnull)
 ```
 
+**⚠️ WARNING: Never Wrap show() in Rank-Dependent Conditionals!**
+
+Because `show()` is collective, wrapping it in a rank-dependent conditional will desynchronize the MPI cluster and cause it to hang:
+
+```julia
+# ❌ WRONG - This will hang MPI!
+if rank == 0
+    println(v)  # Only rank 0 calls Vector(v), others wait forever
+end
+
+# ❌ WRONG - This will also hang!
+if rank == 0
+    @show v  # Only rank 0 participates in collective operations
+end
+
+# ✓ CORRECT - All ranks participate, only rank 0 prints
+println(io0(), v)  # All ranks call Vector(v), rank 0 displays
+```
+
+If you want rank-specific output, **always use `io0()`** - it ensures all ranks participate in the collective operations while controlling which ranks produce the output.
+
 ### Dense vs Sparse Display
 
 Matrices automatically choose the appropriate display format:
@@ -171,24 +196,6 @@ end
 ```
 
 In this case, **don't use `io0()`** because you want all ranks to write.
-
-### Conditional Output by Rank
-
-For more complex control, use explicit rank checks:
-
-```julia
-comm = MPI.COMM_WORLD
-rank = MPI.Comm_rank(comm)
-
-# Custom logic
-if rank == 0
-    println("Master rank reporting")
-elseif rank == nranks - 1
-    println("Last rank reporting")
-end
-```
-
-However, `io0()` is usually cleaner and more maintainable.
 
 ### Debugging Output
 

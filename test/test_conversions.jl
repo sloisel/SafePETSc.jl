@@ -66,7 +66,7 @@ try
     # Test 7: Demonstrate io0() usage
     println(io0(), "\n[Test 7] io0() helper function")
     println(io0(), "This line prints only on rank 0 (via io0())")
-    println(io0(r=1), "This line prints only on rank 1 (via io0(r=1))")
+    println(io0(r=Set([1])), "This line prints only on rank 1 (via io0(r=Set([1])))")
     println(io0(), "✓ io0() helper works correctly")
 
     # Clean up - objects will be finalized automatically when they go out of scope

@@ -183,29 +183,37 @@ export BlockProduct, calculate!
 export io0
 
 """
-    io0(io=stdout; r=0)
+    io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)
 
-Return `io` on rank `r`, and `devnull` on all other ranks.
+Return `io` if the current rank is in `r`, otherwise return `dn`.
 
-This is useful for printing output only on a specific rank to avoid duplicate output.
+This is useful for printing output only on specific ranks to avoid duplicate output.
+
+# Parameters
+- `io`: The IO stream to use (default: `stdout`)
+- `r`: Set of ranks that should produce output (default: `Set{Int}([0])`)
+- `dn`: The IO stream to return for non-selected ranks (default: `devnull`)
 
 # Examples
 ```julia
-# Print only on rank 0
+# Print only on rank 0 (default)
 println(io0(), "This prints only on rank 0")
 
 # Print only on rank 2
-println(io0(r=2), "This prints only on rank 2")
+println(io0(r=Set([2])), "This prints only on rank 2")
+
+# Print on ranks 0 and 3
+println(io0(r=Set([0, 3])), "This prints on ranks 0 and 3")
 
 # Write to file only on rank 1
 open("output.txt", "w") do f
-    println(io0(f, r=1), "This writes only on rank 1")
+    println(io0(f; r=Set([1])), "This writes only on rank 1")
 end
 ```
 """
-function io0(io=stdout; r=0)
+function io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
-    return rank == r ? io : devnull
+    return rank ∈ r ? io : dn
 end
 
 include("vec.jl")

@@ -92,7 +92,10 @@ println(io0(), "Solution: ", x)
 println(io0(), v)  # Displays vector contents
 
 # Print on a specific rank
-println(io0(r=2), "Message from rank 2")
+println(io0(r=Set([2])), "Message from rank 2")
+
+# Print on multiple ranks
+println(io0(r=Set([0, 2])), "Message from ranks 0 and 2")
 
 # Write to file only on rank 0
 open("results.txt", "w") do f
@@ -100,7 +103,7 @@ open("results.txt", "w") do f
 end
 ```
 
-The `io0()` function returns the provided IO stream (default `stdout`) on the specified rank, and `devnull` on all other ranks. This ensures output appears only once while allowing all ranks to execute the same code.
+The `io0()` function returns the provided IO stream (default `stdout`) if the current rank is in the specified set of ranks, and `devnull` on all other ranks. This ensures output appears only from selected ranks while allowing all ranks to execute the same code.
 
 ### Memory Management
 
