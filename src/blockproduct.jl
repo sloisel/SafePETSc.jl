@@ -22,9 +22,9 @@ Represents a product of block matrices with pre-allocated storage for efficient 
 A block matrix is a Julia `Matrix` where each element is a `Mat`, `Mat'`, `Vec`, `Vec'`, scalar, or `nothing`.
 
 # Fields
-- `prod::Vector{Matrix}`: The sequence of block matrices to multiply
-- `result::Union{Matrix, Nothing}`: Pre-allocated result (allocated on first `calculate!` call)
-- `intermediates::Vector{Matrix}`: Pre-allocated intermediate results for chained products
+- `prod::Vector{Matrix{BlockElement{T}}}`: The sequence of block matrices to multiply
+- `result::Union{Matrix{BlockElement{T}}, Nothing}`: Pre-allocated result (allocated on first `calculate!` call)
+- `intermediates::Vector{Matrix{BlockElement{T}}}`: Pre-allocated intermediate results for chained products
 - `prefix::String`: PETSc prefix (must match all contained objects)
 
 # Constructor
@@ -52,13 +52,13 @@ C2 = calculate!(bp)
 ```
 """
 mutable struct BlockProduct{T}
-    prod::Vector{<:Matrix}
-    result::Union{Matrix, Nothing}
-    intermediates::Vector{Matrix}
+    prod::Vector{Matrix{BlockElement{T}}}
+    result::Union{Matrix{BlockElement{T}}, Nothing}
+    intermediates::Vector{Matrix{BlockElement{T}}}
     prefix::String
 
     # Inner constructor that only validates, doesn't allocate
-    function BlockProduct{T}(prod::Vector{<:Matrix}, prefix::String) where T
+    function BlockProduct{T}(prod::Vector{Matrix{BlockElement{T}}}, prefix::String) where T
         isempty(prod) && error("Product list cannot be empty")
 
         # Validate dimensions compatibility
@@ -77,7 +77,7 @@ mutable struct BlockProduct{T}
             end
         end
 
-        new{T}(prod, nothing, Matrix[], prefix)
+        new{T}(prod, nothing, Matrix{BlockElement{T}}[], prefix)
     end
 end
 
@@ -111,7 +111,7 @@ function _validate_element(elem, block_idx, i, j, expected_prefix)
 end
 
 """
-    BlockProduct(prod::Vector{<:Matrix}; prefix::String="")
+    BlockProduct(prod::Vector{Matrix{BlockElement{T}}}; prefix::String="")
 
 Create a BlockProduct from a vector of block matrices.
 
@@ -147,7 +147,18 @@ function BlockProduct(prod::Vector{<:Matrix}; prefix::String="")
         T = Float64
     end
 
-    bp = BlockProduct{T}(prod, prefix)
+    # Convert input matrices to proper BlockElement{T} type
+    # This allows Matrix{Float64} to become Matrix{BlockElement{Float64}}
+    typed_prod = Vector{Matrix{BlockElement{T}}}(undef, length(prod))
+    for (idx, block) in enumerate(prod)
+        typed_block = Matrix{BlockElement{T}}(undef, size(block)...)
+        for i in axes(block, 1), j in axes(block, 2)
+            typed_block[i, j] = block[i, j]
+        end
+        typed_prod[idx] = typed_block
+    end
+
+    bp = BlockProduct{T}(typed_prod, prefix)
     # Perform initial calculation to cache all PETSc objects
     _calculate_init!(bp)
     return bp
@@ -236,7 +247,7 @@ function calculate!(bp::BlockProduct{T}) where T
 end
 
 """
-    _block_multiply_inplace!(dest::Matrix, A::Matrix, B::Matrix)
+    _block_multiply_inplace!(dest::Matrix{BlockElement{T}}, A::Matrix{BlockElement{T}}, B::Matrix{BlockElement{T}})
 
 Multiply two block matrices and store the result in dest, reusing PETSc objects where possible.
 
@@ -245,7 +256,7 @@ to update the values without allocating new PETSc objects.
 
 For scalar blocks, just recomputes the values.
 """
-function _block_multiply_inplace!(dest::Matrix, A::Matrix, B::Matrix)
+function _block_multiply_inplace!(dest::Matrix{BlockElement{T}}, A::Matrix{BlockElement{T}}, B::Matrix{BlockElement{T}}) where T
     m, n = size(A, 1), size(B, 2)
     inner = size(A, 2)
 
@@ -399,7 +410,7 @@ PETSc.@for_libpetsc begin
 end
 
 """
-    _block_multiply(A::Matrix, B::Matrix) -> Matrix
+    _block_multiply(A::Matrix{BlockElement{T}}, B::Matrix{BlockElement{T}}) -> Matrix{BlockElement{T}}
 
 Multiply two block matrices element-wise using standard block matrix multiplication.
 
@@ -407,14 +418,14 @@ C[i,j] = sum_k A[i,k] * B[k,j]
 
 Handles scalars, nothing (structural zeros), Mat, Vec, and Vec' appropriately.
 """
-function _block_multiply(A::Matrix, B::Matrix)
+function _block_multiply(A::Matrix{BlockElement{T}}, B::Matrix{BlockElement{T}}) where T
     m, n = size(A, 1), size(B, 2)
     inner = size(A, 2)
 
     @assert inner == size(B, 1) "Inner dimensions must match"
 
-    # Create result matrix - type will be inferred
-    result = Matrix{Any}(undef, m, n)
+    # Create result matrix with proper BlockElement type
+    result = Matrix{BlockElement{T}}(undef, m, n)
 
     for i in 1:m, j in 1:n
         # Compute result[i,j] = sum over k of A[i,k] * B[k,j]
