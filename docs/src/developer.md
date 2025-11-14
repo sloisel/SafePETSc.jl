@@ -298,9 +298,7 @@ If program hangs, likely causes:
 Debug with:
 ```julia
 # Add at suspicious points
-if MPI.Comm_rank(MPI.COMM_WORLD) == 0
-    println("Reached checkpoint A")
-end
+println(io0(), "Reached checkpoint A")
 MPI.Barrier(MPI.COMM_WORLD)
 ```
 
@@ -315,10 +313,8 @@ Check for:
 Inspect manager state:
 ```julia
 manager = SafeMPI.default_manager[]
-if MPI.Comm_rank(MPI.COMM_WORLD) == 0
-    println("Active objects: ", length(manager.counter_pool))
-    println("Pending releases: ", length(manager.pending_releases))
-end
+println(io0(), "Active objects: ", length(manager.counter_pool))
+println(io0(), "Pending releases: ", length(manager.pending_releases))
 ```
 
 ### Assertion Failures

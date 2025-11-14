@@ -125,21 +125,7 @@ function compute_something()
 end
 ```
 
-### 2. Avoid Premature Manual Cleanup
-
-```julia
-# Don't do this:
-v = Vec_uniform([1.0, 2.0])
-SafeMPI.check_and_destroy!()  # v might still be in use!
-y = v .+ 1.0  # May crash
-
-# Instead, let automatic cleanup handle it
-v = Vec_uniform([1.0, 2.0])
-y = v .+ 1.0
-# cleanup happens automatically at safe points
-```
-
-### 3. Explicit Cleanup in Long-Running Loops
+### 2. Explicit Cleanup in Long-Running Loops
 
 ```julia
 for i in 1:1000000
@@ -162,10 +148,8 @@ end
 manager = SafeMPI.default_manager[]
 
 # Inspect state (mirrored on all ranks)
-if MPI.Comm_rank(MPI.COMM_WORLD) == 0
-    println("Active objects: ", length(manager.counter_pool))
-    println("Free IDs: ", length(manager.free_ids))
-end
+println(io0(), "Active objects: ", length(manager.counter_pool))
+println(io0(), "Free IDs: ", length(manager.free_ids))
 ```
 
 ### Enable Verbose Assertions

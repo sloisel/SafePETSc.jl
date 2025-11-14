@@ -192,9 +192,7 @@ v = Vec_uniform(data)
 # Compute: y = 2x + 1
 y = 2.0 .* v .+ 1.0
 
-if rank == 0
-    println("Computation complete")
-end
+println(io0(), "Computation complete")
 ```
 
 ### Sparse Contributions

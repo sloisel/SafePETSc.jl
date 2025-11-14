@@ -84,7 +84,9 @@ println(io0(r=Set([0, 2])), "This is from ranks 0 and 2")
 `io0()` works with any IO stream, including files:
 
 ```julia
-# Write to file only on rank 0
+using LinearAlgebra  # For norm()
+
+# Write to file only on rank 0 (assumes x, A, b from previous example)
 open("results.txt", "w") do f
     println(io0(f), "Results:")
     println(io0(f), "Solution: ", x)

@@ -205,6 +205,7 @@ Here's a complete example that solves a linear system:
 ```julia
 using SafePETSc
 using MPI
+using LinearAlgebra
 
 # Initialize
 SafePETSc.Init()
