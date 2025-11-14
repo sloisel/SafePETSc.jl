@@ -127,7 +127,7 @@ end
 
 A distributed reference to an object of type `T` that is managed across MPI ranks.
 
-When all ranks have released their references (via garbage collection or explicit `release!`),
+When all ranks have released their references via garbage collection,
 the object is collectively destroyed on all ranks using the type's `destroy_obj!` method.
 
 # Constructor
@@ -136,8 +136,8 @@ the object is collectively destroyed on all ranks using the type's `destroy_obj!
 Create a distributed reference to `obj`. The type `T` must opt-in to distributed management
 by defining `destroy_trait(::Type{T}) = CanDestroy()` and implementing `destroy_obj!(obj::T)`.
 
-Finalizers automatically call `release!()` when the `DRef` is garbage collected, so manual
-cleanup is optional. Call `check_and_destroy!()` to perform the actual collective destruction.
+Finalizers automatically enqueue releases when the `DRef` is garbage collected.
+Call `check_and_destroy!()` to perform the actual collective destruction.
 
 # Example
 ```julia
