@@ -186,6 +186,6 @@ SafeMPI.enable_assert[]  # true
 
 ## See Also
 
-- [`DRef`](@ref)
-- [`DistributedRefManager`](@ref)
-- [`check_and_destroy!`](@ref)
+- [`SafePETSc.SafeMPI.DRef`](@ref)
+- [`SafePETSc.SafeMPI.DistributedRefManager`](@ref)
+- [`SafePETSc.SafeMPI.check_and_destroy!`](@ref)

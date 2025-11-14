@@ -15,6 +15,7 @@ SafePETSc.SafeMPI.DistributedRefManager
 SafePETSc.SafeMPI.check_and_destroy!
 SafePETSc.SafeMPI.destroy_obj!
 SafePETSc.SafeMPI.default_manager
+SafePETSc.SafeMPI.default_check
 ```
 
 ## Trait System

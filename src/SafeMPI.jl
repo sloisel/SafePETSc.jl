@@ -120,21 +120,6 @@ set_assert(x::Bool) = (enable_assert[] = x; nothing)
 
 function __init__()
     default_manager[] = DistributedRefManager()
-
-    # Register atexit hook to clean up remaining objects before PETSc/MPI finalize
-    # This prevents segfaults from PETSc.Mat/Vec finalizers running after PETSc shutdown
-    atexit() do
-        # Only attempt cleanup if MPI is still initialized and not finalized
-        if MPI.Initialized() && !MPI.Finalized()
-            # Force GC to run all DRef finalizers, which enqueue releases
-            GC.gc(true)
-
-            # Now clean up all remaining DRef objects
-            # This removes objects from manager.objs, allowing their PETSc.Mat/Vec
-            # finalizers to run while PETSc is still in a valid state
-            check_and_destroy!(default_manager[])
-        end
-    end
 end
 
 """

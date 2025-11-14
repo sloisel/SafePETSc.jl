@@ -312,7 +312,4 @@ Ensure:
 
 ## See Also
 
-- [`Solver`](@ref)
-- [`Base.:\`](@ref)
-- [`LinearAlgebra.ldiv!`](@ref)
-- [`Base.:/`](@ref)
+- [`SafePETSc.Solver`](@ref)

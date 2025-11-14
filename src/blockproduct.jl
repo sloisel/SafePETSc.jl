@@ -19,7 +19,7 @@ const BlockElement{T} = Union{Mat{T}, Vec{T}, Adjoint{T, Vec{T}}, Adjoint{T, Mat
 
 Represents a product of block matrices with pre-allocated storage for efficient recomputation.
 
-A block matrix is a Julia `Matrix` where each element is a `Mat`, `Vec`, `Vec'`, scalar, or `nothing`.
+A block matrix is a Julia `Matrix` where each element is a `Mat`, `Mat'`, `Vec`, `Vec'`, scalar, or `nothing`.
 
 # Fields
 - `prod::Vector{Matrix}`: The sequence of block matrices to multiply
@@ -121,19 +121,23 @@ All matrices/vectors must use the same `prefix`.
 function BlockProduct(prod::Vector{<:Matrix}; prefix::String="")
     # Infer element type from first PETSc object
     T = nothing
-    for block in prod, elem in block
-        if elem isa Mat
-            T = eltype(elem.obj.A)
-            break
-        elseif elem isa Vec
-            T = eltype(elem.obj.v)
-            break
-        elseif elem isa Adjoint && elem.parent isa Vec
-            T = eltype(elem.parent.obj.v)
-            break
-        elseif elem isa Adjoint && elem.parent isa Mat
-            T = eltype(elem.parent.obj.A)
-            break
+    for block in prod
+        # Use explicit 2D iteration to avoid linear indexing into Adjoint objects
+        for i in axes(block, 1), j in axes(block, 2)
+            elem = block[i, j]
+            if elem isa Mat
+                T = eltype(elem.obj.A)
+                break
+            elseif elem isa Vec
+                T = eltype(elem.obj.v)
+                break
+            elseif elem isa Adjoint && elem.parent isa Vec
+                T = eltype(elem.parent.obj.v)
+                break
+            elseif elem isa Adjoint && elem.parent isa Mat
+                T = eltype(elem.parent.obj.A)
+                break
+            end
         end
         T !== nothing && break
     end

@@ -55,7 +55,7 @@ local_counts = [
 ]
 
 global_counts = similar(local_counts)
-MPI.Reduce!(local_counts, global_counts, +, 0, comm)
+MPI.Allreduce!(local_counts, global_counts, +, comm)
 
 if rank == 0
     println("Test Summary: mpi_uniform (aggregated across $(nranks) ranks)")

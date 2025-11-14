@@ -1,14 +1,21 @@
 # SafePETSc.jl
 
-SafePETSc is a Julia package that provides distributed reference management for MPI-based parallel computing with PETSc. The core purpose is to safely manage the lifecycle of distributed objects across MPI ranks, ensuring objects are destroyed only when all ranks have released their references.
+SafePETSc is a Julia package that makes distributed [PETSc](https://petsc.org/) linear algebra feel like native Julia. Instead of writing verbose PETSc C API calls with explicit pointer management and multi-step operations, you can write natural Julia expressions like `A * B + C`, `A \ b`, or `y .= 2 .* x .+ 3`.
+
+**The Problem**: PETSc is powerful but cumbersome. Multiplying two matrices takes many lines of code, requires careful pointer management, and errors cause segfaults and bus errors. Decomposing algebraic expressions into sequences of low-level operations is error-prone and verbose.
+
+**The Solution**: SafePETSc implements Julia's array interface for distributed PETSc objects. You get arithmetic operators (`+`, `-`, `*`, `\`, `/`), broadcasting (`y .= f.(x)`), standard constructors (`spdiagm`, `vcat`, `hcat`, `blockdiag`), and familiar iteration patterns (`eachrow`). The package handles the complexity of PETSc's C API and manages object lifecycles automatically through distributed reference management.
 
 ## Features
 
-- **Automatic Memory Management**: Distributed objects are automatically tracked and released when all MPI ranks have released their references
-- **GPU-Friendly Operations**: Prioritizes PETSc's native GPU-compatible operations
-- **Type-Safe API**: Uses Julia's trait system to ensure only appropriate types are managed
-- **Efficient Cleanup**: Centralized cleanup with configurable throttling to reduce overhead
-- **Rich Linear Algebra**: Comprehensive support for distributed vectors, matrices, and solvers
+- **Julia-Native Syntax**: Use `A * B`, `A \ b`, `A + B`, `A'` just like regular Julia matrices
+- **Broadcasting**: Full support for `.+`, `.*`, `.=` and function broadcasting `f.(x)`
+- **Standard Constructors**: `spdiagm`, `vcat`, `hcat`, `blockdiag` work on distributed matrices
+- **Linear Algebra**: Matrix multiplication, solving (`\`, `/`), transpose, in-place operations
+- **GPU-Friendly**: Bulk operations that work efficiently on GPU devices
+- **Automatic Memory Management**: Objects are cleaned up automatically across MPI ranks
+- **Vector Pooling**: Temporary vectors are reused for efficiency (configurable with `ENABLE_VEC_POOL[]`)
+- **Iteration**: Use `eachrow(A)` for row-wise processing
 
 ## Quick Example
 
@@ -31,26 +38,22 @@ x = A \ b
 # Objects are automatically cleaned up when they go out of scope
 ```
 
-## Package Architecture
+## Core Types
 
-SafePETSc consists of two main modules:
+SafePETSc provides three main types for distributed linear algebra:
 
-### SafeMPI
+- **`Vec{T}`**: Distributed vectors with Julia array-like operations (broadcasting, arithmetic, etc.) and automatic pooling for efficiency
+- **`Mat{T}`**: Distributed matrices with arithmetic operators (`+`, `-`, `*`, `\`), broadcasting, transpose (`A'`), and GPU-friendly operations
+- **`Solver{T}`**: Linear solver objects that can be reused for multiple solves with the same matrix
 
-The `SafeMPI` module implements the distributed reference management system:
+### Memory Management
 
-- **`DRef{T}`**: A distributed reference wrapper that tracks objects across MPI ranks
-- **`DistributedRefManager`**: Each rank allocates IDs deterministically, mirrors reference counters and the shared `free_ids` pool, and performs collective cleanup via Allgather/Allgatherv
-- **Trait-based destruction**: Types must opt-in to distributed management
-- **Automatic cleanup**: Finalizers enqueue releases locally; `check_and_destroy!` performs GC and collective Allgather at safe points
+Objects are automatically cleaned up when they go out of scope through distributed garbage collection. For faster cleanup in memory-intensive applications, you can manually trigger cleanup:
 
-### SafePETSc
-
-The main module wraps PETSc functionality with safe distributed reference management:
-
-- **`Vec{T}`**: Distributed vectors with automatic memory management and pooling (vectors are returned to a reuse pool by default)
-- **`Mat{T}`**: Distributed matrices with GPU-friendly operations
-- **`Solver{T}`**: Linear solver objects that can be reused
+```julia
+GC.gc()                          # Run Julia's garbage collector
+SafeMPI.check_and_destroy!()     # Perform distributed cleanup
+```
 
 ## Installation
 

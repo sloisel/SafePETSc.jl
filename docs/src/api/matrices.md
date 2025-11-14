@@ -71,3 +71,10 @@ for row in eachrow(A)
     process(row)
 end
 ```
+
+## Block Matrix Products
+
+```@docs
+SafePETSc.BlockProduct
+SafePETSc.calculate!
+```

@@ -379,6 +379,87 @@ Base.size(r::SafeMPI.DRef{<:_Vec}, d::Integer) = Base.size(r.obj, d)
 Base.axes(r::SafeMPI.DRef{<:_Vec}) = Base.axes(r.obj)
 Base.length(r::SafeMPI.DRef{<:_Vec}) = Base.length(r.obj)
 
+# Adjoint of Vec behaves as a row vector (1 × n matrix)
+Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (1, length(parent(vt)))
+Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, d::Integer) where {T} = d == 1 ? 1 : (d == 2 ? length(parent(vt)) : 1)
+Base.length(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = length(parent(vt))
+Base.axes(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (Base.OneTo(1), Base.OneTo(length(parent(vt))))
+
+# Note: getindex is intentionally not defined for Vec adjoints
+# They should only be used in matrix operations like v' * w or v' * A
+# BlockProduct iteration uses explicit 2D indexing on the block matrix itself,
+# not on the Vec adjoint elements
+
+# Scalar multiplication with vectors
+Base.:*(α::Number, v::Vec{T}) where {T} = α .* v
+Base.:*(v::Vec{T}, α::Number) where {T} = α .* v
+
+# Scalar multiplication with adjoint vectors
+Base.:*(α::Number, vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (α * parent(vt))'
+Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, α::Number) where {T} = (α * parent(vt))'
+
+# Addition of adjoint vectors (row vectors)
+Base.:+(vt1::LinearAlgebra.Adjoint{T, <:Vec{T}}, vt2::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (parent(vt1) + parent(vt2))'
+
+# Outer product: v * w' (returns Mat)
+function Base.:*(v::Vec{T}, wt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T}
+    w = parent(wt)
+
+    # Check dimensions and partitioning
+    m = length(v)
+    n = length(w)
+
+    @mpiassert v.obj.row_partition == w.obj.row_partition && v.obj.prefix == w.obj.prefix "Vectors must have the same row partition and prefix"
+
+    # Create an m × n matrix
+    # Each rank owns a subset of rows and columns
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    # Use v's row partition as both row and column partition (for v and w)
+    # Result has: rows partitioned like v, columns partitioned like w
+    row_partition = v.obj.row_partition
+    col_partition = w.obj.row_partition  # Use w's row partition as column partition
+
+    row_lo = row_partition[rank+1]
+    row_hi = row_partition[rank+2] - 1
+    nlocal_rows = row_hi - row_lo + 1
+
+    col_lo = col_partition[rank+1]
+    col_hi = col_partition[rank+2] - 1
+    nlocal_cols = col_hi - col_lo + 1
+
+    # Create distributed PETSc matrix
+    petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, m, n, v.obj.prefix)
+
+    # Get local portions of v and w
+    v_local = PETSc.unsafe_localarray(v.obj.v; read=true)
+    w_local = PETSc.unsafe_localarray(w.obj.v; read=true)
+
+    # Set values: result[i,j] = v[i] * w[j]
+    # Each rank computes its local rows and local columns only
+    for i_local in 1:nlocal_rows
+        i_global = row_lo + i_local - 1
+        row_values = Vector{T}(undef, nlocal_cols)
+        col_indices = Vector{Int}(undef, nlocal_cols)
+
+        for j_local in 1:nlocal_cols
+            j_global = col_lo + j_local - 1
+            row_values[j_local] = v_local[i_local] * w_local[j_local]
+            col_indices[j_local] = j_global
+        end
+
+        _mat_setvalues!(petsc_mat, [i_global], col_indices, row_values, PETSc.INSERT_VALUES)
+    end
+
+    # Assemble the matrix
+    PETSc.assemble(petsc_mat)
+
+    # Wrap in DRef
+    obj = _Mat{T}(petsc_mat, row_partition, col_partition, v.obj.prefix)
+    return SafeMPI.DRef(obj)
+end
+
 # Out-of-place broadcast: allocate a new Vec (wrapped in DRef) and compute into it.
 function Base.copy(bc::Base.Broadcast.Broadcasted{VecBroadcastStyle})
     # Find representative Vec for partition/prefix
@@ -521,6 +602,43 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     obj = _Vec{T}(w_petsc, A.obj.col_partition, v.obj.prefix)
     w = SafeMPI.DRef(obj)
     return LinearAlgebra.Adjoint(w)
+end
+
+# Inner product: v' * w (returns scalar)
+function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, w::Vec{T}) where {T}
+    v = parent(vt)
+
+    # Check dimensions and partitioning
+    v_length = size(v)[1]
+    w_length = size(w)[1]
+    @mpiassert v_length == w_length && v.obj.row_partition == w.obj.row_partition && v.obj.prefix == w.obj.prefix "Vector lengths must match (v: $(v_length), w: $(w_length)), row partitions must match, and v and w must have the same prefix"
+
+    # Compute inner product using PETSc VecDot
+    return _vec_dot(v.obj.v, w.obj.v)
+end
+
+# Row vector times transposed matrix: v' * A' (returns row vector)
+function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, At::LinearAlgebra.Adjoint{T, <:Mat{T}}) where {T}
+    # v' * A' = (A * v)'
+    v = parent(vt)
+    A = parent(At)
+
+    # A * v gives a column vector
+    result_vec = A * v
+
+    # Return as row vector (adjoint)
+    return result_vec'
+end
+
+# PETSc vector dot product wrapper
+PETSc.@for_libpetsc begin
+    function _vec_dot(v::PETSc.Vec{$PetscScalar}, w::PETSc.Vec{$PetscScalar})
+        result = Ref{$PetscScalar}()
+        PETSc.@chk ccall((:VecDot, $libpetsc), PETSc.PetscErrorCode,
+                         (CVec, CVec, Ptr{$PetscScalar}),
+                         v, w, result)
+        return result[]
+    end
 end
 
 # In-place adjoint vector-matrix multiplication: w = v' * A (reuses pre-allocated w)

@@ -906,7 +906,7 @@ A = spdiagm(-1 => lower, 0 => diag, 1 => upper)
 B = spdiagm(100, 100, 0 => v1, 1 => v2)
 ```
 """
-function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; row_partition::Vector{Int}=Int[], col_partition::Vector{Int}=Int[]) where {T}
+function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; kwargs...) where {T}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
@@ -933,11 +933,12 @@ function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; row_partition::Vector{Int}=In
         end
     end
 
-    return spdiagm(m, n, kv...; row_partition=row_partition, col_partition=col_partition)
+    return spdiagm(m, n, kv...; kwargs...)
 end
 
 function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
-                 row_partition::Vector{Int}=Int[], col_partition::Vector{Int}=Int[]) where {T}
+                 row_partition::Vector{Int}=default_row_partition(m, MPI.Comm_size(MPI.COMM_WORLD)),
+                 col_partition::Vector{Int}=default_row_partition(n, MPI.Comm_size(MPI.COMM_WORLD))) where {T}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
@@ -945,17 +946,18 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
-    # Determine partitions (use defaults if none provided)
-    result_row_partition = isempty(row_partition) ? default_row_partition(m, nranks) : row_partition
-    result_col_partition = isempty(col_partition) ? default_row_partition(n, nranks) : col_partition
-    row_partition_valid = length(result_row_partition) == nranks + 1 &&
-                          result_row_partition[1] == 1 &&
-                          result_row_partition[end] == m + 1 &&
-                          all(r -> result_row_partition[r] <= result_row_partition[r+1], 1:nranks)
-    col_partition_valid = length(result_col_partition) == nranks + 1 &&
-                          result_col_partition[1] == 1 &&
-                          result_col_partition[end] == n + 1 &&
-                          all(c -> result_col_partition[c] <= result_col_partition[c+1], 1:nranks)
+    # Validate partitions
+    # Note: We cannot infer partitions from diagonal vectors because the diagonals
+    # are shifted by their offset k, so vector partitions don't map directly to
+    # matrix row/column partitions. User can override with explicit partitions.
+    row_partition_valid = length(row_partition) == nranks + 1 &&
+                          row_partition[1] == 1 &&
+                          row_partition[end] == m + 1 &&
+                          all(r -> row_partition[r] <= row_partition[r+1], 1:nranks)
+    col_partition_valid = length(col_partition) == nranks + 1 &&
+                          col_partition[1] == 1 &&
+                          col_partition[end] == n + 1 &&
+                          all(c -> col_partition[c] <= col_partition[c+1], 1:nranks)
 
     # Validate all vectors have same prefix and correct lengths - single @mpiassert (pulled out of loop)
     first_prefix = kv[1].second.obj.prefix
@@ -1008,8 +1010,8 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
     end
 
     # Add structural zeros for all diagonal positions in this rank's row partition
-    row_lo = result_row_partition[rank+1]
-    row_hi = result_row_partition[rank+2] - 1
+    row_lo = row_partition[rank+1]
+    row_hi = row_partition[rank+2] - 1
 
     # Build per-row column sets for this rank's rows (for fingerprint and structure allocation)
     # Also insert explicit structural zeros into (I,J,V)
@@ -1054,8 +1056,8 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
     end
     # Assemble result via Mat_sum (no pooling for concat operations)
     return Mat_sum(local_result;
-                   row_partition=result_row_partition,
-                   col_partition=result_col_partition,
+                   row_partition=row_partition,
+                   col_partition=col_partition,
                    prefix=first_prefix,
                    own_rank_only=false)
 end

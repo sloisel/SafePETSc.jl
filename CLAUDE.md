@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SafePETSc is a Julia package that provides distributed reference management for MPI-based parallel computing. The core purpose is to safely manage the lifecycle of distributed objects across MPI ranks, ensuring objects are destroyed only when all ranks have released their references.
+SafePETSc is a Julia package that makes distributed PETSc linear algebra feel like native Julia. Instead of writing verbose PETSc C API calls with explicit pointer management and multi-step operations, users can write natural Julia expressions like `A * B + C`, `A \ b`, or `y .= 2 .* x .+ 3`.
+
+**The Problem**: PETSc is powerful but cumbersome. Multiplying two matrices takes many lines of code, requires careful pointer management, and errors cause segfaults and bus errors. Decomposing algebraic expressions into sequences of low-level operations is error-prone and verbose.
+
+**The Solution**: SafePETSc implements Julia's array interface for distributed PETSc objects. You get arithmetic operators (`+`, `-`, `*`, `\`, `/`), broadcasting (`y .= f.(x)`), standard constructors (`spdiagm`, `vcat`, `hcat`, `blockdiag`), and familiar iteration patterns (`eachrow`). The package handles the complexity of PETSc's C API and manages object lifecycles automatically through distributed reference management.
 
 ## Development Commands
 
@@ -39,8 +43,97 @@ This pattern allows `Pkg.test()` to work correctly by having `runtests.jl` call 
 
 - Do not automatically commit changes into git unless asked by the user.
 - Do not automatically push commits to github unless asked by the user.
+- Do not tag releases, TagBot will tag on github.
 
-## Architecture
+## User-Facing Features
+
+SafePETSc implements a Julia-native interface for PETSc, allowing natural mathematical expressions.
+
+### Vector Operations
+
+```julia
+# Arithmetic and broadcasting (feels like regular Julia)
+y = 2 .* x .+ 3           # Broadcasting with scalars
+z = x .+ y                # Element-wise addition
+w = x .* y                # Element-wise multiplication
+y .= f.(x)                # Apply function to each element
+
+# Standard operations
+result = x + y            # Vector addition
+result = x - y            # Vector subtraction
+result = -x               # Negation
+result = x' * y           # Dot product (via adjoint)
+result = x' * A           # Adjoint-matrix multiply
+```
+
+### Matrix Operations
+
+```julia
+# Linear algebra (just like dense Julia matrices)
+C = A * B                 # Matrix-matrix multiplication
+y = A * x                 # Matrix-vector multiplication
+x = A \ b                 # Linear solve (single RHS)
+X = A \ B                 # Linear solve (multiple RHS)
+x = A' \ b                # Solve with transpose
+y = b' / A                # Left division (row vector)
+Y = B / A                 # Right division (matrix)
+
+# Arithmetic
+C = A + B                 # Matrix addition
+C = A - B                 # Matrix subtraction
+B = A'                    # Transpose (adjoint)
+C = α * A                 # Scalar multiplication
+C = α + A                 # Add scalar to diagonal
+
+# Construction
+A = spdiagm(0 => diag, 1 => upper, -1 => lower)  # Diagonal/tridiagonal
+C = vcat(A, B)           # Vertical concatenation
+C = hcat(A, B)           # Horizontal concatenation
+C = blockdiag(A, B)      # Block diagonal
+
+# Iteration
+for row in eachrow(A)    # Iterate over rows (dense matrices)
+    # ... process row ...
+end
+```
+
+### In-Place Operations
+
+```julia
+# Efficient in-place versions (no temporaries)
+mul!(y, A, x)            # y = A * x
+mul!(C, A, B)            # C = A * B
+ldiv!(x, A, b)           # x = A \ b (solve in-place)
+transpose!(B, A)         # B = A' (transpose in-place)
+```
+
+### Construction Patterns
+
+```julia
+# Uniform matrices/vectors (same data on all ranks)
+A = Mat_uniform(petsc_mat)
+x = Vec_uniform(petsc_vec)
+
+# Sum matrices/vectors (data split across ranks)
+A = Mat_sum(petsc_mat)
+x = Vec_sum(petsc_vec)
+
+# Helpers
+y = zeros_like(x)        # Create zero vector with same structure
+y = ones_like(x)         # Create ones vector
+y = fill_like(x, val)    # Fill with value
+```
+
+### Key Differences from Native Julia
+
+- **No scalar indexing**: Use PETSc's bulk operations instead of `A[i,j]` (prevents GPU→CPU transfers)
+- **Explicit partitioning**: Use `Vec_uniform` vs `Vec_sum` to control data distribution
+- **Solver reuse**: Create `Solver(A)` objects for repeated solves with same matrix
+- **Memory pooling**: Control temporary vector allocation with vector pools
+
+## Architecture (Implementation Details)
+
+*This section describes the internal implementation. Users don't need to understand these details to use SafePETSc effectively.*
 
 ### Core Components
 

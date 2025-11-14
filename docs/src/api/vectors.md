@@ -29,6 +29,14 @@ SafePETSc.fill_like
 SafePETSc.default_row_partition
 ```
 
+## Vector Pooling
+
+```@docs
+SafePETSc.ENABLE_VEC_POOL
+SafePETSc.clear_vec_pool!
+SafePETSc.get_vec_pool_stats
+```
+
 ## Operations
 
 ### Arithmetic

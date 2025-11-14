@@ -2,21 +2,22 @@
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://sloisel.github.io/SafePETSc.jl/stable/) [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://sloisel.github.io/SafePETSc.jl/dev/) [![CI](https://github.com/sloisel/SafePETSc.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/sloisel/SafePETSc.jl/actions/workflows/CI.yml) [![codecov](https://codecov.io/gh/sloisel/SafePETSc.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/sloisel/SafePETSc.jl)
 
-A Julia package providing safe distributed reference management for MPI-based parallel computing with PETSc.
+A Julia package that makes distributed [PETSc](https://petsc.org/) linear algebra feel like native Julia.
 
 ## Overview
 
-SafePETSc.jl wraps [PETSc](https://petsc.org/) functionality with automatic distributed garbage collection, ensuring that objects distributed across MPI ranks are released only when all ranks have released their references. By default, PETSc vectors are pooled for reuse rather than destroyed immediately; you can disable pooling or clear the pool to free memory. This prevents common pitfalls in parallel computing such as premature destruction, memory leaks, and race conditions.
+SafePETSc.jl lets you write natural Julia expressions like `A * B + C`, `A \ b`, or `y .= 2 .* x .+ 3` for distributed PETSc matrices and vectors. Instead of managing PETSc's verbose C API with explicit pointer manipulation and multi-step operations, you get Julia's familiar array interface: arithmetic operators, broadcasting, standard constructors (`spdiagm`, `vcat`, `hcat`), and iteration patterns. The package handles PETSc's complexity and automatically manages object lifecycles across MPI ranks, so your code stays readable and errors like segfaults from pointer mistakes are eliminated.
 
 ## Features
 
-- **Distributed Reference Counting**: Automatic lifetime management for objects shared across MPI ranks (mirrored counters on all ranks, shared ID pool)
-- **Trait-Based Safety**: Explicit opt-in system prevents accidental misuse
-- **PETSc Integration**: Seamless wrapping of PETSc vectors, matrices, and linear solvers
-- **GPU-Friendly**: Prioritizes bulk operations that work efficiently on GPU devices
-- **Finalizer-Based Cleanup**: Automatic resource release via Julia's garbage collector at safe points
-- **Vector Pooling**: Released vectors are returned to a reuse pool by default; disable with `ENABLE_VEC_POOL[] = false` or call `clear_vec_pool!()` to free pooled vectors
-- **ID Recycling**: Prevents integer overflow in long-running applications
+- **Julia-Native Syntax**: Use `A * B`, `A \ b`, `A + B`, `A'` just like regular Julia matrices
+- **Broadcasting**: Full support for `.+`, `.*`, `.=` and function broadcasting `f.(x)`
+- **Standard Constructors**: `spdiagm`, `vcat`, `hcat`, `blockdiag` work on distributed matrices
+- **Linear Algebra**: Matrix multiplication, solving (`\`, `/`), transpose, in-place operations
+- **GPU-Friendly**: Bulk operations that work efficiently on GPU devices
+- **Automatic Memory Management**: Objects are cleaned up automatically across MPI ranks
+- **Vector Pooling**: Temporary vectors are reused for efficiency (configurable with `ENABLE_VEC_POOL[]`)
+- **Iteration**: Use `eachrow(A)` for row-wise processing
 
 ## Installation
 
@@ -42,30 +43,41 @@ using SparseArrays
 # Initialize MPI
 MPI.Init()
 
-# Create a distributed vector from uniform data
+# Create distributed vectors and matrices
 v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
-
-# Create a vector from sparse contributions (summed across ranks)
-v_sparse = Vec_sum(sparsevec([1, 3], [1.0, 3.0], 4))
-
-# Vector operations
-y = v .+ 1.0        # Element-wise addition
-z = 2.0 .* v        # Scaling
-
-# Create matrices and solve linear systems
 A = Mat_uniform(sparse([1.0 2.0; 3.0 4.0]))
-b = Vec_uniform([1.0, 2.0])
-x = A \ b
+B = Mat_uniform(sparse([5.0 6.0; 7.0 8.0]))
 
-# Resources are automatically released at safe points; vectors are pooled by default
+# Linear algebra (just like regular Julia!)
+C = A * B           # Matrix multiplication
+y = A * v           # Matrix-vector product
+x = A \ v           # Linear solve
+z = A' * v          # Transpose multiply
+
+# Broadcasting
+w = 2.0 .* v .+ 3.0      # Scalar operations
+result = v .+ w          # Element-wise addition
+
+# Matrix construction
+D = spdiagm(0 => [1.0, 2.0], 1 => [0.5])  # Diagonal matrix
+E = vcat(A, B)                             # Vertical concatenation
+F = hcat(A, B)                             # Horizontal concatenation
+
+# In-place operations (more efficient)
+mul!(y, A, v)       # y = A * v (no allocation)
+ldiv!(x, A, v)      # x = A \ v (solve in-place)
+
+# Resources are automatically cleaned up; vectors are pooled by default
 MPI.Finalize()
 ```
 
-## Architecture
+## Architecture (Implementation Details)
+
+*This section describes the internal implementation for developers and contributors. Users don't need to understand these details to use SafePETSc effectively.*
 
 ### SafeMPI Module
 
-The core of the package implements a reference-counting garbage collection system:
+The package implements a reference-counting garbage collection system for distributed objects:
 
 - **DistributedRefManager**: Coordinates reference counting across MPI ranks
   - All ranks run the same ID allocation logic and keep the same `free_ids` vector, ensuring deterministic IDs without a dedicated root
@@ -139,11 +151,6 @@ julia --project=. -e 'using Pkg; Pkg.instantiate()'
 # Start REPL with package loaded
 julia --project=. -e 'using SafePETSc'
 ```
-
-## Documentation
-
-For detailed documentation on the architecture and implementation, see:
-- [CLAUDE.md](CLAUDE.md) - Development guide and architecture overview
 
 ## Requirements
 

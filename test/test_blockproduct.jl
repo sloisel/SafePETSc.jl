@@ -431,8 +431,9 @@ M8 = SafePETSc.Mat_uniform([0.0 1.0; 1.0 0.0])  # Swap matrix
 
 # Block matrix with all combinations: [M7   M8']
 #                                     [M7'  M8 ]
-A_block = [M7 M8'; M7' M8]
-B_block = [M7 M7; M7 M7]
+# Note: Use reshape instead of [...] syntax to avoid Adjoint dimension mismatch issues
+A_block = reshape([M7, M7', M8', M8], 2, 2)
+B_block = reshape([M7, M7, M7, M7], 2, 2)
 
 bp = BlockProduct([A_block, B_block])
 result = calculate!(bp)
@@ -459,7 +460,7 @@ local_counts = [
 ]
 
 global_counts = similar(local_counts)
-MPI.Reduce!(local_counts, global_counts, +, 0, comm)
+MPI.Allreduce!(local_counts, global_counts, +, comm)
 
 if rank == 0
     println("Test Summary: BlockProduct tests (aggregated across $(nranks) ranks)")
