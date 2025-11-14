@@ -236,10 +236,9 @@ b = Vec_uniform(ones(n))
 # Solve the system
 x = A \ b
 
-# Extract local portion for output (if needed)
-if rank == 0
-    println("System solved successfully")
-end
+# Print result (only on rank 0)
+println(io0(), "System solved successfully")
+println(io0(), "Solution norm: ", norm(x))
 
 # Explicit cleanup (optional - happens automatically at scope exit)
 SafeMPI.check_and_destroy!()

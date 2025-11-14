@@ -20,6 +20,7 @@ makedocs(;
             "Vectors" => "guide/vectors.md",
             "Matrices" => "guide/matrices.md",
             "Linear Solvers" => "guide/solvers.md",
+            "Input/Output and Display" => "guide/io.md",
         ],
         "API Reference" => [
             "SafeMPI" => "api/safempi.md",

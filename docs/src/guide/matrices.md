@@ -150,23 +150,6 @@ col_part = default_row_partition(n, nranks)
 - Column operations require matching column partitions
 - Matrix multiplication: `C = A * B` requires `A.col_partition == B.row_partition`
 
-## GPU-Friendly Operations
-
-SafePETSc prioritizes PETSc's native GPU-compatible operations:
-
-```julia
-# Good: Uses PETSc's MatTranspose (GPU-friendly)
-B = Mat(A')
-
-# Good: Uses PETSc's MatMatMult (GPU-friendly)
-C = A * B
-
-# Good: Uses PETSc's MatConvert (GPU-friendly)
-# (internal to SafePETSc operations)
-```
-
-Avoid element-by-element access patterns that cause excessive GPU↔CPU transfers.
-
 ## Advanced Features
 
 ### Iterating Over Dense Matrix Rows

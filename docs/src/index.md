@@ -12,7 +12,6 @@ SafePETSc is a Julia package that makes distributed [PETSc](https://petsc.org/) 
 - **Broadcasting**: Full support for `.+`, `.*`, `.=` and function broadcasting `f.(x)`
 - **Standard Constructors**: `spdiagm`, `vcat`, `hcat`, `blockdiag` work on distributed matrices
 - **Linear Algebra**: Matrix multiplication, solving (`\`, `/`), transpose, in-place operations
-- **GPU-Friendly**: Bulk operations that work efficiently on GPU devices
 - **Automatic Memory Management**: Objects are cleaned up automatically across MPI ranks
 - **Vector Pooling**: Temporary vectors are reused for efficiency (configurable with `ENABLE_VEC_POOL[]`)
 - **Iteration**: Use `eachrow(A)` for row-wise processing
