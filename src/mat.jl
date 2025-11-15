@@ -234,10 +234,9 @@ end
 # In-place transpose: B = A^T (reuses pre-allocated B)
 function LinearAlgebra.transpose!(B::Mat{T}, A::Mat{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
-    @mpiassert (A.obj.prefix == B.obj.prefix &&
-                size(A, 1) == size(B, 2) && size(A, 2) == size(B, 1) &&
+    @mpiassert (size(A, 1) == size(B, 2) && size(A, 2) == size(B, 1) &&
                 A.obj.row_partition == B.obj.col_partition &&
-                A.obj.col_partition == B.obj.row_partition) "Matrices must have the same prefix, transpose dimensions must match (A is $(size(A)), B must be $(size(A, 2))×$(size(A, 1)), got $(size(B))), A's row partition must match B's column partition, and A's column partition must match B's row partition"
+                A.obj.col_partition == B.obj.row_partition) "Transpose dimensions must match (A is $(size(A)), B must be $(size(A, 2))×$(size(A, 1)), got $(size(B))), A's row partition must match B's column partition, and A's column partition must match B's row partition"
 
     # Perform in-place transpose using PETSc reuse path. The caller must
     # ensure B was originally created by MatTranspose(A, MAT_INITIAL_MATRIX)
@@ -252,7 +251,7 @@ function Base.:*(A::Mat{T}, x::Vec{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(x)[1]
-    @mpiassert n == vec_length && A.obj.col_partition == x.obj.row_partition && A.obj.prefix == x.obj.prefix "Matrix columns must match vector length (A: $(m)×$(n), x: $(vec_length)), column partition of A must match row partition of x, and A and x must have the same prefix"
+    @mpiassert n == vec_length && A.obj.col_partition == x.obj.row_partition "Matrix columns must match vector length (A: $(m)×$(n), x: $(vec_length)) and column partition of A must match row partition of x"
 
     # Create result vector with A's row partition
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -282,8 +281,7 @@ function LinearAlgebra.mul!(y::Vec{T}, A::Mat{T}, x::Vec{T}) where {T}
     x_length = size(x)[1]
     @mpiassert (m == y_length && n == x_length &&
                 A.obj.row_partition == y.obj.row_partition &&
-                A.obj.col_partition == x.obj.row_partition &&
-                A.obj.prefix == x.obj.prefix == y.obj.prefix) "Output vector y must have length matching matrix rows (A: $(m)×$(n), y: $(y_length)), input vector x must have length matching matrix columns (x: $(x_length)), matrix row partition must match output vector partition, matrix column partition must match input vector partition, and all objects must have the same prefix"
+                A.obj.col_partition == x.obj.row_partition) "Output vector y must have length matching matrix rows (A: $(m)×$(n), y: $(y_length)), input vector x must have length matching matrix columns (x: $(x_length)), matrix row partition must match output vector partition, and matrix column partition must match input vector partition"
 
     # Perform matrix-vector multiplication using PETSc (reuses y)
     _mat_mult_vec!(y.obj.v, A.obj.A, x.obj.v)
@@ -326,10 +324,9 @@ Add two distributed PETSc matrices. Requires identical sizes, partitions, and pr
 Note: Does not use pooling due to PETSc MatAXPY internal state management issues.
 """
 function Base.:+(A::Mat{T}, B::Mat{T}) where {T}
-    @mpiassert (A.obj.prefix == B.obj.prefix &&
-                size(A, 1) == size(B, 1) && size(A, 2) == size(B, 2) &&
+    @mpiassert (size(A, 1) == size(B, 1) && size(A, 2) == size(B, 2) &&
                 A.obj.row_partition == B.obj.row_partition &&
-                A.obj.col_partition == B.obj.col_partition) "Matrix addition requires same prefix, identical sizes, and identical partitions"
+                A.obj.col_partition == B.obj.col_partition) "Matrix addition requires identical sizes and identical partitions"
 
     # Create fresh result matrix
     nr = MPI.Comm_rank(MPI.COMM_WORLD)
@@ -355,10 +352,9 @@ Subtract two distributed PETSc matrices. Requires identical sizes, partitions, a
 Note: Does not use pooling due to PETSc MatAXPY internal state management issues.
 """
 function Base.:-(A::Mat{T}, B::Mat{T}) where {T}
-    @mpiassert (A.obj.prefix == B.obj.prefix &&
-                size(A, 1) == size(B, 1) && size(A, 2) == size(B, 2) &&
+    @mpiassert (size(A, 1) == size(B, 1) && size(A, 2) == size(B, 2) &&
                 A.obj.row_partition == B.obj.row_partition &&
-                A.obj.col_partition == B.obj.col_partition) "Matrix subtraction requires same prefix, identical sizes, and identical partitions"
+                A.obj.col_partition == B.obj.col_partition) "Matrix subtraction requires identical sizes and identical partitions"
 
     # Create fresh result matrix
     nr = MPI.Comm_rank(MPI.COMM_WORLD)
@@ -454,9 +450,8 @@ function Base.cat(As::Mat{T}...; dims) where {T}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
-    # Validate all matrices have same type T and prefix - collect conditions first
+    # Get prefix from first matrix (will be used for result)
     first_prefix = As[1].obj.prefix
-    all_same_prefix = all(As[k].obj.prefix == first_prefix for k in 2:n)
 
     # Validate partition compatibility based on dims - collect conditions first
     if dims == 1  # Vertical concatenation
@@ -466,7 +461,7 @@ function Base.cat(As::Mat{T}...; dims) where {T}
         all_same_col_partition = all(As[k].obj.col_partition == first_col_partition for k in 2:n)
         all_same_ncols = all(size(As[k], 2) == first_ncols for k in 2:n)
         # Single @mpiassert for efficiency (pulled out of loops)
-        @mpiassert (all_same_prefix && all_same_col_partition && all_same_ncols) "For dims=1: all matrices must have the same prefix, column partition, and number of columns"
+        @mpiassert (all_same_col_partition && all_same_ncols) "For dims=1: all matrices must have the same column partition and number of columns"
     elseif dims == 2  # Horizontal concatenation
         # All matrices must have same row partition and number of rows
         first_row_partition = As[1].obj.row_partition
@@ -474,7 +469,7 @@ function Base.cat(As::Mat{T}...; dims) where {T}
         all_same_row_partition = all(As[k].obj.row_partition == first_row_partition for k in 2:n)
         all_same_nrows = all(size(As[k], 1) == first_nrows for k in 2:n)
         # Single @mpiassert for efficiency (pulled out of loops)
-        @mpiassert (all_same_prefix && all_same_row_partition && all_same_nrows) "For dims=2: all matrices must have the same prefix, row partition, and number of rows"
+        @mpiassert (all_same_row_partition && all_same_nrows) "For dims=2: all matrices must have the same row partition and number of rows"
     else
         throw(ArgumentError("dims must be 1 or 2 for matrix concatenation"))
     end
@@ -562,10 +557,8 @@ function blockdiag(As::Mat{T}...) where {T}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
-    # Validate all matrices have same type T and prefix - single @mpiassert (pulled out of loop)
+    # Get prefix from first matrix (will be used for result)
     first_prefix = As[1].obj.prefix
-    all_same_prefix = all(As[k].obj.prefix == first_prefix for k in 2:n)
-    @mpiassert all_same_prefix "All matrices must have the same prefix"
 
     # Extract local sparse matrices (owned rows only)
     local_sparse = [_mat_to_local_sparse(A) for A in As]
@@ -618,10 +611,9 @@ function Base.:*(A::Mat{T}, B::Mat{T}) where {T}
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
     # Validate inputs - single @mpiassert for efficiency
-    # Check: same prefix, inner dimensions match, and inner partitions match
-    @mpiassert (A.obj.prefix == B.obj.prefix &&
-                size(A, 2) == size(B, 1) &&
-                A.obj.col_partition == B.obj.row_partition) "Matrix multiplication requires same prefix, compatible dimensions (A cols must equal B rows), and matching inner partitions (A.col_partition must equal B.row_partition)"
+    # Check: inner dimensions match, and inner partitions match
+    @mpiassert (size(A, 2) == size(B, 1) &&
+                A.obj.col_partition == B.obj.row_partition) "Matrix multiplication requires compatible dimensions (A cols must equal B rows) and matching inner partitions (A.col_partition must equal B.row_partition)"
 
     # Determine result partitions
     # Result has same row partition as A and same column partition as B
@@ -650,9 +642,8 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, B::Mat{T}) where {T}
 
     # Validate inputs: A' is n×m, B is m×p, result is n×p
     # A' has row partition = A's col partition, col partition = A's row partition
-    @mpiassert (A.obj.prefix == B.obj.prefix &&
-                size(A, 1) == size(B, 1) &&
-                A.obj.row_partition == B.obj.row_partition) "Transpose-matrix multiplication A'*B requires same prefix, compatible dimensions (A rows must equal B rows for A'*B), and matching partitions (A.row_partition must equal B.row_partition)"
+    @mpiassert (size(A, 1) == size(B, 1) &&
+                A.obj.row_partition == B.obj.row_partition) "Transpose-matrix multiplication A'*B requires compatible dimensions (A rows must equal B rows for A'*B) and matching partitions (A.row_partition must equal B.row_partition)"
 
     # Result partitions: rows from A's columns, columns from B's columns
     result_row_partition = A.obj.col_partition
@@ -680,9 +671,8 @@ function Base.:*(A::Mat{T}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) where {T}
 
     # Validate inputs: A is m×n, B' is n×p (B is p×n), result is m×p
     # B' has row partition = B's col partition, col partition = B's row partition
-    @mpiassert (A.obj.prefix == B.obj.prefix &&
-                size(A, 2) == size(B, 2) &&
-                A.obj.col_partition == B.obj.col_partition) "Matrix-transpose multiplication A*B' requires same prefix, compatible dimensions (A cols must equal B cols for A*B'), and matching partitions (A.col_partition must equal B.col_partition)"
+    @mpiassert (size(A, 2) == size(B, 2) &&
+                A.obj.col_partition == B.obj.col_partition) "Matrix-transpose multiplication A*B' requires compatible dimensions (A cols must equal B cols for A*B') and matching partitions (A.col_partition must equal B.col_partition)"
 
     # Result partitions: rows from A's rows, columns from B's rows
     result_row_partition = A.obj.row_partition
@@ -711,9 +701,8 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, Bt::LinearAlgebra.Ad
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
     # Validate inputs: A' is n×m, B' is m×p (B is p×m), result is n×p
-    @mpiassert (A.obj.prefix == B.obj.prefix &&
-                size(A, 1) == size(B, 2) &&
-                A.obj.row_partition == B.obj.col_partition) "Transpose-transpose multiplication A'*B' requires same prefix, compatible dimensions (A rows must equal B cols for A'*B'), and matching partitions (A.row_partition must equal B.col_partition)"
+    @mpiassert (size(A, 1) == size(B, 2) &&
+                A.obj.row_partition == B.obj.col_partition) "Transpose-transpose multiplication A'*B' requires compatible dimensions (A rows must equal B cols for A'*B') and matching partitions (A.row_partition must equal B.col_partition)"
 
     # Compute as (B * A)' since PETSc doesn't have AtBt product type
     # First compute BA
@@ -735,12 +724,11 @@ end
 # In-place matrix-matrix multiplication: C = A * B (reuses pre-allocated C)
 function LinearAlgebra.mul!(C::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
-    @mpiassert (A.obj.prefix == B.obj.prefix == C.obj.prefix &&
-                size(A, 2) == size(B, 1) &&
+    @mpiassert (size(A, 2) == size(B, 1) &&
                 size(A, 1) == size(C, 1) && size(B, 2) == size(C, 2) &&
                 A.obj.col_partition == B.obj.row_partition &&
                 A.obj.row_partition == C.obj.row_partition &&
-                B.obj.col_partition == C.obj.col_partition) "All matrices must have the same prefix, inner dimensions must match (A cols must equal B rows): A is $(size(A)), B is $(size(B)), output matrix C must have dimensions $(size(A, 1))×$(size(B, 2)) (got $(size(C))), matrix inner partitions must match (A.col_partition must equal B.row_partition), result row partition must match A's row partition, and result column partition must match B's column partition"
+                B.obj.col_partition == C.obj.col_partition) "Inner dimensions must match (A cols must equal B rows): A is $(size(A)), B is $(size(B)), output matrix C must have dimensions $(size(A, 1))×$(size(B, 2)) (got $(size(C))), matrix inner partitions must match (A.col_partition must equal B.row_partition), result row partition must match A's row partition, and result column partition must match B's column partition"
 
     # Perform in-place matrix-matrix multiplication using PETSc
     _mat_mat_mult!(C.obj.A, A.obj.A, B.obj.A)
@@ -914,10 +902,8 @@ function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; kwargs...) where {T}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
-    # Validate all vectors have same prefix - single @mpiassert (pulled out of loop)
+    # Get prefix from first vector (will be used for result)
     first_prefix = kv[1].second.obj.prefix
-    all_same_prefix = all(v.obj.prefix == first_prefix for (k, v) in kv)
-    @mpiassert all_same_prefix "All vectors must have the same prefix"
 
     # Infer matrix dimensions from diagonals without querying PETSc values
     # Avoid generic length(v) in case it triggers unintended array conversions
@@ -959,14 +945,15 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
                           col_partition[end] == n + 1 &&
                           all(c -> col_partition[c] <= col_partition[c+1], 1:nranks)
 
-    # Validate all vectors have same prefix and correct lengths - single @mpiassert (pulled out of loop)
+    # Get prefix from first vector (will be used for result)
     first_prefix = kv[1].second.obj.prefix
-    all_same_prefix = all(v.obj.prefix == first_prefix for (k, v) in kv)
+
+    # Validate vector lengths and partitions
     all_correct_lengths = all(begin
         required_len = k >= 0 ? min(m, n - k) : min(m + k, n)
         length(v) <= required_len  # allow shorter vectors; remaining entries are treated as zeros
     end for (k, v) in kv)
-    @mpiassert (all_same_prefix && all_correct_lengths && row_partition_valid && col_partition_valid) "All vectors must have the same prefix, lengths not exceeding the allowed diagonal span, and row_partition/col_partition must each have length nranks+1, start at 1, end at m+1/n+1 respectively, and be non-decreasing"
+    @mpiassert (all_correct_lengths && row_partition_valid && col_partition_valid) "All vector lengths must not exceed the allowed diagonal span, and row_partition/col_partition must each have length nranks+1, start at 1, end at m+1/n+1 respectively, and be non-decreasing"
 
     # Build local sparse contributions explicitly (I, J, V) using only locally-owned
     # entries from each distributed diagonal vector. This avoids global VecGetValues

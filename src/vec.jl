@@ -409,7 +409,7 @@ function Base.:*(v::Vec{T}, wt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T}
     m = length(v)
     n = length(w)
 
-    @mpiassert v.obj.row_partition == w.obj.row_partition && v.obj.prefix == w.obj.prefix "Vectors must have the same row partition and prefix"
+    @mpiassert v.obj.row_partition == w.obj.row_partition "Vectors must have the same row partition"
 
     # Create an m × n matrix
     # Each rank owns a subset of rows and columns
@@ -581,7 +581,7 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     vec_length = size(v)[1]
     m, n = size(A)
-    @mpiassert vec_length == m && v.obj.row_partition == A.obj.row_partition && v.obj.prefix == A.obj.prefix "Vector length must match matrix rows (v: $(vec_length), A: $(m)×$(n)), row partitions must match, and v and A must have the same prefix"
+    @mpiassert vec_length == m && v.obj.row_partition == A.obj.row_partition "Vector length must match matrix rows (v: $(vec_length), A: $(m)×$(n)) and row partitions must match"
 
     # Create result vector with A's column partition (transpose result)
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -611,7 +611,7 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, w::Vec{T}) where {T}
     # Check dimensions and partitioning
     v_length = size(v)[1]
     w_length = size(w)[1]
-    @mpiassert v_length == w_length && v.obj.row_partition == w.obj.row_partition && v.obj.prefix == w.obj.prefix "Vector lengths must match (v: $(v_length), w: $(w_length)), row partitions must match, and v and w must have the same prefix"
+    @mpiassert v_length == w_length && v.obj.row_partition == w.obj.row_partition "Vector lengths must match (v: $(v_length), w: $(w_length)) and row partitions must match"
 
     # Compute inner product using PETSc VecDot
     return _vec_dot(v.obj.v, w.obj.v)
@@ -652,8 +652,7 @@ function LinearAlgebra.mul!(w::Vec{T}, vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A
     m, n = size(A)
     @mpiassert (v_length == m && w_length == n &&
                 v.obj.row_partition == A.obj.row_partition &&
-                w.obj.row_partition == A.obj.col_partition &&
-                v.obj.prefix == A.obj.prefix == w.obj.prefix) "Input vector v must have length matching matrix rows (v: $(v_length), A: $(m)×$(n)), output vector w must have length matching matrix columns (w: $(w_length)), input vector partition must match matrix row partition, output vector partition must match matrix column partition, and all objects must have the same prefix"
+                w.obj.row_partition == A.obj.col_partition) "Input vector v must have length matching matrix rows (v: $(v_length), A: $(m)×$(n)), output vector w must have length matching matrix columns (w: $(w_length)), input vector partition must match matrix row partition, and output vector partition must match matrix column partition"
 
     # Perform w = A^T * v using PETSc (reuses w)
     _mat_mult_transpose_vec!(w.obj.v, A.obj.A, v.obj.v)

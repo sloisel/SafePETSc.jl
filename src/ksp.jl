@@ -189,7 +189,7 @@ function Base.:\(A::Mat{T}, b::Vec{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(b)[1]
-    @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition && A.obj.prefix == b.obj.prefix "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), row/column partitions of A must match and equal b's row partition, and A and b must have the same prefix"
+    @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), and row/column partitions of A must match and equal b's row partition"
 
     # Create KSP solver
     ksp_obj = Solver(A; prefix=A.obj.prefix)
@@ -223,8 +223,7 @@ function LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T}, b::Vec{T}) where {T}
     @mpiassert (m == n && m == b_length && m == x_length &&
                 A.obj.row_partition == A.obj.col_partition &&
                 A.obj.row_partition == b.obj.row_partition &&
-                A.obj.row_partition == x.obj.row_partition &&
-                A.obj.prefix == b.obj.prefix == x.obj.prefix) "Matrix A must be square (got $(m)×$(n)), matrix rows must match vector lengths (b has length $(b_length), x has length $(x_length)), A's row and column partitions must match, A's row partition must match b's and x's row partitions, and all objects must have the same prefix"
+                A.obj.row_partition == x.obj.row_partition) "Matrix A must be square (got $(m)×$(n)), matrix rows must match vector lengths (b has length $(b_length), x has length $(x_length)), A's row and column partitions must match, and A's row partition must match b's and x's row partitions"
 
     # Create KSP solver (will be destroyed when function exits)
     ksp_obj = Solver(A; prefix=A.obj.prefix)
@@ -245,8 +244,7 @@ function LinearAlgebra.ldiv!(ksp::Solver{T}, x::Vec{T}, b::Vec{T}) where {T}
     x_length = size(x)[1]
     @mpiassert (m == n && m == b_length && m == x_length &&
                 ksp.obj.row_partition == b.obj.row_partition &&
-                ksp.obj.row_partition == x.obj.row_partition &&
-                ksp.obj.prefix == b.obj.prefix == x.obj.prefix) "Solver's matrix must be square (got $(m)×$(n)), solver matrix rows must match vector lengths (b has length $(b_length), x has length $(x_length)), solver's row partition must match b's and x's row partitions, and all objects must have the same prefix"
+                ksp.obj.row_partition == x.obj.row_partition) "Solver's matrix must be square (got $(m)×$(n)), solver matrix rows must match vector lengths (b has length $(b_length), x has length $(x_length)), and solver's row partition must match b's and x's row partitions"
 
     # Solve into pre-allocated x using existing solver
     _ksp_solve_vec!(ksp.obj.ksp, x.obj.v, b.obj.v)
@@ -344,7 +342,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, b::Vec{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(b)[1]
-    @mpiassert m == n && n == vec_length && A.obj.col_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition && A.obj.prefix == b.obj.prefix "Matrix must be square (A: $(m)×$(n)), matrix columns must match vector length (b: $(vec_length)), row/column partitions of A must match, column partition must equal b's row partition, and A and b must have the same prefix"
+    @mpiassert m == n && n == vec_length && A.obj.col_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix columns must match vector length (b: $(vec_length)), row/column partitions of A must match, and column partition must equal b's row partition"
 
     # Create KSP solver
     ksp_obj = Solver(A; prefix=A.obj.prefix)
@@ -415,7 +413,7 @@ function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(b)[1]
-    @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition && A.obj.prefix == b.obj.prefix "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), row/column partitions of A must match and equal b's row partition, and A and b must have the same prefix"
+    @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), and row/column partitions of A must match and equal b's row partition"
 
     # Create KSP solver
     ksp_obj = Solver(A; prefix=A.obj.prefix)
