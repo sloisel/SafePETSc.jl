@@ -201,6 +201,8 @@ end
 """
     calculate!(bp::BlockProduct)
 
+**MPI Collective**
+
 Recompute the product after modifying input matrices/vectors, reusing cached PETSc objects.
 
 After the user modifies entries in bp.prod[k][i,j] matrices or vectors, calling this function

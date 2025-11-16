@@ -53,6 +53,22 @@ Display methods (automatically used by `println`, `display`, etc.):
 
 ```@docs
 SafePETSc.io0
+SafePETSc.own_row(::SafePETSc.Vec)
+```
+
+## Row-wise Operations
+
+```@docs
+SafePETSc.map_rows
+```
+
+## Indexing
+
+Non-collective element and range access:
+
+```@docs
+Base.getindex(::SafePETSc.Vec, ::Int)
+Base.getindex(::SafePETSc.Vec, ::UnitRange{Int})
 ```
 
 ## Operations

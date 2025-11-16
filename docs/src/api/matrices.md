@@ -44,6 +44,28 @@ Display methods (automatically used by `println`, `display`, etc.):
 - `show(io::IO, A::Mat)` - Display matrix contents (uses dense or sparse format based on type)
 - `show(io::IO, mime::MIME, A::Mat)` - Display with MIME type support
 
+## Utilities
+
+```@docs
+SafePETSc.own_row(::SafePETSc.Mat)
+```
+
+## Row-wise Operations
+
+See [`map_rows`](@ref) in the [Vectors API](vectors.md#Row-wise-Operations) - works with both vectors and matrices.
+
+## Indexing
+
+Non-collective element and range access:
+
+```@docs
+Base.getindex(::SafePETSc.Mat, ::Colon, ::Int)
+Base.getindex(::SafePETSc.Mat, ::Int, ::Int)
+Base.getindex(::SafePETSc.Mat, ::UnitRange{Int}, ::Int)
+Base.getindex(::SafePETSc.Mat, ::Int, ::UnitRange{Int})
+Base.getindex(::SafePETSc.Mat, ::UnitRange{Int}, ::UnitRange{Int})
+```
+
 ## Operations
 
 ### Linear Algebra

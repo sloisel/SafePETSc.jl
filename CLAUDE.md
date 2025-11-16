@@ -24,6 +24,12 @@ julia --project=. -e 'using Pkg; Pkg.instantiate()'
 julia --project=. -e 'using SafePETSc'
 ```
 
+## Directory structure
+- Source files for the library are in src/
+- Test scripts are in test/
+- User-centric examples are in examples/. The number of examples should be modest, not to exceed 10. If there are more than 10, consult the user on what to do. There should be at most one example per main feature.
+- Documentation with Documenter is in docs/. Make sure the documentation builds, is free of errors and warnings as much as possible. All user-visible API should be documented, internal functions should not be documented. The User Guide should describe all main features.
+
 ### Testing with MPI
 The package uses a dual-file testing approach for MPI:
 - `test/runtests.jl` - Entry point that spawns MPI processes
@@ -43,6 +49,7 @@ This pattern allows `Pkg.test()` to work correctly by having `runtests.jl` call 
 
 - Do not automatically commit changes into git unless asked by the user.
 - Do not automatically push commits to github unless asked by the user.
+- When the user gives permission to git commit and/or push once, that is not carte blanche to do it later.
 - Do not tag releases, TagBot will tag on github.
 
 ## User-Facing Features
@@ -124,9 +131,15 @@ y = ones_like(x)         # Create ones vector
 y = fill_like(x, val)    # Fill with value
 ```
 
+### IO
+
+Use io0() to print or otherwise perform io from a single rank. It can be used as follows: `println(io0(),"Hello from rank 0!").
+The Vec{T} and Mat{T} implement `show(...)` methods, but these are collective. Therefore, you can do `println(io0(),A)` and it will
+print the Vec or Mat once on rank 0.
+
 ### Key Differences from Native Julia
 
-- **No scalar indexing**: Use PETSc's bulk operations instead of `A[i,j]` (prevents GPU→CPU transfers)
+- **Avoid scalar indexing**: Use PETSc's bulk operations instead of `A[i,j]` (prevents GPU→CPU transfers)
 - **Explicit partitioning**: Use `Vec_uniform` vs `Vec_sum` to control data distribution
 - **Solver reuse**: Create `Solver(A)` objects for repeated solves with same matrix
 - **Memory pooling**: Control temporary vector allocation with vector pools
@@ -168,14 +181,11 @@ The package uses a trait-based approach to control which types can be managed:
 
 1. **Object Creation**: Every rank runs the same deterministic ID allocation, inserts the new ID into its mirrored `counter_pool`, and initializes `free_ids` state identically
 2. **Automatic Release**: Finalizers enqueue local release IDs (no MPI calls in finalizers)
-3. **Destruction Check**: `check_and_destroy!()` performs a full GC, drains local queues, Allgathers counts and payload to all ranks, each rank updates counters, computes ready IDs, and all ranks destroy their local copies simultaneously (no additional broadcast needed)
+3. **Destruction Check**: `check_and_destroy!()` is a collective operation that is automatically called by the library, but can also be called by the user to try and destroy PETSc objects that are eligible for destruction. The Julia garbage collector determines what is destructible, so one can help the discovery of destructible object by forcing a partial or full garbage collection first with GC.gc(false) or GC.gc(true). This is never necessary in examples or in tests, except when testing specifically that DRefs are working as expected. For all other tests, it should not be necessary to gc, or even to call `check_and_destroy!()`. Furthermore, no specific cleanup operation is needed for SafePETSc or SafeMPI. You should never call check_and_destroy!() at the end of scripts to "cleanup".
 
 ### Key Design Decisions
 
-- **Automatic Cleanup**: Uses finalizers to automatically call `release!()` when DistributedRefs are garbage collected
-- **Explicit `release!()` Optional**: Users can call `release!()` manually for immediate cleanup, but it's not required
-- **Synchronous Destruction**: `check_and_destroy!()` must be called explicitly to perform the actual cleanup, allowing controlled cleanup points
-- **ID Recycling**: Released IDs are reused to prevent integer overflow in long-running applications
+- **Synchronous Destruction**: `check_and_destroy!()` is called synchronously in constructors, users can also call it explicitly but this is a collective operation.
 - **Trait System**: Prevents accidental misuse by requiring explicit opt-in for destruction support
 - **No advertisement**: Putting advertisements for Claude in commit messages or anywhere else is forbidden. Claude is not a co-author. Sebastien Loisel is the one and only author.
 

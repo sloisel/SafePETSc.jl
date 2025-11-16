@@ -150,6 +150,128 @@ partition = v.obj.row_partition
 prefix = v.obj.prefix
 ```
 
+## Row Ownership and Indexing
+
+### Determining Owned Rows
+
+Use `own_row()` to find which indices are owned by the current rank:
+
+```julia
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+
+# Get ownership range for this rank
+owned = own_row(v)  # e.g., 1:2 on rank 0, 3:4 on rank 1
+
+println(io0(), "Rank $(MPI.Comm_rank(MPI.COMM_WORLD)) owns indices: $owned")
+```
+
+### Indexing Vectors
+
+**Important:** You can only index elements that are owned by the current rank. Attempting to access non-owned indices will result in an error.
+
+```julia
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+owned = own_row(v)
+
+# ✓ CORRECT - Access owned elements
+if 2 in owned
+    val = v[2]  # Returns 2.0 on the rank that owns index 2
+end
+
+# ✓ CORRECT - Access range of owned elements
+if owned == 1:2
+    vals = v[1:2]  # Returns [1.0, 2.0] on the rank that owns these indices
+end
+
+# ❌ WRONG - Accessing non-owned indices causes an error
+val = v[3]  # ERROR if rank doesn't own index 3!
+```
+
+**Indexing is non-collective** - each rank can independently access its owned data without coordination.
+
+### Use Cases for Indexing
+
+Indexing is useful when you need to:
+- Extract specific local values for computation
+- Implement custom local operations
+- Interface with non-PETSc code on owned data
+
+```julia
+# Extract owned portion for local processing
+v = Vec_uniform(randn(100))
+owned = own_row(v)
+
+# Get local values
+local_vals = v[owned]
+
+# Process locally
+local_sum = sum(local_vals)
+local_max = maximum(local_vals)
+
+# Aggregate across ranks if needed
+global_sum = MPI.Allreduce(local_sum, +, MPI.COMM_WORLD)
+```
+
+## Row-wise Operations with map_rows
+
+The `map_rows()` function applies a function to each row of distributed vectors or matrices, similar to Julia's `map` but for distributed PETSc objects.
+
+### Basic Usage
+
+```julia
+# Apply function to each element of a vector
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+squared = map_rows(x -> x[1]^2, v)  # Returns Vec([1.0, 4.0, 9.0, 16.0])
+
+# Transform vector to matrix (using adjoint for row output)
+powers = map_rows(x -> [x[1], x[1]^2, x[1]^3]', v)  # Returns 4×3 Mat
+```
+
+**Note:** For vectors, the function receives a 1-element view, so use `x[1]` to access the scalar value.
+
+### Output Types
+
+The return type depends on what your function returns:
+
+- **Scalar** → Returns a `Vec` with same number of rows
+- **Vector** → Returns a `Vec` with expanded rows (m*n rows if each returns n-element vector)
+- **Adjoint Vector** (row vector) → Returns a `Mat` with m rows
+
+```julia
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+
+# Scalar output: Vec with same size
+doubled = map_rows(x -> 2 * x[1], v)
+
+# Vector output: Vec with expanded size (4 * 2 = 8 elements)
+expanded = map_rows(x -> [x[1], x[1]^2], v)
+
+# Adjoint vector output: Mat with 4 rows, 3 columns
+matrix_form = map_rows(x -> [x[1], x[1]^2, x[1]^3]', v)
+```
+
+### Combining Multiple Inputs
+
+Process multiple vectors or matrices together:
+
+```julia
+v1 = Vec_uniform([1.0, 2.0, 3.0])
+v2 = Vec_uniform([4.0, 5.0, 6.0])
+
+# Combine two vectors element-wise
+combined = map_rows((x, y) -> [x[1] + y[1], x[1] * y[1]]', v1, v2)
+# Returns 3×2 matrix: [sum, product] for each pair
+```
+
+**Important:** All inputs must have the same row partition.
+
+### Performance Notes
+
+- `map_rows()` is a **collective operation** - all ranks must call it
+- The function is applied only to locally owned rows on each rank
+- Results are automatically assembled into a new distributed object
+- Works efficiently with both vectors and matrices (see [Matrices guide](matrices.md#row-wise-operations-with-map_rows))
+
 ## PETSc Options
 
 Use prefixes to configure PETSc behavior:

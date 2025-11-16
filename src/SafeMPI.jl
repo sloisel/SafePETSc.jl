@@ -108,6 +108,8 @@ const enable_assert = Ref{Bool}(true)
 """
     set_assert(x::Bool) -> nothing
 
+**MPI Non-Collective**
+
 Enable (`true`) or disable (`false`) MPI assertion checks via `@mpiassert`.
 
 # Example
@@ -311,6 +313,8 @@ end
 """
     check_and_destroy!(manager=default_manager[]; max_check_count::Integer=1)
 
+**MPI Collective**
+
 Perform garbage collection and process pending object releases, destroying objects when
 all ranks have released their references.
 
@@ -345,6 +349,8 @@ end
 """
     mpi_any(local_bool::Bool, comm=MPI.COMM_WORLD) -> Bool
 
+**MPI Collective**
+
 Collective logical OR reduction across all ranks in `comm`.
 
 Returns `true` on all ranks if any rank has `local_bool == true`, otherwise returns `false`
@@ -370,6 +376,8 @@ end
 """
     mpierror(msg::AbstractString, trace::Bool; comm=MPI.COMM_WORLD, code::Integer=1)
 
+**MPI Collective**
+
 Best-effort MPI-wide error terminator that avoids hangs:
 - Prints `[rank N] ERROR: msg` on each process that reaches it
 - If `trace` is true, prints a backtrace
@@ -390,6 +398,8 @@ end
 
 """
     @mpiassert cond [message]
+
+**MPI Collective**
 
 MPI-aware assertion that checks `cond` on all ranks and triggers collective error handling
 if any rank fails the assertion.

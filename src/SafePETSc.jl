@@ -38,6 +38,8 @@ const SUBSET_NONZERO_PATTERN    = Cint(2)
 """
     petsc_options_insert_string(options_string::String)
 
+**MPI Collective**
+
 Insert command-line style options into PETSc's global options database.
 
 Example: `petsc_options_insert_string("-dense_mat_type mpidense")`
@@ -181,9 +183,13 @@ export Init, Initialized
 export ENABLE_VEC_POOL, clear_vec_pool!, get_vec_pool_stats
 export BlockProduct, calculate!
 export io0
+export map_rows
+export own_row
 
 """
     io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)
+
+**MPI Non-Collective**
 
 Return `io` if the current rank is in `r`, otherwise return `dn`.
 
@@ -220,6 +226,7 @@ include("vec.jl")
 include("mat.jl")
 include("ksp.jl")
 include("blockproduct.jl")
+include("map_rows.jl")
 
 # Opt-in internal _Vec to DRef-managed destruction
 SafeMPI.destroy_trait(::Type{_Vec{T}}) where {T} = SafeMPI.CanDestroy()
@@ -250,6 +257,8 @@ end
 """
     Init() -> nothing
 
+**MPI Collective**
+
 Ensure MPI and PETSc are initialized in the recommended order (MPI first, then PETSc).
 Safe to call multiple times. Does not register custom finalizers; rely on library
 defaults for shutdown (MPI.jl finalizes at exit; PETSc may remain initialized).
@@ -266,6 +275,8 @@ end
 
 """
     Initialized() -> Bool
+
+**MPI Non-Collective**
 
 Return true if both MPI and PETSc are initialized. This is a simple conjunction
 of `MPI.Initialized()` and `PETSc.initialized` for the active PETSc library.

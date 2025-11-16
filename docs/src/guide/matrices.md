@@ -130,6 +130,83 @@ col_part = A.obj.col_partition
 prefix = A.obj.prefix
 ```
 
+## Row Ownership and Indexing
+
+### Determining Owned Rows
+
+Use `own_row()` to find which row indices are owned by the current rank:
+
+```julia
+A = Mat_uniform([1.0 2.0; 3.0 4.0; 5.0 6.0; 7.0 8.0])
+
+# Get ownership range for this rank
+owned = own_row(A)  # e.g., 1:2 on rank 0, 3:4 on rank 1
+
+println(io0(), "Rank $(MPI.Comm_rank(MPI.COMM_WORLD)) owns rows: $owned")
+```
+
+### Indexing Matrices
+
+**Important:** You can only index rows that are owned by the current rank. Attempting to access non-owned rows will result in an error.
+
+SafePETSc supports several indexing patterns:
+
+```julia
+A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0; 10.0 11.0 12.0])
+owned = own_row(A)
+
+# ✓ Single element (owned row, any column)
+if 2 in owned
+    val = A[2, 3]  # Returns 6.0 on the rank that owns row 2
+end
+
+# ✓ Extract column (all ranks get their owned portion)
+col_vec = A[:, 2]  # Returns distributed Vec with owned rows from column 2
+
+# ✓ Row slice (owned row, column range)
+if 3 in owned
+    row_slice = A[3, 1:2]  # Returns [7.0, 8.0] on the rank that owns row 3
+end
+
+# ✓ Column slice (owned row range, single column)
+if owned == 1:2
+    col_slice = A[1:2, 2]  # Returns [2.0, 5.0] on the rank that owns these rows
+end
+
+# ✓ Submatrix (owned row range, column range)
+if owned == 1:2
+    submat = A[1:2, 2:3]  # Returns 2×2 Matrix on the rank that owns these rows
+end
+
+# ❌ WRONG - Accessing non-owned rows causes an error
+val = A[4, 1]  # ERROR if rank doesn't own row 4!
+```
+
+**Indexing is non-collective** - each rank can independently access its owned rows without coordination.
+
+### Use Cases for Indexing
+
+Indexing is useful when you need to:
+- Extract specific local values from owned rows
+- Extract columns as distributed vectors
+- Implement custom local operations
+- Interface with non-PETSc code on owned data
+
+```julia
+# Extract owned portion for local processing
+A = Mat_uniform(randn(100, 50))
+owned = own_row(A)
+
+# Get local submatrix
+local_submat = A[owned, 1:10]  # First 10 columns of owned rows
+
+# Process locally
+local_norms = [norm(local_submat[i, :]) for i in 1:length(owned)]
+
+# Aggregate across ranks if needed
+max_norm = MPI.Allreduce(maximum(local_norms), max, MPI.COMM_WORLD)
+```
+
 ## Partitioning
 
 Matrices have both row and column partitions.
@@ -149,6 +226,91 @@ col_part = default_row_partition(n, nranks)
 - Row operations require matching row partitions
 - Column operations require matching column partitions
 - Matrix multiplication: `C = A * B` requires `A.col_partition == B.row_partition`
+
+## Row-wise Operations with map_rows
+
+The `map_rows()` function applies a function to each row of distributed matrices or vectors, enabling powerful row-wise transformations.
+
+### Basic Usage with Matrices
+
+```julia
+# Apply function to each row of a matrix
+A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0])
+
+# Compute row sums (returns Vec)
+row_sums = map_rows(sum, A)  # Returns Vec([6.0, 15.0])
+
+# Compute statistics per row (returns Mat)
+stats = map_rows(row -> [sum(row), prod(row)]', A)
+# Returns 2×2 Mat: [[6.0, 6.0]; [15.0, 48.0]]
+```
+
+**Note:** For matrices, the function receives a view of each row (like `eachrow`).
+
+### Output Types
+
+The return type depends on what your function returns:
+
+- **Scalar** → Returns a `Vec` with m rows (one value per row)
+- **Vector** → Returns a `Vec` with expanded rows (m*n total elements)
+- **Adjoint Vector** (row vector) → Returns a `Mat` with m rows
+
+```julia
+B = Mat_uniform([1.0 2.0; 3.0 4.0; 5.0 6.0])
+
+# Scalar output: Vec with 3 elements
+means = map_rows(mean, B)
+
+# Vector output: Vec with 3*2 = 6 elements
+doubled = map_rows(row -> [row[1], row[2]], B)
+
+# Matrix output: Mat with 3 rows, 2 columns
+stats = map_rows(row -> [minimum(row), maximum(row)]', B)
+```
+
+### Combining Matrices and Vectors
+
+Process matrices and vectors together row-wise:
+
+```julia
+B = Mat_uniform(randn(5, 3))
+C = Vec_uniform(randn(5))
+
+# Combine matrix rows with corresponding vector elements
+result = map_rows((mat_row, vec_row) -> [sum(mat_row), prod(mat_row), vec_row[1]]', B, C)
+# Returns 5×3 matrix with [row_sum, row_product, vec_value] per row
+```
+
+**Important:** All inputs must have compatible row partitions.
+
+### Real-World Example
+
+```julia
+using Statistics
+
+# Data matrix: each row is an observation
+data = Mat_uniform(randn(1000, 50))
+
+# Compute statistics for each observation
+observation_stats = map_rows(data) do row
+    [mean(row), std(row), minimum(row), maximum(row)]'
+end
+# Returns 1000×4 matrix with statistics per observation
+
+# Convert to Julia matrix for analysis if small
+if size(observation_stats, 1) < 10000
+    stats_array = Matrix(observation_stats)
+    # Further analysis with standard Julia tools
+end
+```
+
+### Performance Notes
+
+- `map_rows()` is a **collective operation** - all ranks must call it
+- The function is applied only to locally owned rows on each rank
+- Results are automatically assembled into a new distributed object
+- More efficient than extracting rows individually and processing
+- Works with both dense and sparse matrices (though sparse iteration may be less efficient)
 
 ## Advanced Features
 
