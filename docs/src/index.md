@@ -1,4 +1,14 @@
-# SafePETSc.jl
+```@meta
+CurrentModule = MultiGridBarrier
+```
+
+```@eval
+using Markdown
+using Pkg
+using MultiGridBarrier
+v = string(pkgversion(MultiGridBarrier))
+md"# SafePETSc.jl $v"
+```
 
 SafePETSc is a Julia package that makes distributed [PETSc](https://petsc.org/) linear algebra feel like native Julia. Instead of writing verbose PETSc C API calls with explicit pointer management and multi-step operations, you can write natural Julia expressions like `A * B + C`, `A \ b`, or `y .= 2 .* x .+ 3`.
 
