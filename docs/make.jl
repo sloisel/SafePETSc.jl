@@ -1,10 +1,14 @@
 using Documenter
 using SafePETSc
 using SparseArrays
+using Pkg
+
+# Compute version dynamically
+version = string(pkgversion(SafePETSc))
 
 makedocs(;
     modules=[SafePETSc, SafePETSc.SafeMPI],
-    sitename="SafePETSc.jl",
+    sitename="SafePETSc.jl $version",
     remotes=nothing,  # Disable remote source links
     warnonly=[:missing_docs, :cross_references, :docs_block],  # Don't fail on warnings
     format=Documenter.HTML(;
