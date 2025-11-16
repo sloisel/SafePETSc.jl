@@ -32,6 +32,8 @@ end
 """
     Vec_uniform(v::Vector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), prefix="") -> Vec{T}
 
+**MPI Collective**
+
 Create a distributed PETSc vector from a Julia vector, asserting uniform distribution across ranks (on MPI.COMM_WORLD).
 
 - `v::Vector{T}` must be identical on all ranks (`mpi_uniform`).
@@ -77,6 +79,8 @@ end
 
 """
     Vec_sum(v::SparseVector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), prefix="", own_rank_only=false) -> Vec{T}
+
+**MPI Collective**
 
 Create a distributed PETSc vector by summing sparse vectors across ranks (on MPI.COMM_WORLD).
 
@@ -257,6 +261,8 @@ end
 # Default row partition: equal blocks across ranks
 """
     default_row_partition(n::Int, nranks::Int) -> Vector{Int}
+
+**MPI Non-Collective**
 
 Create a default row partition that divides n rows equally among nranks.
 
@@ -499,6 +505,8 @@ _first__vec(::Any) = nothing
 """
     zeros_like(x::Vec{T}; T2::Type{S}=T, prefix::String=x.obj.prefix) -> Vec{S}
 
+**MPI Collective**
+
 Create a new distributed vector with the same size and partition as `x`, filled with zeros.
 
 # Arguments
@@ -517,6 +525,8 @@ end
 """
     ones_like(x::Vec{T}; T2::Type{S}=T, prefix::String=x.obj.prefix) -> Vec{S}
 
+**MPI Collective**
+
 Create a new distributed vector with the same size and partition as `x`, filled with ones.
 
 # Arguments
@@ -534,6 +544,8 @@ end
 
 """
     fill_like(x::Vec{T}, val; T2::Type{S}=typeof(val), prefix::String=x.obj.prefix) -> Vec{S}
+
+**MPI Collective**
 
 Create a new distributed vector with the same size and partition as `x`, filled with `val`.
 
@@ -635,7 +647,7 @@ PETSc.@for_libpetsc begin
     function _vec_dot(v::PETSc.Vec{$PetscScalar}, w::PETSc.Vec{$PetscScalar})
         result = Ref{$PetscScalar}()
         PETSc.@chk ccall((:VecDot, $libpetsc), PETSc.PetscErrorCode,
-                         (CVec, CVec, Ptr{$PetscScalar}),
+                         (PETSc.CVec, PETSc.CVec, Ptr{$PetscScalar}),
                          v, w, result)
         return result[]
     end
@@ -679,6 +691,8 @@ end
 """
     clear_vec_pool!()
 
+**MPI Non-Collective**
+
 Clear all vectors from the pool, destroying them immediately.
 Useful for testing or explicit memory management.
 """
@@ -698,6 +712,8 @@ end
 
 """
     get_vec_pool_stats() -> Dict
+
+**MPI Non-Collective**
 
 Return statistics about the current vector pool state.
 Returns a dictionary with keys (nglobal, prefix, type) => count.
@@ -724,6 +740,8 @@ end
 
 """
     Vector(x::Vec{T}) -> Vector{T}
+
+**MPI Collective**
 
 Convert a distributed PETSc Vec to a Julia Vector by gathering all data to all ranks.
 This is a collective operation - all ranks must call it and will receive the complete vector.
@@ -761,12 +779,116 @@ function Base.Vector(x::Vec{T}) where T
     return result
 end
 
+# -----------------------------------------------------------------------------
+# Vector Indexing
+# -----------------------------------------------------------------------------
+
+"""
+    own_row(v::Vec{T}) -> UnitRange{Int}
+
+**MPI Non-Collective**
+
+Return the range of indices owned by the current rank for vector v.
+
+# Example
+```julia
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+range = own_row(v)  # e.g., 1:2 on rank 0
+```
+"""
+own_row(v::DRef{_Vec{T}}) where {T} = v.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+1]:(v.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+2]-1)
+
+"""
+    Base.getindex(v::Vec{T}, i::Int) -> T
+
+**MPI Non-Collective**
+
+Get the value at index i from a distributed vector.
+
+The index i must be wholly contained in the current rank's ownership range.
+If not, the function will abort with an error message and stack trace.
+
+# Example
+```julia
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+# On rank that owns index 2:
+val = v[2]  # Returns 2.0
+```
+"""
+function Base.getindex(v::DRef{_Vec{T}}, i::Int) where {T}
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    # Get local range
+    lo = v.obj.row_partition[rank+1]
+    hi = v.obj.row_partition[rank+2] - 1
+
+    # Check that index is in local range (non-collective check)
+    if !(lo <= i <= hi)
+        SafeMPI.mpierror("Index $i must be in rank $rank's ownership range [$lo, $hi]", true)
+    end
+
+    # Use unsafe_localarray to get read access to local data
+    local_view = PETSc.unsafe_localarray(v.obj.v; read=true)
+    try
+        # Convert global index to local index
+        local_idx = i - lo + 1
+        return local_view[local_idx]
+    finally
+        Base.finalize(local_view)
+    end
+end
+
+"""
+    Base.getindex(v::Vec{T}, range::UnitRange{Int}) -> Vector{T}
+
+**MPI Non-Collective**
+
+Extract a contiguous range of values from a distributed vector.
+
+The range must be wholly contained in the current rank's ownership range.
+If not, the function will abort with an error message and stack trace.
+
+# Example
+```julia
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+# On rank that owns indices 2:3:
+vals = v[2:3]  # Returns [2.0, 3.0]
+```
+"""
+function Base.getindex(v::DRef{_Vec{T}}, range::UnitRange{Int}) where {T}
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    # Get local range
+    lo = v.obj.row_partition[rank+1]
+    hi = v.obj.row_partition[rank+2] - 1
+
+    # Check that range is in local range (non-collective check)
+    range_lo = first(range)
+    range_hi = last(range)
+    if !(lo <= range_lo && range_hi <= hi)
+        SafeMPI.mpierror("Range $range must be wholly contained in rank $rank's ownership range [$lo, $hi]", true)
+    end
+
+    # Use unsafe_localarray to get read access to local data
+    local_view = PETSc.unsafe_localarray(v.obj.v; read=true)
+    try
+        # Convert global indices to local indices
+        local_start = range_lo - lo + 1
+        local_end = range_hi - lo + 1
+        return copy(local_view[local_start:local_end])
+    finally
+        Base.finalize(local_view)
+    end
+end
+
 """
     Base.show(io::IO, x::Vec{T})
 
+**MPI Collective**
+
 Display a distributed PETSc Vec by converting to Julia Vector and showing it.
 
-This is a collective operation - all ranks must call it and will display the same vector.
+All ranks must call it and will display the same vector.
 To print only on rank 0, use: `println(io0(), v)`
 """
 Base.show(io::IO, x::Vec{T}) where T = show(io, Vector(x))
@@ -774,9 +896,11 @@ Base.show(io::IO, x::Vec{T}) where T = show(io, Vector(x))
 """
     Base.show(io::IO, mime::MIME, x::Vec{T})
 
+**MPI Collective**
+
 Display a distributed PETSc Vec with a specific MIME type by converting to Julia Vector.
 
-This is a collective operation - all ranks must call it and will display the same vector.
+All ranks must call it and will display the same vector.
 To print only on rank 0, use: `show(io0(), mime, v)`
 """
 Base.show(io::IO, mime::MIME, x::Vec{T}) where T = show(io, mime, Vector(x))

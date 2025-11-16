@@ -67,6 +67,18 @@ end
         run_mpi_test(joinpath(@__DIR__, "test_mat_getindex.jl"); nprocs=4, expect_success=true)
     end
 
+    @testset "Vec indexing Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_vec_indexing.jl"); nprocs=4, expect_success=true)
+    end
+
+    @testset "Mat indexing Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_mat_indexing.jl"); nprocs=4, expect_success=true)
+    end
+
+    @testset "Advanced Vec Operations Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_vec_advanced.jl"); nprocs=4, expect_success=true)
+    end
+
     @testset "Mat cat Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_mat_cat.jl"); nprocs=4, expect_success=true)
     end
@@ -87,6 +99,10 @@ end
         run_mpi_test(joinpath(@__DIR__, "test_mat_eachrow.jl"); nprocs=4, expect_success=true)
     end
 
+    @testset "map_rows Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_map_rows.jl"); nprocs=4, expect_success=true)
+    end
+
     @testset "Vec Pooling Edge Cases Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_vec_pool_edge.jl"); nprocs=4, expect_success=true)
     end
@@ -101,5 +117,9 @@ end
 
     @testset "Conversion and Display Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_conversions.jl"); nprocs=4, expect_success=true)
+    end
+
+    @testset "Advanced Matrix Operations Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_mat_advanced.jl"); nprocs=4, expect_success=true)
     end
 end
