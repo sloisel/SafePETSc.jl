@@ -44,7 +44,7 @@ SafePETSc provides three main types for distributed linear algebra:
 
 - **`Vec{T}`**: Distributed vectors with Julia array-like operations (broadcasting, arithmetic, etc.) and automatic pooling for efficiency
 - **`Mat{T}`**: Distributed matrices with arithmetic operators (`+`, `-`, `*`, `\`), broadcasting, transpose (`A'`), and GPU-friendly operations
-- **`Solver{T}`**: Linear solver objects that can be reused for multiple solves with the same matrix
+- **`KSP{T}`**: Linear solver objects that can be reused for multiple solves with the same matrix
 
 ### Memory Management
 

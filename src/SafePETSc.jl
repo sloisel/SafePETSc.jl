@@ -170,14 +170,14 @@ using SparseArrays
 A = spdiagm(0 => diag_vec, 1 => upper_diag)
 ```
 
-See also: [`Mat_uniform`](@ref), [`Mat_sum`](@ref), [`Vec`](@ref), [`Solver`](@ref)
+See also: [`Mat_uniform`](@ref), [`Mat_sum`](@ref), [`Vec`](@ref), [`KSP`](@ref)
 """
 const Mat{T} = SafeMPI.DRef{_Mat{T}}
 
 export Vec, Vec_uniform, Vec_sum, default_row_partition
 export zeros_like, ones_like, fill_like
 export Mat, Mat_uniform, Mat_sum
-export Solver
+export KSP
 export petsc_options_insert_string
 export Init, Initialized
 export ENABLE_VEC_POOL, clear_vec_pool!, get_vec_pool_stats

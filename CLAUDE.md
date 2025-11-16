@@ -141,7 +141,7 @@ print the Vec or Mat once on rank 0.
 
 - **Avoid scalar indexing**: Use PETSc's bulk operations instead of `A[i,j]` (prevents GPU→CPU transfers)
 - **Explicit partitioning**: Use `Vec_uniform` vs `Vec_sum` to control data distribution
-- **Solver reuse**: Create `Solver(A)` objects for repeated solves with same matrix
+- **KSP reuse**: Create `KSP(A)` objects for repeated solves with same matrix
 - **Memory pooling**: Control temporary vector allocation with vector pools
 
 ## Architecture (Implementation Details)

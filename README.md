@@ -80,7 +80,7 @@ SafePETSc provides three main distributed types that wrap PETSc objects:
 
 - **Vec{T}**: Distributed vectors with automatic lifetime management and pooling
 - **Mat{T}**: Distributed matrices supporting dense and sparse formats
-- **Solver**: Linear solver contexts for efficient repeated solves
+- **KSP**: Linear solver contexts for efficient repeated solves
 
 ### Printing and Display
 

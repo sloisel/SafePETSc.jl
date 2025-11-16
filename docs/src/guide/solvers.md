@@ -32,11 +32,11 @@ Note: `B` and `X` must be dense matrices (`MATMPIDENSE`).
 
 ## Reusable Solvers
 
-For multiple solves with the same matrix, create a `Solver` object:
+For multiple solves with the same matrix, create a `KSP` object:
 
 ```julia
 # Create solver once
-ksp = Solver(A)
+ksp = KSP(A)
 
 # Solve multiple systems
 x1 = zeros_like(b1)
@@ -45,7 +45,7 @@ ldiv!(ksp, x1, b1)
 x2 = zeros_like(b2)
 ldiv!(ksp, x2, b2)
 
-# Solver is cleaned up automatically when ksp goes out of scope
+# KSP is cleaned up automatically when ksp goes out of scope
 ```
 
 ### Benefits of Reuse
@@ -104,11 +104,11 @@ petsc_options_insert_string("-pc_type bjacobi")
 # With prefix for specific solvers
 petsc_options_insert_string("-my_ksp_type cg")
 A = Mat_uniform(data; prefix="my_")
-ksp = Solver(A)  # Will use CG
+ksp = KSP(A)  # Will use CG
 ```
 
 Common KSP options:
-- `-ksp_type`: Solver type (cg, gmres, bcgs, etc.)
+- `-ksp_type`: KSP type (cg, gmres, bcgs, etc.)
 - `-ksp_rtol`: Relative tolerance
 - `-ksp_atol`: Absolute tolerance
 - `-ksp_max_it`: Maximum iterations
@@ -124,7 +124,7 @@ x = A \ b
 # PETSc will print convergence information
 ```
 
-## Solver Types
+## KSP Types
 
 SafePETSc supports all PETSc KSP types. Common choices:
 
@@ -181,7 +181,7 @@ r = b - A * x
 # (In practice, use PETSc's built-in convergence monitoring)
 ```
 
-### Iterative Solver with Monitoring
+### Iterative KSP with Monitoring
 
 ```julia
 using SafePETSc
@@ -217,7 +217,7 @@ SafePETSc.Init()
 A = Mat_uniform(...)
 
 # Create solver once
-ksp = Solver(A)
+ksp = KSP(A)
 
 # Solve many RHS vectors
 for i in 1:100
@@ -227,7 +227,7 @@ for i in 1:100
     results[i] = extract_result(x)
 end
 
-# Solver automatically cleaned up
+# KSP automatically cleaned up
 ```
 
 ### Block Solves
@@ -251,7 +251,7 @@ X = A \ B
 
 ## Performance Tips
 
-1. **Reuse Solvers**: Create `Solver` once for multiple solves
+1. **Reuse KSP Objects**: Create `KSP` once for multiple solves
 2. **Choose Appropriate Method**: Direct for small problems, iterative for large
 3. **Tune Preconditioner**: Can dramatically affect convergence
 4. **Monitor Convergence**: Use `-ksp_monitor` to tune parameters
@@ -263,12 +263,12 @@ petsc_options_insert_string("-mat_type aijcusparse")
 petsc_options_insert_string("-vec_type cuda")
 ```
 
-## Solver Properties
+## KSP Properties
 
 Check solver dimensions:
 
 ```julia
-ksp = Solver(A)
+ksp = KSP(A)
 
 m, n = size(ksp)  # Matrix dimensions
 m = size(ksp, 1)  # Rows
@@ -312,4 +312,4 @@ Ensure:
 
 ## See Also
 
-- [`SafePETSc.Solver`](@ref)
+- [`SafePETSc.KSP`](@ref)

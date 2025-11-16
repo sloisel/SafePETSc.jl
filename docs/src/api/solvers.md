@@ -5,7 +5,7 @@ Linear solver functionality in SafePETSc.
 ## Type
 
 ```@docs
-SafePETSc.Solver
+SafePETSc.KSP
 ```
 
 ## Initialization
@@ -56,5 +56,5 @@ X = B / A'                             # Solve XA^T = B
 ## Properties
 
 ```julia
-m, n = size(ksp)                       # Solver matrix dimensions
+m, n = size(ksp)                       # KSP matrix dimensions
 ```

@@ -216,16 +216,16 @@ drX = drB / drA'
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Test 11: Solver constructor with prefix
+# Test 11: KSP constructor with prefix
 if rank == 0
-    println("[DEBUG] Test 11: Solver constructor")
+    println("[DEBUG] Test 11: KSP constructor")
     flush(stdout)
 end
 
 A_data = Matrix{Float64}(I, 4, 4) * 2.0
 drA = SafePETSc.Mat_uniform(A_data)
 
-ksp = SafePETSc.Solver(drA; prefix="test_")
+ksp = SafePETSc.KSP(drA; prefix="test_")
 @test ksp isa SafeMPI.DRef
 
 SafeMPI.check_and_destroy!()
@@ -328,7 +328,7 @@ drb1 = SafePETSc.Vec_uniform(b1_data)
 drb2 = SafePETSc.Vec_uniform(b2_data)
 
 # Create solver (can be reused)
-ksp = SafePETSc.Solver(drA)
+ksp = SafePETSc.KSP(drA)
 
 # Pre-allocate output vector
 drx = SafePETSc.Vec_uniform(zeros(4))
@@ -385,7 +385,7 @@ drB1 = SafePETSc.Mat_uniform(B1_data; prefix="dense_")
 drB2 = SafePETSc.Mat_uniform(B2_data; prefix="dense_")
 
 # Create solver (can be reused)
-ksp = SafePETSc.Solver(drA)
+ksp = SafePETSc.KSP(drA)
 
 # Pre-allocate output matrix (must be dense)
 drX = SafePETSc.Mat_uniform(zeros(4, 2); prefix="dense_")

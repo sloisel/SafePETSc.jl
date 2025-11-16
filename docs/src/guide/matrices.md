@@ -432,7 +432,7 @@ x = A \ b
 1. **Use Native Operations**: Prefer PETSc operations over element access
 2. **Batch Assembly**: Build sparse matrices locally, then sum once
 3. **Appropriate Matrix Type**: Use dense vs. sparse based on structure
-4. **Reuse Solver Objects**: Create `Solver` once, reuse for multiple solves
+4. **Reuse KSP Objects**: Create `KSP` once, reuse for multiple solves
 5. **GPU Configuration**: Set PETSc options for GPU matrices
 
 ```julia

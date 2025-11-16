@@ -7,47 +7,47 @@ struct _KSP{T}
 end
 
 """
-    Solver{T}
+    KSP{T}
 
 A PETSc KSP (Krylov Subspace) linear solver with element type `T`, managed by SafePETSc's
 reference counting system.
 
-`Solver{T}` is actually a type alias for `DRef{_KSP{T}}`, meaning solvers are automatically
+`KSP{T}` is actually a type alias for `DRef{_KSP{T}}`, meaning solvers are automatically
 tracked across MPI ranks and destroyed collectively when all ranks release their references.
 
-Solvers can be reused for multiple linear systems with the same matrix, avoiding the cost
+KSP objects can be reused for multiple linear systems with the same matrix, avoiding the cost
 of repeated factorization or preconditioner setup.
 
 # Construction
 
-See the [`Solver`](@ref) constructor for creating solver instances.
+See the [`KSP`](@ref) constructor for creating solver instances.
 
 # Usage
 
-Solvers can be used implicitly via the backslash operator, or explicitly for reuse:
+KSP solvers can be used implicitly via the backslash operator, or explicitly for reuse:
 
 ```julia
 # Implicit (creates and destroys solver internally)
 x = A \\ b
 
 # Explicit (reuse solver for multiple solves)
-ksp = Solver(A)
+ksp = KSP(A)
 x1 = similar(b)
 x2 = similar(b)
 LinearAlgebra.ldiv!(ksp, x1, b1)  # First solve
 LinearAlgebra.ldiv!(ksp, x2, b2)  # Second solve with same matrix
 ```
 
-See also: [`Mat`](@ref), [`Vec`](@ref), the `Solver` constructor
+See also: [`Mat`](@ref), [`Vec`](@ref), the `KSP` constructor
 """
-const Solver{T} = SafeMPI.DRef{_KSP{T}}
+const KSP{T} = SafeMPI.DRef{_KSP{T}}
 
-# Sizes for Solver reflect the operator dimensions recorded at construction
+# Sizes for KSP reflect the operator dimensions recorded at construction
 Base.size(r::SafeMPI.DRef{<:_KSP}) = (r.obj.row_partition[end] - 1, r.obj.col_partition[end] - 1)
 Base.size(r::SafeMPI.DRef{<:_KSP}, d::Integer) = d == 1 ? (r.obj.row_partition[end] - 1) : (d == 2 ? (r.obj.col_partition[end] - 1) : 1)
 
 """
-    Solver(A::Mat{T}; prefix::String="") -> Solver{T}
+    KSP(A::Mat{T}; prefix::String="") -> KSP{T}
 
 **MPI Collective**
 
@@ -55,11 +55,11 @@ Create a PETSc KSP (Krylov Subspace) linear solver for the matrix A.
 
 - `A::Mat{T}` is the matrix for which to create the solver.
 - `prefix` is an optional string prefix for KSPSetOptionsPrefix() to set solver-specific command-line options.
-- Returns a Solver that will destroy the PETSc KSP collectively when all ranks release their reference.
+- Returns a KSP that will destroy the PETSc KSP collectively when all ranks release their reference.
 
-The Solver object can be used to solve linear systems via backslash (\\) and forward-slash (/) operators.
+The KSP object can be used to solve linear systems via backslash (\\) and forward-slash (/) operators.
 """
-function Solver(A::Mat{T}; prefix::String="") where T
+function KSP(A::Mat{T}; prefix::String="") where T
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
     
@@ -194,7 +194,7 @@ end
 Solve the linear system Ax = b using PETSc's KSP solver.
 
 Creates a KSP solver internally and returns the solution vector x.
-For repeated solves with the same matrix, use `Solver` explicitly for better performance.
+For repeated solves with the same matrix, use `KSP` explicitly for better performance.
 """
 function Base.:\(A::Mat{T}, b::Vec{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
@@ -203,7 +203,7 @@ function Base.:\(A::Mat{T}, b::Vec{T}) where {T}
     @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), and row/column partitions of A must match and equal b's row partition"
 
     # Create KSP solver
-    ksp_obj = Solver(A; prefix=A.obj.prefix)
+    ksp_obj = KSP(A; prefix=A.obj.prefix)
 
     # Create result vector
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -232,7 +232,7 @@ end
 
 In-place solve of Ax = b, storing the result in the pre-allocated vector x.
 
-Creates a KSP solver internally. For repeated solves, use the `ldiv!(ksp, x, b)` variant.
+Creates a KSP solver internally. For repeated solves, use the `ldiv!(ksp, x, b)` variant with a reusable KSP object.
 """
 function LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T}, b::Vec{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
@@ -245,7 +245,7 @@ function LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T}, b::Vec{T}) where {T}
                 A.obj.row_partition == x.obj.row_partition) "Matrix A must be square (got $(m)×$(n)), matrix rows must match vector lengths (b has length $(b_length), x has length $(x_length)), A's row and column partitions must match, and A's row partition must match b's and x's row partitions"
 
     # Create KSP solver (will be destroyed when function exits)
-    ksp_obj = Solver(A; prefix=A.obj.prefix)
+    ksp_obj = KSP(A; prefix=A.obj.prefix)
 
     # Solve into pre-allocated x
     _ksp_solve_vec!(ksp_obj.obj.ksp, x.obj.v, b.obj.v)
@@ -256,7 +256,7 @@ function LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T}, b::Vec{T}) where {T}
 end
 
 """
-    LinearAlgebra.ldiv!(ksp::Solver{T}, x::Vec{T}, b::Vec{T}) -> Vec{T}
+    LinearAlgebra.ldiv!(ksp::KSP{T}, x::Vec{T}, b::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -264,14 +264,14 @@ In-place solve using a pre-existing KSP solver, storing the result in x.
 
 Reuses the solver and the result vector for maximum efficiency in repeated solves.
 """
-function LinearAlgebra.ldiv!(ksp::Solver{T}, x::Vec{T}, b::Vec{T}) where {T}
+function LinearAlgebra.ldiv!(ksp::KSP{T}, x::Vec{T}, b::Vec{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(ksp)
     b_length = size(b)[1]
     x_length = size(x)[1]
     @mpiassert (m == n && m == b_length && m == x_length &&
                 ksp.obj.row_partition == b.obj.row_partition &&
-                ksp.obj.row_partition == x.obj.row_partition) "Solver's matrix must be square (got $(m)×$(n)), solver matrix rows must match vector lengths (b has length $(b_length), x has length $(x_length)), and solver's row partition must match b's and x's row partitions"
+                ksp.obj.row_partition == x.obj.row_partition) "KSP's matrix must be square (got $(m)×$(n)), KSP matrix rows must match vector lengths (b has length $(b_length), x has length $(x_length)), and KSP's row partition must match b's and x's row partitions"
 
     # Solve into pre-allocated x using existing solver
     _ksp_solve_vec!(ksp.obj.ksp, x.obj.v, b.obj.v)
@@ -298,7 +298,7 @@ function Base.:\(A::Mat{T}, B::Mat{T}) where {T}
     @mpiassert m == n && m == p && A.obj.row_partition == B.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix A must be square (A: $(m)×$(n)), matrix rows must match (B: $(p)×$(q)), and row/column partitions of A must match and equal B's row partition"
 
     # Create KSP solver
-    ksp_obj = Solver(A; prefix=A.obj.prefix)
+    ksp_obj = KSP(A; prefix=A.obj.prefix)
 
     # Create result matrix
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -332,7 +332,7 @@ end
 In-place solve of AX = B for multiple right-hand sides, storing the result in X.
 
 Both B and X must be dense matrices (MATDENSE or MPIDENSE).
-Creates a KSP solver internally. For repeated solves, use the `ldiv!(ksp, X, B)` variant.
+Creates a KSP solver internally. For repeated solves, use the `ldiv!(ksp, X, B)` variant with a reusable KSP object.
 """
 function LinearAlgebra.ldiv!(X::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
@@ -346,7 +346,7 @@ function LinearAlgebra.ldiv!(X::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
                 B.obj.col_partition == X.obj.col_partition) "Matrix A must be square (got $(m)×$(n)), matrix A rows must match B rows (B is $(p)×$(q)), result matrix X must have dimensions $(m)×$(q) (got $(r)×$(s)), A's row and column partitions must match, A's row partition must match B's and X's row partitions, and B's column partition must match X's column partition"
 
     # Create KSP solver (will be destroyed when function exits)
-    ksp_obj = Solver(A; prefix=A.obj.prefix)
+    ksp_obj = KSP(A; prefix=A.obj.prefix)
 
     # Solve with multiple RHS: B must be dense (user's responsibility)
     _ksp_mat_solve!(ksp_obj.obj.ksp, X.obj.A, B.obj.A)
@@ -357,7 +357,7 @@ function LinearAlgebra.ldiv!(X::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
 end
 
 """
-    LinearAlgebra.ldiv!(ksp::Solver{T}, X::Mat{T}, B::Mat{T}) -> Mat{T}
+    LinearAlgebra.ldiv!(ksp::KSP{T}, X::Mat{T}, B::Mat{T}) -> Mat{T}
 
 **MPI Collective**
 
@@ -365,7 +365,7 @@ In-place solve using a pre-existing KSP solver for multiple right-hand sides.
 
 Reuses the solver and result matrix for maximum efficiency. B and X must be dense matrices.
 """
-function LinearAlgebra.ldiv!(ksp::Solver{T}, X::Mat{T}, B::Mat{T}) where {T}
+function LinearAlgebra.ldiv!(ksp::KSP{T}, X::Mat{T}, B::Mat{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(ksp)
     p, q = size(B)
@@ -373,7 +373,7 @@ function LinearAlgebra.ldiv!(ksp::Solver{T}, X::Mat{T}, B::Mat{T}) where {T}
     @mpiassert (m == n && m == p && m == r && q == s &&
                 ksp.obj.row_partition == B.obj.row_partition &&
                 ksp.obj.row_partition == X.obj.row_partition &&
-                B.obj.col_partition == X.obj.col_partition) "Solver's matrix must be square (got $(m)×$(n)), solver matrix rows must match B rows (B is $(p)×$(q)), result matrix X must have dimensions $(m)×$(q) (got $(r)×$(s)), solver's row partition must match B's and X's row partitions, and B's column partition must match X's column partition"
+                B.obj.col_partition == X.obj.col_partition) "KSP's matrix must be square (got $(m)×$(n)), KSP matrix rows must match B rows (B is $(p)×$(q)), result matrix X must have dimensions $(m)×$(q) (got $(r)×$(s)), KSP's row partition must match B's and X's row partitions, and B's column partition must match X's column partition"
 
     # Solve with multiple RHS using existing solver: B must be dense (user's responsibility)
     _ksp_mat_solve!(ksp.obj.ksp, X.obj.A, B.obj.A)
@@ -401,7 +401,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, b::Vec{T}) where {T}
     @mpiassert m == n && n == vec_length && A.obj.col_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix columns must match vector length (b: $(vec_length)), row/column partitions of A must match, and column partition must equal b's row partition"
 
     # Create KSP solver
-    ksp_obj = Solver(A; prefix=A.obj.prefix)
+    ksp_obj = KSP(A; prefix=A.obj.prefix)
 
     # Create result vector
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -442,7 +442,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, B::Mat{T}) where {T}
     @mpiassert m == n && n == p && A.obj.col_partition == B.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix A must be square (A: $(m)×$(n)), matrix columns must match (B: $(p)×$(q)), row/column partitions of A must match, and column partition must equal B's row partition"
 
     # Create KSP solver
-    ksp_obj = Solver(A; prefix=A.obj.prefix)
+    ksp_obj = KSP(A; prefix=A.obj.prefix)
 
     # Create result matrix
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -486,7 +486,7 @@ function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), and row/column partitions of A must match and equal b's row partition"
 
     # Create KSP solver
-    ksp_obj = Solver(A; prefix=A.obj.prefix)
+    ksp_obj = KSP(A; prefix=A.obj.prefix)
 
     # Create result vector
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -524,7 +524,7 @@ function Base.:/(B::Mat{T}, A::Mat{T}) where {T}
 
     # Step 2: Solve A' \ B' (which is A^T Y = B^T, where Y = X^T)
     # Create KSP solver
-    ksp_obj = Solver(A)
+    ksp_obj = KSP(A)
 
     # Create Y matrix with col partition of A for rows, row partition of B for cols
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -576,7 +576,7 @@ function Base.:/(B::Mat{T}, At::LinearAlgebra.Adjoint{T, <:Mat{T}}) where {T}
 
     # Step 2: Solve A \ B' (which is AY = B^T, where Y = X^T)
     # Create KSP solver
-    ksp_obj = Solver(A)
+    ksp_obj = KSP(A)
 
     # Create Y matrix with row partition of A for rows, row partition of B for cols
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
