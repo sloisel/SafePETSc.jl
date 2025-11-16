@@ -16,11 +16,11 @@ makedocs(;
         "Home" => "index.md",
         "Getting Started" => "getting_started.md",
         "User Guide" => [
-            "Distributed Reference Management" => "guide/distributed_refs.md",
             "Vectors" => "guide/vectors.md",
             "Matrices" => "guide/matrices.md",
             "Linear Solvers" => "guide/solvers.md",
             "Input/Output and Display" => "guide/io.md",
+            "Distributed Reference Management" => "guide/distributed_refs.md",
         ],
         "API Reference" => [
             "SafeMPI" => "api/safempi.md",

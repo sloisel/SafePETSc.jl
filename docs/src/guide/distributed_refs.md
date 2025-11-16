@@ -1,6 +1,6 @@
 # Distributed Reference Management
 
-SafePETSc's core feature is automatic distributed reference management via the `SafeMPI` module. This ensures that distributed objects are properly cleaned up across all MPI ranks.
+SafePETSc enables native Julia syntax for distributed linear algebra by implementing automatic distributed reference management via the `SafeMPI` module. This implementation detail ensures that distributed objects are properly cleaned up across all MPI ranks, allowing users to write natural Julia expressions like `A * B + C` without manual memory management.
 
 ## The Problem
 
@@ -157,7 +157,7 @@ SafeMPI.enable_assert[]  # true
 ## Performance Considerations
 
 - **Cleanup Cost**: `check_and_destroy!` uses collective `Allgather/Allgatherv` operations and periodically triggers partial garbage collection
-- **Throttling**: Adjust `SafePETSc.default_check[]` to control automatic cleanup frequency (default: 10). Higher values reduce overhead but increase memory usage
+- **Throttling**: Adjust `SafePETSc.default_check[]` to control how often partial garbage collection (`GC.gc(false)`) is triggered in `check_and_destroy!()` (default: 10). Higher values reduce GC overhead but may delay object finalization
 
 ## See Also
 
