@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Matrices · SafePETSc.jl 0.1.8</title><meta name="title" content="Matrices · SafePETSc.jl 0.1.8"/><meta property="og:title" content="Matrices · SafePETSc.jl 0.1.8"/><meta property="twitter:title" content="Matrices · SafePETSc.jl 0.1.8"/><meta name="description" content="Documentation for SafePETSc.jl 0.1.8."/><meta property="og:description" content="Documentation for SafePETSc.jl 0.1.8."/><meta property="twitter:description" content="Documentation for SafePETSc.jl 0.1.8."/><meta property="og:url" content="https://sloisel.github.io/SafePETSc.jl/guide/matrices/"/><meta property="twitter:url" content="https://sloisel.github.io/SafePETSc.jl/guide/matrices/"/><link rel="canonical" href="https://sloisel.github.io/SafePETSc.jl/guide/matrices/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">SafePETSc.jl 0.1.8</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../vectors/">Vectors</a></li><li class="is-active"><a class="tocitem" href>Matrices</a><ul class="internal"><li><a class="tocitem" href="#Creating-Matrices"><span>Creating Matrices</span></a></li><li><a class="tocitem" href="#Matrix-Operations"><span>Matrix Operations</span></a></li><li><a class="tocitem" href="#Transpose-Operations"><span>Transpose Operations</span></a></li><li><a class="tocitem" href="#Properties"><span>Properties</span></a></li><li><a class="tocitem" href="#Row-Ownership-and-Indexing"><span>Row Ownership and Indexing</span></a></li><li><a class="tocitem" href="#Partitioning"><span>Partitioning</span></a></li><li><a class="tocitem" href="#Row-wise-Operations-with-map_rows"><span>Row-wise Operations with map_rows</span></a></li><li><a class="tocitem" href="#Advanced-Features"><span>Advanced Features</span></a></li><li><a class="tocitem" href="#Examples"><span>Examples</span></a></li><li><a class="tocitem" href="#Performance-Tips"><span>Performance Tips</span></a></li><li><a class="tocitem" href="#Converting-to-Julia-Arrays"><span>Converting to Julia Arrays</span></a></li><li><a class="tocitem" href="#Compatibility-Notes"><span>Compatibility Notes</span></a></li><li><a class="tocitem" href="#See-Also"><span>See Also</span></a></li></ul></li><li><a class="tocitem" href="../solvers/">Linear Solvers</a></li><li><a class="tocitem" href="../io/">Input/Output and Display</a></li><li><a class="tocitem" href="../distributed_refs/">Distributed Reference Management</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/safempi/">SafeMPI</a></li><li><a class="tocitem" href="../../api/vectors/">Vectors</a></li><li><a class="tocitem" href="../../api/matrices/">Matrices</a></li><li><a class="tocitem" href="../../api/solvers/">Solvers</a></li></ul></li><li><a class="tocitem" href="../../developer/">Developer Guide</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">User Guide</a></li><li class="is-active"><a href>Matrices</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Matrices</a></li></ul></nav><div class="docs-right"><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Matrices"><a class="docs-heading-anchor" href="#Matrices">Matrices</a><a id="Matrices-1"></a><a class="docs-heading-anchor-permalink" href="#Matrices" title="Permalink"></a></h1><p>SafePETSc provides distributed matrices through the <code>Mat{T}</code> type, which wraps PETSc&#39;s distributed matrix functionality with GPU-friendly operations and automatic memory management.</p><h2 id="Creating-Matrices"><a class="docs-heading-anchor" href="#Creating-Matrices">Creating Matrices</a><a id="Creating-Matrices-1"></a><a class="docs-heading-anchor-permalink" href="#Creating-Matrices" title="Permalink"></a></h2><h3 id="Uniform-Distribution"><a class="docs-heading-anchor" href="#Uniform-Distribution">Uniform Distribution</a><a id="Uniform-Distribution-1"></a><a class="docs-heading-anchor-permalink" href="#Uniform-Distribution" title="Permalink"></a></h3><p>Use <code>Mat_uniform</code> when all ranks have the same data:</p><pre><code class="language-julia hljs"># Create from dense matrix
+A = Mat_uniform([1.0 2.0; 3.0 4.0])
+
+# With custom partitions
+row_part = [1, 2, 3]  # 2 ranks
+col_part = [1, 2, 3]
+A = Mat_uniform(data; row_partition=row_part, col_partition=col_part)
+
+# With PETSc options prefix
+A = Mat_uniform(data; prefix=&quot;my_mat_&quot;)</code></pre><h3 id="Sum-Distribution"><a class="docs-heading-anchor" href="#Sum-Distribution">Sum Distribution</a><a id="Sum-Distribution-1"></a><a class="docs-heading-anchor-permalink" href="#Sum-Distribution" title="Permalink"></a></h3><p>Use <code>Mat_sum</code> when ranks contribute sparse entries:</p><pre><code class="language-julia hljs">using SparseArrays
+
+# Each rank contributes different sparse entries
+# All contributions are summed
+rank = MPI.Comm_rank(MPI.COMM_WORLD)
+I = [1, rank+1]
+J = [1, rank+1]
+V = [1.0, 2.0]
+A = Mat_sum(sparse(I, J, V, 10, 10))
+
+# Assert local ownership for validation
+A = Mat_sum(sparse_local; own_rank_only=true)</code></pre><h2 id="Matrix-Operations"><a class="docs-heading-anchor" href="#Matrix-Operations">Matrix Operations</a><a id="Matrix-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Matrix-Operations" title="Permalink"></a></h2><h3 id="Linear-Algebra"><a class="docs-heading-anchor" href="#Linear-Algebra">Linear Algebra</a><a id="Linear-Algebra-1"></a><a class="docs-heading-anchor-permalink" href="#Linear-Algebra" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Matrix-vector multiplication
+y = A * x
+
+# In-place
+mul!(y, A, x)
+
+# Matrix-matrix multiplication
+C = A * B
+
+# In-place
+mul!(C, A, B)
+
+# Transpose
+B = A&#39;
+B = Mat(A&#39;)  # Materialize transpose
+
+# In-place transpose (reuses B)
+transpose!(B, A)</code></pre><h3 id="Concatenation"><a class="docs-heading-anchor" href="#Concatenation">Concatenation</a><a id="Concatenation-1"></a><a class="docs-heading-anchor-permalink" href="#Concatenation" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Vertical concatenation
+C = vcat(A, B)
+C = cat(A, B; dims=1)
+
+# Horizontal concatenation
+D = hcat(A, B)
+D = cat(A, B; dims=2)
+
+# Block diagonal
+E = blockdiag(A, B, C)</code></pre><h3 id="Sparse-Diagonal-Matrices"><a class="docs-heading-anchor" href="#Sparse-Diagonal-Matrices">Sparse Diagonal Matrices</a><a id="Sparse-Diagonal-Matrices-1"></a><a class="docs-heading-anchor-permalink" href="#Sparse-Diagonal-Matrices" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SparseArrays
+
+# Create diagonal matrix from vectors
+diag_vec = Vec_uniform(ones(100))
+upper_vec = Vec_uniform(ones(99))
+lower_vec = Vec_uniform(ones(99))
+
+# Tridiagonal matrix
+A = spdiagm(-1 =&gt; lower_vec, 0 =&gt; diag_vec, 1 =&gt; upper_vec)
+
+# Explicit dimensions
+A = spdiagm(100, 100, 0 =&gt; diag_vec, 1 =&gt; upper_vec)</code></pre><h2 id="Transpose-Operations"><a class="docs-heading-anchor" href="#Transpose-Operations">Transpose Operations</a><a id="Transpose-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Transpose-Operations" title="Permalink"></a></h2><p>SafePETSc uses PETSc&#39;s efficient transpose operations:</p><pre><code class="language-julia hljs"># Create transpose (new matrix)
+B = Mat(A&#39;)
+
+# Reuse transpose storage
+B = Mat(A&#39;)  # Initial creation
+# ... later, after A changes:
+transpose!(B, A)  # Reuse B&#39;s storage</code></pre><p>Note: For <code>transpose!</code> to work correctly with PETSc&#39;s reuse mechanism, <code>B</code> should have been created as a transpose of <code>A</code> initially.</p><h2 id="Properties"><a class="docs-heading-anchor" href="#Properties">Properties</a><a id="Properties-1"></a><a class="docs-heading-anchor-permalink" href="#Properties" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Element type
+T = eltype(A)
+
+# Size
+m, n = size(A)
+m = size(A, 1)
+n = size(A, 2)
+
+# Partition information
+row_part = A.obj.row_partition
+col_part = A.obj.col_partition
+prefix = A.obj.prefix</code></pre><h2 id="Row-Ownership-and-Indexing"><a class="docs-heading-anchor" href="#Row-Ownership-and-Indexing">Row Ownership and Indexing</a><a id="Row-Ownership-and-Indexing-1"></a><a class="docs-heading-anchor-permalink" href="#Row-Ownership-and-Indexing" title="Permalink"></a></h2><h3 id="Determining-Owned-Rows"><a class="docs-heading-anchor" href="#Determining-Owned-Rows">Determining Owned Rows</a><a id="Determining-Owned-Rows-1"></a><a class="docs-heading-anchor-permalink" href="#Determining-Owned-Rows" title="Permalink"></a></h3><p>Use <code>own_row()</code> to find which row indices are owned by the current rank:</p><pre><code class="language-julia hljs">A = Mat_uniform([1.0 2.0; 3.0 4.0; 5.0 6.0; 7.0 8.0])
+
+# Get ownership range for this rank
+owned = own_row(A)  # e.g., 1:2 on rank 0, 3:4 on rank 1
+
+println(io0(), &quot;Rank $(MPI.Comm_rank(MPI.COMM_WORLD)) owns rows: $owned&quot;)</code></pre><h3 id="Indexing-Matrices"><a class="docs-heading-anchor" href="#Indexing-Matrices">Indexing Matrices</a><a id="Indexing-Matrices-1"></a><a class="docs-heading-anchor-permalink" href="#Indexing-Matrices" title="Permalink"></a></h3><p><strong>Important:</strong> You can only index rows that are owned by the current rank. Attempting to access non-owned rows will result in an error.</p><p>SafePETSc supports several indexing patterns:</p><pre><code class="language-julia hljs">A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0; 10.0 11.0 12.0])
+owned = own_row(A)
+
+# ✓ Single element (owned row, any column)
+if 2 in owned
+    val = A[2, 3]  # Returns 6.0 on the rank that owns row 2
+end
+
+# ✓ Extract column (all ranks get their owned portion)
+col_vec = A[:, 2]  # Returns distributed Vec with owned rows from column 2
+
+# ✓ Row slice (owned row, column range)
+if 3 in owned
+    row_slice = A[3, 1:2]  # Returns [7.0, 8.0] on the rank that owns row 3
+end
+
+# ✓ Column slice (owned row range, single column)
+if owned == 1:2
+    col_slice = A[1:2, 2]  # Returns [2.0, 5.0] on the rank that owns these rows
+end
+
+# ✓ Submatrix (owned row range, column range)
+if owned == 1:2
+    submat = A[1:2, 2:3]  # Returns 2×2 Matrix on the rank that owns these rows
+end
+
+# ❌ WRONG - Accessing non-owned rows causes an error
+val = A[4, 1]  # ERROR if rank doesn&#39;t own row 4!</code></pre><p><strong>Indexing is non-collective</strong> - each rank can independently access its owned rows without coordination.</p><h3 id="Use-Cases-for-Indexing"><a class="docs-heading-anchor" href="#Use-Cases-for-Indexing">Use Cases for Indexing</a><a id="Use-Cases-for-Indexing-1"></a><a class="docs-heading-anchor-permalink" href="#Use-Cases-for-Indexing" title="Permalink"></a></h3><p>Indexing is useful when you need to:</p><ul><li>Extract specific local values from owned rows</li><li>Extract columns as distributed vectors</li><li>Implement custom local operations</li><li>Interface with non-PETSc code on owned data</li></ul><pre><code class="language-julia hljs"># Extract owned portion for local processing
+A = Mat_uniform(randn(100, 50))
+owned = own_row(A)
+
+# Get local submatrix
+local_submat = A[owned, 1:10]  # First 10 columns of owned rows
+
+# Process locally
+local_norms = [norm(local_submat[i, :]) for i in 1:length(owned)]
+
+# Aggregate across ranks if needed
+max_norm = MPI.Allreduce(maximum(local_norms), max, MPI.COMM_WORLD)</code></pre><h2 id="Partitioning"><a class="docs-heading-anchor" href="#Partitioning">Partitioning</a><a id="Partitioning-1"></a><a class="docs-heading-anchor-permalink" href="#Partitioning" title="Permalink"></a></h2><p>Matrices have both row and column partitions.</p><h3 id="Default-Partitioning"><a class="docs-heading-anchor" href="#Default-Partitioning">Default Partitioning</a><a id="Default-Partitioning-1"></a><a class="docs-heading-anchor-permalink" href="#Default-Partitioning" title="Permalink"></a></h3><pre><code class="language-julia hljs">m, n = 100, 80
+nranks = MPI.Comm_size(MPI.COMM_WORLD)
+
+row_part = default_row_partition(m, nranks)
+col_part = default_row_partition(n, nranks)</code></pre><h3 id="Requirements"><a class="docs-heading-anchor" href="#Requirements">Requirements</a><a id="Requirements-1"></a><a class="docs-heading-anchor-permalink" href="#Requirements" title="Permalink"></a></h3><ul><li>Row operations require matching row partitions</li><li>Column operations require matching column partitions</li><li>Matrix multiplication: <code>C = A * B</code> requires <code>A.col_partition == B.row_partition</code></li></ul><h2 id="Row-wise-Operations-with-map_rows"><a class="docs-heading-anchor" href="#Row-wise-Operations-with-map_rows">Row-wise Operations with map_rows</a><a id="Row-wise-Operations-with-map_rows-1"></a><a class="docs-heading-anchor-permalink" href="#Row-wise-Operations-with-map_rows" title="Permalink"></a></h2><p>The <code>map_rows()</code> function applies a function to each row of distributed matrices or vectors, enabling powerful row-wise transformations.</p><h3 id="Basic-Usage-with-Matrices"><a class="docs-heading-anchor" href="#Basic-Usage-with-Matrices">Basic Usage with Matrices</a><a id="Basic-Usage-with-Matrices-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage-with-Matrices" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Apply function to each row of a matrix
+A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0])
+
+# Compute row sums (returns Vec)
+row_sums = map_rows(sum, A)  # Returns Vec([6.0, 15.0])
+
+# Compute statistics per row (returns Mat)
+stats = map_rows(row -&gt; [sum(row), prod(row)]&#39;, A)
+# Returns 2×2 Mat: [[6.0, 6.0]; [15.0, 48.0]]</code></pre><p><strong>Note:</strong> For matrices, the function receives a view of each row (like <code>eachrow</code>).</p><h3 id="Output-Types"><a class="docs-heading-anchor" href="#Output-Types">Output Types</a><a id="Output-Types-1"></a><a class="docs-heading-anchor-permalink" href="#Output-Types" title="Permalink"></a></h3><p>The return type depends on what your function returns:</p><ul><li><strong>Scalar</strong> → Returns a <code>Vec</code> with m rows (one value per row)</li><li><strong>Vector</strong> → Returns a <code>Vec</code> with expanded rows (m*n total elements)</li><li><strong>Adjoint Vector</strong> (row vector) → Returns a <code>Mat</code> with m rows</li></ul><pre><code class="language-julia hljs">B = Mat_uniform([1.0 2.0; 3.0 4.0; 5.0 6.0])
+
+# Scalar output: Vec with 3 elements
+means = map_rows(mean, B)
+
+# Vector output: Vec with 3*2 = 6 elements
+doubled = map_rows(row -&gt; [row[1], row[2]], B)
+
+# Matrix output: Mat with 3 rows, 2 columns
+stats = map_rows(row -&gt; [minimum(row), maximum(row)]&#39;, B)</code></pre><h3 id="Combining-Matrices-and-Vectors"><a class="docs-heading-anchor" href="#Combining-Matrices-and-Vectors">Combining Matrices and Vectors</a><a id="Combining-Matrices-and-Vectors-1"></a><a class="docs-heading-anchor-permalink" href="#Combining-Matrices-and-Vectors" title="Permalink"></a></h3><p>Process matrices and vectors together row-wise:</p><pre><code class="language-julia hljs">B = Mat_uniform(randn(5, 3))
+C = Vec_uniform(randn(5))
+
+# Combine matrix rows with corresponding vector elements
+result = map_rows((mat_row, vec_row) -&gt; [sum(mat_row), prod(mat_row), vec_row[1]]&#39;, B, C)
+# Returns 5×3 matrix with [row_sum, row_product, vec_value] per row</code></pre><p><strong>Important:</strong> All inputs must have compatible row partitions.</p><h3 id="Real-World-Example"><a class="docs-heading-anchor" href="#Real-World-Example">Real-World Example</a><a id="Real-World-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Real-World-Example" title="Permalink"></a></h3><pre><code class="language-julia hljs">using Statistics
+
+# Data matrix: each row is an observation
+data = Mat_uniform(randn(1000, 50))
+
+# Compute statistics for each observation
+observation_stats = map_rows(data) do row
+    [mean(row), std(row), minimum(row), maximum(row)]&#39;
+end
+# Returns 1000×4 matrix with statistics per observation
+
+# Convert to Julia matrix for analysis if small
+if size(observation_stats, 1) &lt; 10000
+    stats_array = Matrix(observation_stats)
+    # Further analysis with standard Julia tools
+end</code></pre><h3 id="Performance-Notes"><a class="docs-heading-anchor" href="#Performance-Notes">Performance Notes</a><a id="Performance-Notes-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Notes" title="Permalink"></a></h3><ul><li><code>map_rows()</code> is a <strong>collective operation</strong> - all ranks must call it</li><li>The function is applied only to locally owned rows on each rank</li><li>Results are automatically assembled into a new distributed object</li><li>More efficient than extracting rows individually and processing</li><li>Works with both dense and sparse matrices (though sparse iteration may be less efficient)</li></ul><h2 id="Advanced-Features"><a class="docs-heading-anchor" href="#Advanced-Features">Advanced Features</a><a id="Advanced-Features-1"></a><a class="docs-heading-anchor-permalink" href="#Advanced-Features" title="Permalink"></a></h2><h3 id="Iterating-Over-Dense-Matrix-Rows"><a class="docs-heading-anchor" href="#Iterating-Over-Dense-Matrix-Rows">Iterating Over Dense Matrix Rows</a><a id="Iterating-Over-Dense-Matrix-Rows-1"></a><a class="docs-heading-anchor-permalink" href="#Iterating-Over-Dense-Matrix-Rows" title="Permalink"></a></h3><p>For <code>MATMPIDENSE</code> matrices:</p><pre><code class="language-julia hljs"># Iterate over local rows efficiently
+for row in eachrow(A)
+    # row is a view of the matrix row
+    process(row)
+end</code></pre><p>This uses a single <code>MatDenseGetArrayRead</code> call for the entire iteration.</p><h3 id="PETSc-Options"><a class="docs-heading-anchor" href="#PETSc-Options">PETSc Options</a><a id="PETSc-Options-1"></a><a class="docs-heading-anchor-permalink" href="#PETSc-Options" title="Permalink"></a></h3><p>Configure matrix behavior via options:</p><pre><code class="language-julia hljs"># Set global options
+petsc_options_insert_string(&quot;-dense_mat_type mpidense&quot;)
+
+# Use prefix for specific matrices
+A = Mat_uniform(data; prefix=&quot;my_mat_&quot;)</code></pre><h2 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h2><h3 id="Assemble-a-Sparse-Matrix"><a class="docs-heading-anchor" href="#Assemble-a-Sparse-Matrix">Assemble a Sparse Matrix</a><a id="Assemble-a-Sparse-Matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Assemble-a-Sparse-Matrix" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SafePETSc
+using SparseArrays
+using MPI
+
+SafePETSc.Init()
+
+rank = MPI.Comm_rank(MPI.COMM_WORLD)
+nranks = MPI.Comm_size(MPI.COMM_WORLD)
+
+n = 100
+
+# Each rank builds a local piece
+row_part = default_row_partition(n, nranks)
+lo = row_part[rank + 1]
+hi = row_part[rank + 2] - 1
+
+# Build local sparse matrix (only owned rows)
+I = Int[]
+J = Int[]
+V = Float64[]
+
+for i in lo:hi
+    # Diagonal
+    push!(I, i)
+    push!(J, i)
+    push!(V, 2.0)
+
+    # Off-diagonal
+    if i &gt; 1
+        push!(I, i)
+        push!(J, i-1)
+        push!(V, -1.0)
+    end
+    if i &lt; n
+        push!(I, i)
+        push!(J, i+1)
+        push!(V, -1.0)
+    end
+end
+
+local_sparse = sparse(I, J, V, n, n)
+
+# Assemble global matrix
+A = Mat_sum(local_sparse; own_rank_only=true)</code></pre><h3 id="Build-Block-Matrices"><a class="docs-heading-anchor" href="#Build-Block-Matrices">Build Block Matrices</a><a id="Build-Block-Matrices-1"></a><a class="docs-heading-anchor-permalink" href="#Build-Block-Matrices" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Create blocks
+A11 = Mat_uniform(...)
+A12 = Mat_uniform(...)
+A21 = Mat_uniform(...)
+A22 = Mat_uniform(...)
+
+# Assemble block matrix
+A = vcat(hcat(A11, A12), hcat(A21, A22))
+
+# Or equivalently
+A = [A11 A12; A21 A22]  # (if block-matrix syntax is supported)</code></pre><h3 id="Tridiagonal-System"><a class="docs-heading-anchor" href="#Tridiagonal-System">Tridiagonal System</a><a id="Tridiagonal-System-1"></a><a class="docs-heading-anchor-permalink" href="#Tridiagonal-System" title="Permalink"></a></h3><pre><code class="language-julia hljs">n = 1000
+
+# Create diagonal vectors
+diag = Vec_uniform(2.0 * ones(n))
+upper = Vec_uniform(-1.0 * ones(n-1))
+lower = Vec_uniform(-1.0 * ones(n-1))
+
+# Build tridiagonal matrix
+A = spdiagm(-1 =&gt; lower, 0 =&gt; diag, 1 =&gt; upper)
+
+# Create RHS
+b = Vec_uniform(ones(n))
+
+# Solve
+x = A \ b</code></pre><h2 id="Performance-Tips"><a class="docs-heading-anchor" href="#Performance-Tips">Performance Tips</a><a id="Performance-Tips-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Tips" title="Permalink"></a></h2><ol><li><strong>Use Native Operations</strong>: Prefer PETSc operations over element access</li><li><strong>Batch Assembly</strong>: Build sparse matrices locally, then sum once</li><li><strong>Appropriate Matrix Type</strong>: Use dense vs. sparse based on structure</li><li><strong>Reuse KSP Objects</strong>: Create <code>KSP</code> once, reuse for multiple solves</li><li><strong>GPU Configuration</strong>: Set PETSc options for GPU matrices</li></ol><pre><code class="language-julia hljs"># Good: bulk assembly
+local_matrix = sparse(I, J, V, m, n)
+A = Mat_sum(local_matrix)
+
+# Less good: element-by-element (if it were supported)
+# A = Mat_sum(...)
+# for each element
+#     set_value(A, i, j, val)  # Repeated MPI calls</code></pre><h2 id="Converting-to-Julia-Arrays"><a class="docs-heading-anchor" href="#Converting-to-Julia-Arrays">Converting to Julia Arrays</a><a id="Converting-to-Julia-Arrays-1"></a><a class="docs-heading-anchor-permalink" href="#Converting-to-Julia-Arrays" title="Permalink"></a></h2><p>You can convert distributed <code>Mat</code> objects to native Julia arrays for interoperability, analysis, or export. SafePETSc provides two conversion options depending on matrix structure.</p><h3 id="Dense-Matrix-Conversion"><a class="docs-heading-anchor" href="#Dense-Matrix-Conversion">Dense Matrix Conversion</a><a id="Dense-Matrix-Conversion-1"></a><a class="docs-heading-anchor-permalink" href="#Dense-Matrix-Conversion" title="Permalink"></a></h3><p>Use <code>Matrix()</code> to convert to a dense Julia array:</p><pre><code class="language-julia hljs"># Create a distributed matrix
+A = Mat_uniform([1.0 2.0; 3.0 4.0])
+
+# Convert to Julia Matrix
+A_dense = Matrix(A)  # Returns Matrix{Float64}</code></pre><h3 id="Sparse-Matrix-Conversion"><a class="docs-heading-anchor" href="#Sparse-Matrix-Conversion">Sparse Matrix Conversion</a><a id="Sparse-Matrix-Conversion-1"></a><a class="docs-heading-anchor-permalink" href="#Sparse-Matrix-Conversion" title="Permalink"></a></h3><p>Use <code>sparse()</code> to convert to a sparse CSC matrix (preserves sparsity):</p><pre><code class="language-julia hljs">using SparseArrays
+
+# Create sparse matrix
+n = 10_000
+I = [1:n; 1:n-1; 2:n]
+J = [1:n; 2:n; 1:n-1]
+V = [2.0*ones(n); -ones(n-1); -ones(n-1)]
+A = Mat_sum(sparse(I, J, V, n, n))
+
+# Convert to CSC format (preserves sparsity)
+A_csc = sparse(A)  # Returns SparseMatrixCSC{Float64, Int}
+
+# Don&#39;t use Matrix() for sparse matrices!
+A_dense = Matrix(A)  # Creates 10000×10000 dense array - wasteful!</code></pre><h3 id="Checking-Matrix-Type-with-is_dense"><a class="docs-heading-anchor" href="#Checking-Matrix-Type-with-is_dense">Checking Matrix Type with is_dense</a><a id="Checking-Matrix-Type-with-is_dense-1"></a><a class="docs-heading-anchor-permalink" href="#Checking-Matrix-Type-with-is_dense" title="Permalink"></a></h3><p>Use <code>is_dense()</code> to determine if a matrix is stored in dense format:</p><pre><code class="language-julia hljs">using SparseArrays
+
+A_dense = Mat_uniform([1.0 2.0; 3.0 4.0])
+A_sparse = Mat_uniform(sparse([1, 2], [1, 2], [1.0, 4.0], 10, 10))
+
+is_dense(A_dense)   # Returns true (matrix type contains &quot;dense&quot;)
+is_dense(A_sparse)  # Returns false (matrix type is sparse)
+
+# Use appropriate conversion
+if is_dense(A)
+    A_julia = Matrix(A)      # Convert to dense
+else
+    A_julia = sparse(A)      # Convert to sparse CSC
+end</code></pre><p>The <code>is_dense()</code> function checks the PETSc matrix type string and returns <code>true</code> if it contains &quot;dense&quot; (case-insensitive). This handles various dense types like &quot;seqdense&quot;, &quot;mpidense&quot;, and vendor-specific dense matrix types.</p><h3 id="Important:-Collective-Operation"><a class="docs-heading-anchor" href="#Important:-Collective-Operation">Important: Collective Operation</a><a id="Important:-Collective-Operation-1"></a><a class="docs-heading-anchor-permalink" href="#Important:-Collective-Operation" title="Permalink"></a></h3><p><strong>Both conversion functions are collective operations</strong> - all ranks must call them:</p><pre><code class="language-julia hljs"># ✓ CORRECT - All ranks participate
+A_julia = Matrix(A)  # All ranks get the complete matrix
+
+# ❌ WRONG - Will hang MPI!
+if rank == 0
+    A_julia = Matrix(A)  # Only rank 0 calls, others wait forever
+end</code></pre><p>After conversion, <strong>all ranks receive the complete matrix</strong>. The data is gathered from all ranks using MPI collective operations.</p><h3 id="When-to-Use-Conversions"><a class="docs-heading-anchor" href="#When-to-Use-Conversions">When to Use Conversions</a><a id="When-to-Use-Conversions-1"></a><a class="docs-heading-anchor-permalink" href="#When-to-Use-Conversions" title="Permalink"></a></h3><p><strong>Good use cases:</strong></p><ul><li><strong>Interoperability</strong>: Pass data to packages that don&#39;t support PETSc</li><li><strong>Small-scale analysis</strong>: Compute eigenvalues, determinants, etc.</li><li><strong>Data export</strong>: Save results to files</li><li><strong>Visualization</strong>: Convert for plotting libraries</li></ul><pre><code class="language-julia hljs">using LinearAlgebra
+
+# Solve distributed system
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+b = Vec_uniform([1.0, 2.0])
+x = A \ b
+
+# Convert for analysis (small matrix, so conversion is cheap)
+A_julia = Matrix(A)
+λ = eigvals(A_julia)       # Compute eigenvalues
+det_A = det(A_julia)       # Compute determinant
+
+println(io0(), &quot;Eigenvalues: &quot;, λ)
+println(io0(), &quot;Determinant: &quot;, det_A)</code></pre><p><strong>Avoid conversions for:</strong></p><ul><li><strong>Large matrices</strong>: Gathers all data to all ranks (very expensive!)</li><li><strong>Intermediate computations</strong>: Keep data in PETSc format</li><li><strong>Dense conversion of sparse matrices</strong>: Use <code>sparse()</code> instead</li></ul><h3 id="Performance-Considerations"><a class="docs-heading-anchor" href="#Performance-Considerations">Performance Considerations</a><a id="Performance-Considerations-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Considerations" title="Permalink"></a></h3><p>Conversion performance scales with:</p><ul><li><strong>Matrix size</strong>: Larger matrices take longer to gather</li><li><strong>Rank count</strong>: More ranks means more communication</li><li><strong>Sparsity</strong>: Sparse conversions are more efficient than dense for large sparse matrices</li></ul><pre><code class="language-julia hljs"># Small: fast conversion (&lt; 1ms)
+A_small = Mat_uniform(ones(100, 100))
+A_julia = Matrix(A_small)
+
+# Large sparse: use sparse() not Matrix()
+n = 1_000_000
+A_large_sparse = Mat_sum(sparse(..., n, n))
+A_csc = sparse(A_large_sparse)    # Efficient
+# A_dense = Matrix(A_large_sparse)  # Would allocate n×n dense array!</code></pre><p>See <a href="../io/#converting-to-native-julia-arrays">Converting to Native Julia Arrays</a> for more details and examples.</p><h2 id="Compatibility-Notes"><a class="docs-heading-anchor" href="#Compatibility-Notes">Compatibility Notes</a><a id="Compatibility-Notes-1"></a><a class="docs-heading-anchor-permalink" href="#Compatibility-Notes" title="Permalink"></a></h2><ul><li><strong>Transpose Reuse</strong>: <code>transpose!(B, A)</code> requires that <code>B</code> was created via <code>Mat(A&#39;)</code> or has a compatible precursor</li><li><strong>Matrix Multiplication Reuse</strong>: <code>mul!(C, A, B)</code> requires pre-allocated <code>C</code> with correct partitions</li><li><strong>Dense Operations</strong>: Some operations (e.g., <code>\</code> with matrix RHS) require dense matrices</li></ul><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="../../api/matrices/#SafePETSc.Mat_uniform"><code>Mat_uniform</code></a></li><li><a href="../../api/matrices/#SafePETSc.Mat_sum"><code>Mat_sum</code></a></li><li><a href="../../api/matrices/#SparseArrays.spdiagm"><code>spdiagm</code></a></li><li><a href="../../api/matrices/#Base.vcat"><code>vcat</code></a>, <a href="../../api/matrices/#Base.hcat"><code>hcat</code></a>, <a href="../../api/matrices/#SparseArrays.blockdiag"><code>blockdiag</code></a></li><li><a href="../../api/matrices/#SafePETSc.is_dense"><code>SafePETSc.is_dense</code></a></li><li><a href="../io/">Input/Output and Display</a> - Display and conversion operations</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../vectors/">« Vectors</a><a class="docs-footer-nextpage" href="../solvers/">Linear Solvers »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.0 on <span class="colophon-date" title="Sunday 16 November 2025 19:59">Sunday 16 November 2025</span>. Using Julia version 1.12.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
