@@ -5,6 +5,8 @@
 """
     Mat_uniform(A::Matrix{T}; row_partition=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)), col_partition=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)), prefix="") -> DRef{Mat{T}}
 
+**MPI Collective**
+
 Create a distributed PETSc matrix from a Julia matrix, asserting uniform distribution across ranks (on MPI.COMM_WORLD).
 
 - `A::Matrix{T}` must be identical on all ranks (`mpi_uniform`).
@@ -64,6 +66,8 @@ end
 
 """
     Mat_sum(A::SparseMatrixCSC{T}; row_partition=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)), col_partition=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)), prefix="", own_rank_only=false) -> DRef{Mat{T}}
+
+**MPI Collective**
 
 Create a distributed PETSc matrix by summing sparse matrices across ranks (on MPI.COMM_WORLD).
 
@@ -221,7 +225,15 @@ Base.size(r::SafeMPI.DRef{<:_Mat}, d::Integer) = Base.size(r.obj, d)
 # Adjoint support for Mat
 Base.adjoint(A::Mat{T}) where {T} = LinearAlgebra.Adjoint(A)
 
-# Materialize an Adjoint{Mat} into a new Mat (creates A^T)
+"""
+    Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) -> Mat{T}
+
+**MPI Collective**
+
+Materialize an adjoint matrix into a new transposed Mat.
+
+Creates a new matrix B = A^T using PETSc's transpose operations.
+"""
 function Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) where {T}
     A = parent(adj)::Mat{T}
     # Create B = A^T via PETSc (MAT_INITIAL_MATRIX) and preserve prefix
@@ -231,7 +243,15 @@ function Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) where {T}
     return SafeMPI.DRef(obj)
 end
 
-# In-place transpose: B = A^T (reuses pre-allocated B)
+"""
+    LinearAlgebra.transpose!(B::Mat{T}, A::Mat{T}) -> Mat{T}
+
+**MPI Collective**
+
+In-place transpose: B = A^T.
+
+Reuses the pre-allocated matrix B. Dimensions and partitions must match appropriately.
+"""
 function LinearAlgebra.transpose!(B::Mat{T}, A::Mat{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     @mpiassert (size(A, 1) == size(B, 2) && size(A, 2) == size(B, 1) &&
@@ -246,7 +266,15 @@ function LinearAlgebra.transpose!(B::Mat{T}, A::Mat{T}) where {T}
     return B
 end
 
-# Matrix-vector multiplication: y = A * x
+"""
+    Base.:*(A::Mat{T}, x::Vec{T}) -> Vec{T}
+
+**MPI Collective**
+
+Matrix-vector multiplication: y = A * x.
+
+Returns a new distributed vector with the result.
+"""
 function Base.:*(A::Mat{T}, x::Vec{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
@@ -273,7 +301,15 @@ function Base.:*(A::Mat{T}, x::Vec{T}) where {T}
     return SafeMPI.DRef(obj)
 end
 
-# In-place matrix-vector multiplication: y = A * x (reuses pre-allocated y)
+"""
+    LinearAlgebra.mul!(y::Vec{T}, A::Mat{T}, x::Vec{T}) -> Vec{T}
+
+**MPI Collective**
+
+In-place matrix-vector multiplication: y = A * x.
+
+Reuses the pre-allocated vector y. Dimensions and partitions must match appropriately.
+"""
 function LinearAlgebra.mul!(y::Vec{T}, A::Mat{T}, x::Vec{T}) where {T}
     # Check dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(A)
@@ -320,6 +356,8 @@ end
 """
     Base.:+(A::Mat{T}, B::Mat{T}) -> Mat{T}
 
+**MPI Collective**
+
 Add two distributed PETSc matrices. Requires identical sizes, partitions, and prefix.
 Note: Does not use pooling due to PETSc MatAXPY internal state management issues.
 """
@@ -347,6 +385,8 @@ end
 
 """
     Base.:-(A::Mat{T}, B::Mat{T}) -> Mat{T}
+
+**MPI Collective**
 
 Subtract two distributed PETSc matrices. Requires identical sizes, partitions, and prefix.
 Note: Does not use pooling due to PETSc MatAXPY internal state management issues.
@@ -514,6 +554,8 @@ end
 """
     Base.vcat(As::Mat{T}...) -> Mat{T}
 
+**MPI Collective**
+
 Vertically concatenate distributed PETSc matrices.
 
 Equivalent to `cat(As...; dims=1)`. All matrices must have the same number of columns
@@ -523,6 +565,8 @@ Base.vcat(As::Mat{T}...) where {T} = cat(As...; dims=1)
 
 """
     Base.hcat(As::Mat{T}...) -> Mat{T}
+
+**MPI Collective**
 
 Horizontally concatenate distributed PETSc matrices.
 
@@ -536,6 +580,8 @@ import SparseArrays: blockdiag
 
 """
     blockdiag(As::Mat{T}...) -> Mat{T}
+
+**MPI Collective**
 
 Create a block diagonal matrix from distributed PETSc matrices.
 
@@ -596,6 +642,8 @@ end
 """
     Base.:*(A::Mat{T}, B::Mat{T}) -> Mat{T}
 
+**MPI Collective**
+
 Multiply two distributed PETSc matrices using PETSc's MatMatMult.
 
 Both matrices must have the same element type `T` and the same prefix.
@@ -631,6 +679,8 @@ end
 """
     Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, B::Mat{T}) -> Mat{T}
 
+**MPI Collective**
+
 Transpose-matrix multiplication using PETSc's MatTransposeMatMult.
 
 Computes C = A' * B where A' is the transpose (adjoint for real matrices) of A.
@@ -660,6 +710,8 @@ end
 """
     Base.:*(A::Mat{T}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) -> Mat{T}
 
+**MPI Collective**
+
 Matrix-transpose multiplication using PETSc's MatMatTransposeMult.
 
 Computes C = A * B' where B' is the transpose (adjoint for real matrices) of B.
@@ -688,6 +740,8 @@ end
 
 """
     Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) -> Mat{T}
+
+**MPI Collective**
 
 Transpose-transpose multiplication: C = A' * B'.
 
@@ -721,7 +775,15 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, Bt::LinearAlgebra.Ad
     return SafeMPI.DRef(obj)
 end
 
-# In-place matrix-matrix multiplication: C = A * B (reuses pre-allocated C)
+"""
+    LinearAlgebra.mul!(C::Mat{T}, A::Mat{T}, B::Mat{T}) -> Mat{T}
+
+**MPI Collective**
+
+In-place matrix-matrix multiplication: C = A * B.
+
+Reuses the pre-allocated matrix C. Dimensions and partitions must match appropriately.
+"""
 function LinearAlgebra.mul!(C::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     @mpiassert (size(A, 2) == size(B, 1) &&
@@ -738,7 +800,15 @@ end
 
 # Scalar-matrix multiplication implemented using PETSc.@for_libpetsc
 PETSc.@for_libpetsc begin
-    # Scalar-matrix multiplication: α * A
+    """
+        Base.:*(α::Number, A::Mat{T}) -> Mat{T}
+
+    **MPI Collective**
+
+    Scalar-matrix multiplication: α * A.
+
+    Creates a new matrix with all entries scaled by α.
+    """
     function Base.:*(α::Number, A::Mat{$PetscScalar})
         # Duplicate the matrix
         result_mat_ref = Ref{PETSc.CMat}(C_NULL)
@@ -766,11 +836,27 @@ PETSc.@for_libpetsc begin
         return SafeMPI.DRef(obj)
     end
 
-    # Matrix-scalar multiplication: A * α
+    """
+        Base.:*(A::Mat{T}, α::Number) -> Mat{T}
+
+    **MPI Collective**
+
+    Matrix-scalar multiplication: A * α.
+
+    Creates a new matrix with all entries scaled by α.
+    """
     Base.:*(A::Mat{$PetscScalar}, α::Number) = α * A
 
-    # Scalar-matrix addition: α + A (adds scalar to diagonal)
-    # This is equivalent to A + α*I where I is the identity
+    """
+        Base.:+(α::Number, A::Mat{T}) -> Mat{T}
+
+    **MPI Collective**
+
+    Scalar-matrix addition: α + A.
+
+    Adds scalar α to the diagonal of matrix A (equivalent to A + α*I).
+    Requires A to be square.
+    """
     function Base.:+(α::Number, A::Mat{$PetscScalar})
         # For a square matrix, A + α*I means shift all diagonal elements by α
         # For non-square matrices, this operation is not well-defined mathematically
@@ -803,7 +889,16 @@ PETSc.@for_libpetsc begin
         return SafeMPI.DRef(obj)
     end
 
-    # Matrix-scalar addition: A + α
+    """
+        Base.:+(A::Mat{T}, α::Number) -> Mat{T}
+
+    **MPI Collective**
+
+    Matrix-scalar addition: A + α.
+
+    Adds scalar α to the diagonal of matrix A (equivalent to A + α*I).
+    Requires A to be square.
+    """
     Base.:+(A::Mat{$PetscScalar}, α::Number) = α + A
 end
 
@@ -870,6 +965,8 @@ import SparseArrays: spdiagm
 """
     spdiagm(kv::Pair{<:Integer, <:Vec{T}}...) -> Mat{T}
     spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...) -> Mat{T}
+
+**MPI Collective**
 
 Create a sparse diagonal matrix from distributed PETSc vectors.
 
@@ -1170,6 +1267,15 @@ function Base.iterate(it::_EachRowDense{T}, st::Int) where {T}
     return (row, i)
 end
 
+"""
+    Base.eachrow(A::Mat{T}) -> Iterator
+
+**MPI Non-Collective**
+
+Iterate over the rows of a distributed matrix.
+
+Only iterates over rows owned by the current rank. Each row is returned as a view.
+"""
 function Base.eachrow(A::Mat{T}) where {T}
     return _eachrow_dense(A)
 end
@@ -1180,6 +1286,8 @@ end
 
 """
     Base.getindex(A::Mat{T}, ::Colon, k::Int) -> Vec{T}
+
+**MPI Non-Collective**
 
 Extract column k from matrix A, returning a distributed vector.
 
@@ -1231,6 +1339,332 @@ function Base.getindex(A::DRef{_Mat{T}}, ::Colon, k::Int) where {T}
     return SafeMPI.DRef(obj)
 end
 
+"""
+    own_row(A::Mat{T}) -> UnitRange{Int}
+
+**MPI Non-Collective**
+
+Return the range of row indices owned by the current rank for matrix A.
+
+# Example
+```julia
+A = Mat_uniform([1.0 2.0; 3.0 4.0; 5.0 6.0; 7.0 8.0])
+range = own_row(A)  # e.g., 1:2 on rank 0
+```
+"""
+own_row(A::DRef{_Mat{T}}) where {T} = A.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+1]:(A.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+2]-1)
+
+"""
+    Base.getindex(A::Mat{T}, i::Int, j::Int) -> T
+
+**MPI Non-Collective**
+
+Get the value at position (i, j) from a distributed matrix.
+
+The row index i must be wholly contained in the current rank's row ownership range.
+If not, the function will abort with an error message and stack trace.
+
+This is a non-collective operation.
+
+# Example
+```julia
+A = Mat_uniform([1.0 2.0; 3.0 4.0])
+# On rank that owns row 1:
+val = A[1, 2]  # Returns 2.0
+```
+"""
+function Base.getindex(A::DRef{_Mat{T}}, i::Int, j::Int) where {T}
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    m, n = size(A)
+
+    # Check bounds
+    @assert 1 <= i <= m && 1 <= j <= n "Indices ($i, $j) out of bounds for matrix of size $(m)×$(n)"
+
+    # Get local row range
+    row_lo = A.obj.row_partition[rank+1]
+    row_hi = A.obj.row_partition[rank+2] - 1
+
+    # Check that row index is in local range (non-collective check)
+    if !(row_lo <= i <= row_hi)
+        SafeMPI.mpierror("Row index $i must be in rank $rank's ownership range [$row_lo, $row_hi]", true)
+    end
+
+    # Use different methods for dense vs sparse
+    if is_dense(A)
+        # Use MatDenseGetArrayRead for dense matrices
+        p = _matdense_get_array_read(A.obj.A)
+        try
+            nlocal = row_hi - row_lo + 1
+            local_data = unsafe_wrap(Array, p, (nlocal, n); own=false)
+            local_row = i - row_lo + 1
+            return local_data[local_row, j]
+        finally
+            _matdense_restore_array_read(A.obj.A, p)
+        end
+    else
+        # For sparse matrices, use MatGetRow/MatRestoreRow
+        ncols, cols, vals = _mat_get_row(A.obj.A, i)
+        try
+            if ncols > 0
+                cols_arr = unsafe_wrap(Array, cols, ncols; own=false)
+                vals_arr = unsafe_wrap(Array, vals, ncols; own=false)
+                # Find column j in the row (PETSc uses 0-based indexing)
+                for k in 1:ncols
+                    if Int(cols_arr[k]) + 1 == j
+                        return vals_arr[k]
+                    end
+                end
+            end
+            return zero(T)
+        finally
+            _mat_restore_row(A.obj.A, i, ncols, cols, vals)
+        end
+    end
+end
+
+"""
+    Base.getindex(A::Mat{T}, range_i::UnitRange{Int}, j::Int) -> Vector{T}
+
+**MPI Non-Collective**
+
+Extract a contiguous range of rows from column j of a distributed matrix.
+
+The row range must be wholly contained in the current rank's row ownership range.
+If not, the function will abort with an error message and stack trace.
+
+This is a non-collective operation.
+
+# Example
+```julia
+A = Mat_uniform([1.0 2.0; 3.0 4.0; 5.0 6.0])
+# On rank that owns rows 1:2:
+vals = A[1:2, 2]  # Returns [2.0, 4.0]
+```
+"""
+function Base.getindex(A::DRef{_Mat{T}}, range_i::UnitRange{Int}, j::Int) where {T}
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    m, n = size(A)
+
+    # Check bounds
+    @assert 1 <= first(range_i) && last(range_i) <= m && 1 <= j <= n "Indices ($range_i, $j) out of bounds for matrix of size $(m)×$(n)"
+
+    # Get local row range
+    row_lo = A.obj.row_partition[rank+1]
+    row_hi = A.obj.row_partition[rank+2] - 1
+
+    # Check that row range is in local range (non-collective check)
+    if !(row_lo <= first(range_i) && last(range_i) <= row_hi)
+        SafeMPI.mpierror("Row range $range_i must be wholly contained in rank $rank's ownership range [$row_lo, $row_hi]", true)
+    end
+
+    # Extract values using local array access
+    nrows = length(range_i)
+    vals = Vector{T}(undef, nrows)
+
+    if is_dense(A)
+        # Use MatDenseGetArrayRead for dense matrices
+        p = _matdense_get_array_read(A.obj.A)
+        try
+            nlocal = row_hi - row_lo + 1
+            local_data = unsafe_wrap(Array, p, (nlocal, n); own=false)
+            for (idx, i) in enumerate(range_i)
+                local_row = i - row_lo + 1
+                vals[idx] = local_data[local_row, j]
+            end
+        finally
+            _matdense_restore_array_read(A.obj.A, p)
+        end
+    else
+        # Use MatGetRow for sparse matrices
+        for (idx, i) in enumerate(range_i)
+            ncols, cols_ptr, vals_ptr = _mat_get_row(A.obj.A, i)
+            try
+                val = zero(T)
+                if ncols > 0
+                    cols = unsafe_wrap(Array, cols_ptr, ncols; own=false)
+                    vals_row = unsafe_wrap(Array, vals_ptr, ncols; own=false)
+                    for k in 1:ncols
+                        if Int(cols[k]) + 1 == j
+                            val = vals_row[k]
+                            break
+                        end
+                    end
+                end
+                vals[idx] = val
+            finally
+                _mat_restore_row(A.obj.A, i, ncols, cols_ptr, vals_ptr)
+            end
+        end
+    end
+
+    return vals
+end
+
+"""
+    Base.getindex(A::Mat{T}, i::Int, range_j::UnitRange{Int}) -> Vector{T}
+
+**MPI Non-Collective**
+
+Extract a contiguous range of columns from row i of a distributed matrix.
+
+The row index i must be wholly contained in the current rank's row ownership range.
+If not, the function will abort with an error message and stack trace.
+
+This is a non-collective operation.
+
+# Example
+```julia
+A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0])
+# On rank that owns row 1:
+vals = A[1, 2:3]  # Returns [2.0, 3.0]
+```
+"""
+function Base.getindex(A::DRef{_Mat{T}}, i::Int, range_j::UnitRange{Int}) where {T}
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    m, n = size(A)
+
+    # Check bounds
+    @assert 1 <= i <= m && 1 <= first(range_j) && last(range_j) <= n "Indices ($i, $range_j) out of bounds for matrix of size $(m)×$(n)"
+
+    # Get local row range
+    row_lo = A.obj.row_partition[rank+1]
+    row_hi = A.obj.row_partition[rank+2] - 1
+
+    # Check that row index is in local range (non-collective check)
+    if !(row_lo <= i <= row_hi)
+        SafeMPI.mpierror("Row index $i must be in rank $rank's ownership range [$row_lo, $row_hi]", true)
+    end
+
+    # Extract values using local array access
+    ncols = length(range_j)
+    vals = Vector{T}(undef, ncols)
+
+    if is_dense(A)
+        # Use MatDenseGetArrayRead for dense matrices
+        p = _matdense_get_array_read(A.obj.A)
+        try
+            nlocal = row_hi - row_lo + 1
+            local_data = unsafe_wrap(Array, p, (nlocal, n); own=false)
+            local_row = i - row_lo + 1
+            for (idx, j) in enumerate(range_j)
+                vals[idx] = local_data[local_row, j]
+            end
+        finally
+            _matdense_restore_array_read(A.obj.A, p)
+        end
+    else
+        # Use MatGetRow for sparse matrices
+        ncols_row, cols_ptr, vals_ptr = _mat_get_row(A.obj.A, i)
+        try
+            # Initialize with zeros
+            vals .= zero(T)
+            if ncols_row > 0
+                cols = unsafe_wrap(Array, cols_ptr, ncols_row; own=false)
+                vals_row = unsafe_wrap(Array, vals_ptr, ncols_row; own=false)
+                # Match requested columns with row data
+                for k in 1:ncols_row
+                    col = Int(cols[k]) + 1  # Convert to 1-based
+                    if col in range_j
+                        idx = col - first(range_j) + 1
+                        vals[idx] = vals_row[k]
+                    end
+                end
+            end
+        finally
+            _mat_restore_row(A.obj.A, i, ncols_row, cols_ptr, vals_ptr)
+        end
+    end
+
+    return vals
+end
+
+"""
+    Base.getindex(A::Mat{T}, range_i::UnitRange{Int}, range_j::UnitRange{Int}) -> Union{Matrix{T}, SparseMatrixCSC{T}}
+
+**MPI Non-Collective**
+
+Extract a submatrix from a distributed matrix.
+
+The row range must be wholly contained in the current rank's row ownership range.
+If not, the function will abort with an error message and stack trace.
+
+Returns a dense Matrix if A is dense, otherwise returns a SparseMatrixCSC.
+
+This is a non-collective operation.
+
+# Example
+```julia
+A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0])
+# On rank that owns rows 1:2:
+submat = A[1:2, 2:3]  # Returns [2.0 3.0; 5.0 6.0]
+```
+"""
+function Base.getindex(A::DRef{_Mat{T}}, range_i::UnitRange{Int}, range_j::UnitRange{Int}) where {T}
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    m, n = size(A)
+
+    # Check bounds
+    @assert 1 <= first(range_i) && last(range_i) <= m && 1 <= first(range_j) && last(range_j) <= n "Indices ($range_i, $range_j) out of bounds for matrix of size $(m)×$(n)"
+
+    # Get local row range
+    row_lo = A.obj.row_partition[rank+1]
+    row_hi = A.obj.row_partition[rank+2] - 1
+
+    # Check that row range is in local range (non-collective check)
+    if !(row_lo <= first(range_i) && last(range_i) <= row_hi)
+        SafeMPI.mpierror("Row range $range_i must be wholly contained in rank $rank's ownership range [$row_lo, $row_hi]", true)
+    end
+
+    # Extract values using local array access
+    nrows = length(range_i)
+    ncols = length(range_j)
+
+    if is_dense(A)
+        # Return dense matrix
+        result = Matrix{T}(undef, nrows, ncols)
+        p = _matdense_get_array_read(A.obj.A)
+        try
+            nlocal = row_hi - row_lo + 1
+            local_data = unsafe_wrap(Array, p, (nlocal, n); own=false)
+            for (row_idx, i) in enumerate(range_i)
+                local_row = i - row_lo + 1
+                for (col_idx, j) in enumerate(range_j)
+                    result[row_idx, col_idx] = local_data[local_row, j]
+                end
+            end
+        finally
+            _matdense_restore_array_read(A.obj.A, p)
+        end
+        return result
+    else
+        # Return sparse matrix
+        I = Int[]
+        J = Int[]
+        V = T[]
+        for (row_idx, i) in enumerate(range_i)
+            ncols_row, cols_ptr, vals_ptr = _mat_get_row(A.obj.A, i)
+            try
+                if ncols_row > 0
+                    cols = unsafe_wrap(Array, cols_ptr, ncols_row; own=false)
+                    vals_row = unsafe_wrap(Array, vals_ptr, ncols_row; own=false)
+                    for k in 1:ncols_row
+                        col = Int(cols[k]) + 1  # Convert to 1-based
+                        if col in range_j
+                            col_idx = col - first(range_j) + 1
+                            push!(I, row_idx)
+                            push!(J, col_idx)
+                            push!(V, vals_row[k])
+                        end
+                    end
+                end
+            finally
+                _mat_restore_row(A.obj.A, i, ncols_row, cols_ptr, vals_ptr)
+            end
+        end
+        return sparse(I, J, V, nrows, ncols)
+    end
+end
+
 # -----------------------------------------------------------------------------
 # Matrix Type Query and Conversion to Julia Arrays
 # -----------------------------------------------------------------------------
@@ -1248,6 +1682,8 @@ end
 """
     is_dense(x::Mat{T}) -> Bool
 
+**MPI Non-Collective**
+
 Check if a PETSc matrix is a dense matrix type.
 
 This checks the PETSc matrix type string and returns true if it contains "dense"
@@ -1261,6 +1697,8 @@ end
 
 """
     Matrix(x::Mat{T}) -> Matrix{T}
+
+**MPI Collective**
 
 Convert a distributed PETSc Mat to a Julia Matrix by gathering all data to all ranks.
 This is a collective operation - all ranks must call it and will receive the complete matrix.
@@ -1342,6 +1780,8 @@ end
 """
     SparseArrays.sparse(x::Mat{T}) -> SparseMatrixCSC{T, Int}
 
+**MPI Collective**
+
 Convert a distributed PETSc Mat to a Julia SparseMatrixCSC by gathering all data to all ranks.
 This is a collective operation - all ranks must call it and will receive the complete sparse matrix.
 
@@ -1415,6 +1855,8 @@ end
 """
     Base.show(io::IO, x::Mat{T})
 
+**MPI Collective**
+
 Display a distributed PETSc Mat by converting to Julia Matrix or SparseMatrixCSC and showing it.
 
 Dense matrices are converted to Matrix, other matrices are converted to SparseMatrixCSC.
@@ -1425,6 +1867,8 @@ Base.show(io::IO, x::Mat{T}) where T = show(io, is_dense(x) ? Matrix(x) : sparse
 
 """
     Base.show(io::IO, mime::MIME, x::Mat{T})
+
+**MPI Collective**
 
 Display a distributed PETSc Mat with a specific MIME type by converting to Julia Matrix or SparseMatrixCSC.
 

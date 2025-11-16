@@ -49,6 +49,8 @@ Base.size(r::SafeMPI.DRef{<:_KSP}, d::Integer) = d == 1 ? (r.obj.row_partition[e
 """
     Solver(A::Mat{T}; prefix::String="") -> Solver{T}
 
+**MPI Collective**
+
 Create a PETSc KSP (Krylov Subspace) linear solver for the matrix A.
 
 - `A::Mat{T}` is the matrix for which to create the solver.
@@ -184,7 +186,16 @@ PETSc.@for_libpetsc begin
     end
 end
 
-# Linear solve: x = A \ b (solve Ax = b)
+"""
+    Base.:\\(A::Mat{T}, b::Vec{T}) -> Vec{T}
+
+**MPI Collective**
+
+Solve the linear system Ax = b using PETSc's KSP solver.
+
+Creates a KSP solver internally and returns the solution vector x.
+For repeated solves with the same matrix, use `Solver` explicitly for better performance.
+"""
 function Base.:\(A::Mat{T}, b::Vec{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
@@ -214,7 +225,15 @@ function Base.:\(A::Mat{T}, b::Vec{T}) where {T}
     return SafeMPI.DRef(obj)
 end
 
-# In-place linear solve: x = A \ b (reuses pre-allocated x)
+"""
+    LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T}, b::Vec{T}) -> Vec{T}
+
+**MPI Collective**
+
+In-place solve of Ax = b, storing the result in the pre-allocated vector x.
+
+Creates a KSP solver internally. For repeated solves, use the `ldiv!(ksp, x, b)` variant.
+"""
 function LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T}, b::Vec{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(A)
@@ -236,7 +255,15 @@ function LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T}, b::Vec{T}) where {T}
     return x
 end
 
-# In-place linear solve with pre-existing solver: x = A \ b (reuses solver and x)
+"""
+    LinearAlgebra.ldiv!(ksp::Solver{T}, x::Vec{T}, b::Vec{T}) -> Vec{T}
+
+**MPI Collective**
+
+In-place solve using a pre-existing KSP solver, storing the result in x.
+
+Reuses the solver and the result vector for maximum efficiency in repeated solves.
+"""
 function LinearAlgebra.ldiv!(ksp::Solver{T}, x::Vec{T}, b::Vec{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(ksp)
@@ -254,10 +281,16 @@ function LinearAlgebra.ldiv!(ksp::Solver{T}, x::Vec{T}, b::Vec{T}) where {T}
     return x
 end
 
-# Linear solve: X = A \ B (solve AX = B for multiple right-hand sides)
-# NOTE: User is responsible for ensuring B is dense (MATDENSE or MPIDENSE)
-# as required by PETSc's KSPMatSolve. A and B may have different prefixes.
-# X will inherit B's prefix.
+"""
+    Base.:\\(A::Mat{T}, B::Mat{T}) -> Mat{T}
+
+**MPI Collective**
+
+Solve AX = B for multiple right-hand sides using PETSc's KSPMatSolve.
+
+The matrix B must be dense (MATDENSE or MPIDENSE). Returns the solution matrix X.
+A and B may have different prefixes; X will inherit B's prefix.
+"""
 function Base.:\(A::Mat{T}, B::Mat{T}) where {T}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
@@ -291,8 +324,16 @@ function Base.:\(A::Mat{T}, B::Mat{T}) where {T}
     return SafeMPI.DRef(obj)
 end
 
-# In-place linear solve with matrix RHS: X = A \ B (reuses pre-allocated X)
-# NOTE: User is responsible for ensuring B and X are dense (MATDENSE or MPIDENSE)
+"""
+    LinearAlgebra.ldiv!(X::Mat{T}, A::Mat{T}, B::Mat{T}) -> Mat{T}
+
+**MPI Collective**
+
+In-place solve of AX = B for multiple right-hand sides, storing the result in X.
+
+Both B and X must be dense matrices (MATDENSE or MPIDENSE).
+Creates a KSP solver internally. For repeated solves, use the `ldiv!(ksp, X, B)` variant.
+"""
 function LinearAlgebra.ldiv!(X::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(A)
@@ -315,8 +356,15 @@ function LinearAlgebra.ldiv!(X::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
     return X
 end
 
-# In-place linear solve with matrix RHS using pre-existing solver: X = A \ B (reuses solver and X)
-# NOTE: User is responsible for ensuring B and X are dense (MATDENSE or MPIDENSE)
+"""
+    LinearAlgebra.ldiv!(ksp::Solver{T}, X::Mat{T}, B::Mat{T}) -> Mat{T}
+
+**MPI Collective**
+
+In-place solve using a pre-existing KSP solver for multiple right-hand sides.
+
+Reuses the solver and result matrix for maximum efficiency. B and X must be dense matrices.
+"""
 function LinearAlgebra.ldiv!(ksp::Solver{T}, X::Mat{T}, B::Mat{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(ksp)
@@ -335,7 +383,15 @@ function LinearAlgebra.ldiv!(ksp::Solver{T}, X::Mat{T}, B::Mat{T}) where {T}
     return X
 end
 
-# Transpose solve: x = A' \ b (solve A^T x = b)
+"""
+    Base.:\\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, b::Vec{T}) -> Vec{T}
+
+**MPI Collective**
+
+Solve the transposed system A'x = b using PETSc's KSPSolveTranspose.
+
+Returns the solution vector x. Creates a KSP solver internally.
+"""
 function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, b::Vec{T}) where {T}
     A = parent(At)
 
@@ -367,10 +423,16 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, b::Vec{T}) where {T}
     return SafeMPI.DRef(obj)
 end
 
-# Transpose solve: X = A' \ B (solve A^T X = B for multiple right-hand sides)
-# NOTE: User is responsible for ensuring B is dense (MATDENSE or MPIDENSE)
-# as required by PETSc's KSPMatSolveTranspose. A and B may have different prefixes.
-# X will inherit B's prefix.
+"""
+    Base.:\\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, B::Mat{T}) -> Mat{T}
+
+**MPI Collective**
+
+Solve A'X = B for multiple right-hand sides using PETSc's KSPMatSolveTranspose.
+
+The matrix B must be dense (MATDENSE or MPIDENSE). Returns the solution matrix X.
+A and B may have different prefixes; X will inherit B's prefix.
+"""
 function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, B::Mat{T}) where {T}
     A = parent(At)
 
@@ -406,7 +468,15 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T}}, B::Mat{T}) where {T}
     return SafeMPI.DRef(obj)
 end
 
-# Right division: x' = b' / A (solve x^T A = b^T, equivalent to A^T x = b)
+"""
+    Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) -> Adjoint{T, Vec{T}}
+
+**MPI Collective**
+
+Right division b'/A, which solves x^T A = b^T (equivalent to A^T x = b).
+
+Returns the solution as an adjoint vector x'.
+"""
 function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     b = parent(bt)
 
