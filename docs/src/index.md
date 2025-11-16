@@ -1,12 +1,12 @@
 ```@meta
-CurrentModule = MultiGridBarrier
+CurrentModule = SafePETSc
 ```
 
 ```@eval
 using Markdown
 using Pkg
-using MultiGridBarrier
-v = string(pkgversion(MultiGridBarrier))
+using SafePETSc
+v = string(pkgversion(SafePETSc))
 md"# SafePETSc.jl $v"
 ```
 
