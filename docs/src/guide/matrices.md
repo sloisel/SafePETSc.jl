@@ -1,6 +1,6 @@
 # Matrices
 
-SafePETSc provides distributed matrices through the `Mat{T}` type, which wraps PETSc's distributed matrix functionality with GPU-friendly operations and automatic memory management.
+SafePETSc provides distributed matrices through the `Mat{T,Prefix}` type, which wraps PETSc's distributed matrix functionality with GPU-friendly operations and automatic memory management.
 
 ## Creating Matrices
 
@@ -342,19 +342,41 @@ end
 
 This uses a single `MatDenseGetArrayRead` call for the entire iteration.
 
-### PETSc Options
+### PETSc Options and the Prefix Type Parameter
 
-Configure matrix behavior via options. SafePETSc provides two built-in prefix types: `MPIDENSE` and `MPIAIJ`:
+SafePETSc matrices have a `Prefix` type parameter (e.g., `Mat{Float64,MPIAIJ}`) that determines both the matrix storage format and PETSc configuration. SafePETSc provides two built-in prefix types:
+
+#### Built-in Prefix Types
+
+- **`MPIAIJ`** (default): For sparse matrices
+  - String prefix: `"MPIAIJ_"`
+  - Default PETSc matrix type: `mpiaij` (MPI sparse matrix, compressed row storage)
+  - Use for: Sparse linear algebra, iterative solvers
+  - Memory efficient for matrices with few nonzeros per row
+
+- **`MPIDENSE`**: For dense matrices
+  - String prefix: `"MPIDENSE_"`
+  - Default PETSc matrix type: `mpidense` (MPI dense matrix, row-major storage)
+  - Use for: Dense linear algebra, direct solvers, operations like `eachrow`
+  - Stores all matrix elements
+
+**Important**: Unlike vectors (which are always dense internally), the `Prefix` parameter fundamentally changes matrix storage format. Choose `MPIDENSE` when you need dense storage, and `MPIAIJ` for sparse matrices.
+
+#### Setting PETSc Options
+
+Configure PETSc behavior for matrices with a specific prefix:
 
 ```julia
-# Set options for a specific prefix type
+# Configure GPU-accelerated dense matrices
 petsc_options_insert_string("-MPIDENSE_mat_type mpidense")
-
-# Create matrix with that prefix type
 A = Mat_uniform(data; Prefix=MPIDENSE)
+
+# Configure sparse matrices with custom solver
+petsc_options_insert_string("-MPIAIJ_mat_type mpiaij")
+B = Mat_uniform(sparse_data; Prefix=MPIAIJ)
 ```
 
-The default prefix is `MPIAIJ`.
+The string prefix (e.g., `"MPIDENSE_"`, `"MPIAIJ_"`) is automatically prepended to option names when PETSc processes options for matrices with that prefix type.
 
 ## Examples
 

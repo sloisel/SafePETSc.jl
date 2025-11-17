@@ -6,12 +6,12 @@ struct _KSP{T,Prefix}
 end
 
 """
-    KSP{T}
+    KSP{T,Prefix}
 
-A PETSc KSP (Krylov Subspace) linear solver with element type `T`, managed by SafePETSc's
-reference counting system.
+A PETSc KSP (Krylov Subspace) linear solver with element type `T` and prefix type `Prefix`,
+managed by SafePETSc's reference counting system.
 
-`KSP{T}` is actually a type alias for `DRef{_KSP{T}}`, meaning solvers are automatically
+`KSP{T,Prefix}` is actually a type alias for `DRef{_KSP{T,Prefix}}`, meaning solvers are automatically
 tracked across MPI ranks and destroyed collectively when all ranks release their references.
 
 KSP objects can be reused for multiple linear systems with the same matrix, avoiding the cost

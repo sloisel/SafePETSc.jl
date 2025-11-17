@@ -52,9 +52,37 @@ println(io0(), x)
 
 SafePETSc provides three main types for distributed linear algebra:
 
-- **`Vec{T}`**: Distributed vectors with Julia array-like operations (broadcasting, arithmetic, etc.) and automatic pooling for efficiency
-- **`Mat{T}`**: Distributed matrices with arithmetic operators (`+`, `-`, `*`, `\`), broadcasting, transpose (`A'`), and GPU-friendly operations
-- **`KSP{T}`**: Linear solver objects that can be reused for multiple solves with the same matrix
+- **`Vec{T,Prefix}`**: Distributed vectors with Julia array-like operations (broadcasting, arithmetic, etc.) and automatic pooling for efficiency
+- **`Mat{T,Prefix}`**: Distributed matrices with arithmetic operators (`+`, `-`, `*`, `\`), broadcasting, transpose (`A'`), and GPU-friendly operations
+- **`KSP{T,Prefix}`**: Linear solver objects that can be reused for multiple solves with the same matrix
+
+### The Prefix Type Parameter
+
+All SafePETSc types take a `Prefix` type parameter that controls PETSc object configuration. SafePETSc provides two built-in prefix types:
+
+- **`MPIAIJ`** (default): For sparse matrices and general vectors
+  - String prefix: `"MPIAIJ_"`
+  - Default PETSc matrix type: `mpiaij` (MPI sparse matrix)
+  - Default PETSc vector type: `mpi` (standard MPI vector)
+  - Use for: Sparse linear algebra, general computations
+
+- **`MPIDENSE`**: For dense matrices
+  - String prefix: `"MPIDENSE_"`
+  - Default PETSc matrix type: `mpidense` (MPI dense matrix)
+  - Default PETSc vector type: `mpi` (standard MPI vector)
+  - Use for: Dense linear algebra, operations requiring dense storage (e.g., `eachrow`)
+
+The string prefix is used when setting PETSc options:
+
+```julia
+# Configure GPU acceleration for dense matrices
+petsc_options_insert_string("-MPIDENSE_mat_type mpidense")
+
+# Create matrix with that prefix
+A = Mat_uniform(data; Prefix=MPIDENSE)
+```
+
+**Note**: All PETSc vectors are inherently dense (they store all elements), so `Vec{T,MPIAIJ}` and `Vec{T,MPIDENSE}` differ only in their PETSc options prefix, not their internal storage format.
 
 ### Memory Management
 

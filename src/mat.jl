@@ -270,7 +270,7 @@ function LinearAlgebra.transpose!(B::Mat{T,Prefix}, A::Mat{T,Prefix}) where {T,P
 end
 
 """
-    Base.:*(A::Mat{T}, x::Vec{T}) -> Vec{T}
+    Base.:*(A::Mat{T,Prefix}, x::Vec{T,Prefix}) -> Vec{T,Prefix}
 
 **MPI Collective**
 
@@ -305,7 +305,7 @@ function Base.:*(A::Mat{T,PrefixA}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
 end
 
 """
-    LinearAlgebra.mul!(y::Vec{T}, A::Mat{T}, x::Vec{T}) -> Vec{T}
+    LinearAlgebra.mul!(y::Vec{T,Prefix}, A::Mat{T,Prefix}, x::Vec{T,Prefix}) -> Vec{T,Prefix}
 
 **MPI Collective**
 
@@ -357,7 +357,7 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    Base.:+(A::Mat{T}, B::Mat{T}) -> Mat{T}
+    Base.:+(A::Mat{T,Prefix}, B::Mat{T,Prefix}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -387,7 +387,7 @@ function Base.:+(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
 end
 
 """
-    Base.:-(A::Mat{T}, B::Mat{T}) -> Mat{T}
+    Base.:-(A::Mat{T,Prefix}, B::Mat{T,Prefix}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -522,14 +522,14 @@ function _compute_output_width(As, dims)
 end
 
 """
-    Base.cat(As::Union{Vec{T},Mat{T}}...; dims) -> Mat{T,Prefix}
+    Base.cat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...; dims) -> Mat{T,Prefix}
 
 **MPI Collective**
 
 Concatenate distributed PETSc vectors and/or matrices along dimension `dims`.
 
 # Arguments
-- `As::Union{Vec{T},Mat{T}}...`: One or more vectors or matrices with the same element type `T`
+- `As::Union{Vec{T,Prefix},Mat{T,Prefix}}...`: One or more vectors or matrices with the same element type `T`
 - `dims`: Concatenation dimension (1 for vertical/vcat, 2 for horizontal/hcat)
 
 # Requirements
@@ -643,7 +643,7 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims) where {T}
 end
 
 """
-    Base.vcat(As::Union{Vec{T},Mat{T}}...) -> Mat{T,Prefix}
+    Base.vcat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -675,7 +675,7 @@ See also: [`cat`](@ref), [`hcat`](@ref)
 Base.vcat(As::Union{Vec{T},Mat{T}}...) where {T} = cat(As...; dims=1)
 
 """
-    Base.hcat(As::Union{Vec{T},Mat{T}}...) -> Mat{T,Prefix}
+    Base.hcat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -714,7 +714,7 @@ Base.hcat(As::Union{Vec{T},Mat{T}}...) where {T} = cat(As...; dims=2)
 import SparseArrays: blockdiag
 
 """
-    blockdiag(As::Mat{T}...) -> Mat{T}
+    blockdiag(As::Mat{T,Prefix}...) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -772,7 +772,7 @@ function blockdiag(As::Mat{T,Prefix}...) where {T,Prefix}
 end
 
 """
-    Base.:*(A::Mat{T}, B::Mat{T}) -> Mat{T}
+    Base.:*(A::Mat{T,Prefix}, B::Mat{T,Prefix}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -809,7 +809,7 @@ function Base.:*(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
 end
 
 """
-    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, B::Mat{T}) -> Mat{T}
+    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, B::Mat{T,Prefix}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -840,7 +840,7 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, B::Mat{T,Pref
 end
 
 """
-    Base.:*(A::Mat{T}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) -> Mat{T}
+    Base.:*(A::Mat{T,Prefix}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -871,7 +871,7 @@ function Base.:*(A::Mat{T,Prefix}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefi
 end
 
 """
-    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) -> Mat{T}
+    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -908,7 +908,7 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, Bt::LinearAlg
 end
 
 """
-    LinearAlgebra.mul!(C::Mat{T}, A::Mat{T}, B::Mat{T}) -> Mat{T}
+    LinearAlgebra.mul!(C::Mat{T,Prefix}, A::Mat{T,Prefix}, B::Mat{T,Prefix}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -933,7 +933,7 @@ end
 # Scalar-matrix multiplication implemented using PETSc.@for_libpetsc
 PETSc.@for_libpetsc begin
     """
-        Base.:*(α::Number, A::Mat{T}) -> Mat{T}
+        Base.:*(α::Number, A::Mat{T,Prefix}) -> Mat{T,Prefix}
 
     **MPI Collective**
 
@@ -969,7 +969,7 @@ PETSc.@for_libpetsc begin
     end
 
     """
-        Base.:*(A::Mat{T}, α::Number) -> Mat{T}
+        Base.:*(A::Mat{T,Prefix}, α::Number) -> Mat{T,Prefix}
 
     **MPI Collective**
 
@@ -980,7 +980,7 @@ PETSc.@for_libpetsc begin
     Base.:*(A::Mat{$PetscScalar,Prefix}, α::Number) where {Prefix} = α * A
 
     """
-        Base.:+(α::Number, A::Mat{T}) -> Mat{T}
+        Base.:+(α::Number, A::Mat{T,Prefix}) -> Mat{T,Prefix}
 
     **MPI Collective**
 
@@ -1022,7 +1022,7 @@ PETSc.@for_libpetsc begin
     end
 
     """
-        Base.:+(A::Mat{T}, α::Number) -> Mat{T}
+        Base.:+(A::Mat{T,Prefix}, α::Number) -> Mat{T,Prefix}
 
     **MPI Collective**
 
@@ -1098,8 +1098,8 @@ end
 import SparseArrays: spdiagm
 
 """
-    spdiagm(kv::Pair{<:Integer, <:Vec{T}}...) -> Mat{T}
-    spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...) -> Mat{T}
+    spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...) -> Mat{T,Prefix}
+    spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -1414,7 +1414,7 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    Base.getindex(A::Mat{T}, ::Colon, k::Int) -> Vec{T}
+    Base.getindex(A::Mat{T,Prefix}, ::Colon, k::Int) -> Vec{T,Prefix}
 
 **MPI Non-Collective**
 

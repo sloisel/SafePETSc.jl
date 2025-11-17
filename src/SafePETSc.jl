@@ -18,12 +18,70 @@ const CKSP = Ptr{Cvoid}
 # -----------------------------------------------------------------------------
 
 """
-Placeholder struct for MPIDENSE prefix type.
+    MPIDENSE
+
+Prefix type for dense matrix operations and associated vectors.
+
+# String Prefix
+The string prefix is `"MPIDENSE_"`, which is prepended to PETSc option names.
+
+# Default PETSc Types
+- Matrices: `mpidense` (MPI dense matrix, row-major storage)
+- Vectors: `mpi` (standard MPI vector)
+
+# Usage
+Use `MPIDENSE` for:
+- Dense matrices where all elements are stored
+- Operations requiring dense storage (e.g., `eachrow`)
+- Direct solvers and dense linear algebra
+
+# Example
+```julia
+# Create dense matrix
+A = Mat_uniform([1.0 2.0; 3.0 4.0]; Prefix=MPIDENSE)
+
+# Configure GPU acceleration for dense matrices
+petsc_options_insert_string("-MPIDENSE_mat_type mpidense")
+```
+
+See also: [`MPIAIJ`](@ref), [`Mat`](@ref), [`Vec`](@ref)
 """
 struct MPIDENSE end
 
 """
-Placeholder struct for MPIAIJ prefix type.
+    MPIAIJ
+
+Prefix type for sparse matrices and general vectors (default).
+
+# String Prefix
+The string prefix is `"MPIAIJ_"`, which is prepended to PETSc option names.
+
+# Default PETSc Types
+- Matrices: `mpiaij` (MPI sparse matrix, compressed row storage)
+- Vectors: `mpi` (standard MPI vector)
+
+# Usage
+Use `MPIAIJ` for:
+- Sparse matrices with few nonzeros per row
+- Memory-efficient storage of large sparse systems
+- Iterative solvers and sparse linear algebra
+- General-purpose vector operations
+
+This is the default prefix type when not specified.
+
+# Example
+```julia
+# Create sparse matrix (MPIAIJ is the default)
+A = Mat_uniform(sparse([1.0 0.0; 0.0 2.0]))
+
+# Explicitly specify MPIAIJ prefix
+B = Mat_uniform(data; Prefix=MPIAIJ)
+
+# Configure iterative solver for sparse matrices
+petsc_options_insert_string("-MPIAIJ_ksp_type gmres")
+```
+
+See also: [`MPIDENSE`](@ref), [`Mat`](@ref), [`Vec`](@ref)
 """
 struct MPIAIJ end
 
@@ -31,6 +89,15 @@ struct MPIAIJ end
     prefix(::Type{<:Prefix}) -> String
 
 Return the string prefix for a given prefix type.
+
+The string prefix is prepended to PETSc option names. For example, with prefix type
+`MPIDENSE`, the option `-mat_type mpidense` becomes `-MPIDENSE_mat_type mpidense`.
+
+# Examples
+```julia
+prefix(MPIDENSE)  # Returns "MPIDENSE_"
+prefix(MPIAIJ)    # Returns "MPIAIJ_"
+```
 """
 prefix(::Type{MPIDENSE}) = "MPIDENSE_"
 prefix(::Type{MPIAIJ}) = "MPIAIJ_"

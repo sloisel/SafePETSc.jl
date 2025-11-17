@@ -8,6 +8,10 @@ Distributed vector operations in SafePETSc.
 SafePETSc.Vec
 ```
 
+## Prefix Types
+
+The `Prefix` type parameter controls PETSc configuration for vectors. See the [Matrices API Reference](matrices.md#Prefix-Types) for details on [`MPIAIJ`](@ref), [`MPIDENSE`](@ref), and [`prefix`](@ref).
+
 ## Constructors
 
 ```@docs
@@ -25,14 +29,9 @@ SafePETSc.fill_like
 
 ## Concatenation
 
-Vectors can be concatenated using the same functions as matrices:
+Vectors can be concatenated using the same functions as matrices. See the [Matrices API Reference](matrices.md#Concatenation) for [`vcat`](@ref) and [`hcat`](@ref).
 
-```@docs
-Base.vcat
-Base.hcat
-```
-
-Note: Concatenating vectors returns `Mat{T,Prefix}` objects. See the [Matrices API](matrices.md#Concatenation) for details.
+Note: Concatenating vectors returns `Mat{T,Prefix}` objects.
 
 ## Partitioning
 

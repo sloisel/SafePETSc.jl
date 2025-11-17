@@ -78,9 +78,9 @@ MPI.Finalize()
 
 SafePETSc provides three main distributed types that wrap PETSc objects:
 
-- **Vec{T}**: Distributed vectors with automatic lifetime management and pooling
-- **Mat{T}**: Distributed matrices supporting dense and sparse formats
-- **KSP**: Linear solver contexts for efficient repeated solves
+- **Vec{T,Prefix}**: Distributed vectors with automatic lifetime management and pooling
+- **Mat{T,Prefix}**: Distributed matrices supporting dense and sparse formats
+- **KSP{T,Prefix}**: Linear solver contexts for efficient repeated solves
 
 ### Printing and Display
 

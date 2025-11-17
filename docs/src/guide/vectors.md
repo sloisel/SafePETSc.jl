@@ -1,6 +1,6 @@
 # Vectors
 
-SafePETSc provides distributed vectors through the `Vec{T}` type, which wraps PETSc's distributed vector functionality with automatic memory management.
+SafePETSc provides distributed vectors through the `Vec{T,Prefix}` type, which wraps PETSc's distributed vector functionality with automatic memory management.
 
 ## Creating Vectors
 
@@ -295,21 +295,43 @@ combined = map_rows((x, y) -> [x[1] + y[1], x[1] * y[1]]', v1, v2)
 - Results are automatically assembled into a new distributed object
 - Works efficiently with both vectors and matrices (see [Matrices guide](matrices.md#row-wise-operations-with-map_rows))
 
-## PETSc Options
+## PETSc Options and the Prefix Type Parameter
 
-SafePETSc provides two built-in prefix types: `MPIDENSE` and `MPIAIJ`. You can configure PETSc behavior using these prefixes:
+SafePETSc vectors have a `Prefix` type parameter (e.g., `Vec{Float64,MPIAIJ}`) that controls PETSc configuration through option prefixes. SafePETSc provides two built-in prefix types:
+
+### Built-in Prefix Types
+
+- **`MPIAIJ`** (default): General-purpose prefix
+  - String prefix: `"MPIAIJ_"`
+  - Use for: Most vector operations
+
+- **`MPIDENSE`**: Dense matrix operations prefix
+  - String prefix: `"MPIDENSE_"`
+  - Use for: Vectors associated with dense matrices
+
+**Important**: All PETSc vectors are inherently dense (they store all elements), regardless of the `Prefix` parameter. The prefix only affects which PETSc options are applied, not the internal storage format. Unlike matrices, there is no "sparse vector" format in PETSc.
+
+### Setting PETSc Options
+
+You can configure PETSc behavior for vectors with a specific prefix:
 
 ```julia
-# Set options for a specific prefix type
+# Configure CUDA vectors for dense operations
 petsc_options_insert_string("-MPIDENSE_vec_type cuda")
 
-# Create vector with that prefix type
+# Create vector with MPIDENSE prefix
 v = Vec_uniform(data; Prefix=MPIDENSE)
+# Now PETSc will use CUDA for this vector
 
-# Now PETSc will use the "cuda" type for this vector
+# Configure standard MPI vectors differently
+petsc_options_insert_string("-MPIAIJ_vec_type standard")
+w = Vec_uniform(data; Prefix=MPIAIJ)
+# This vector uses the standard MPI type
 ```
 
-The default prefix is `MPIAIJ`. Advanced users can define custom prefix types (not documented here).
+The string prefix (e.g., `"MPIDENSE_"`, `"MPIAIJ_"`) is automatically prepended to option names when PETSc processes options for objects with that prefix type.
+
+Advanced users can define custom prefix types (not documented here).
 
 ## Examples
 

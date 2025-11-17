@@ -389,10 +389,10 @@ Base.axes(r::SafeMPI.DRef{<:_Vec}) = Base.axes(r.obj)
 Base.length(r::SafeMPI.DRef{<:_Vec}) = Base.length(r.obj)
 
 # Adjoint of Vec behaves as a row vector (1 × n matrix)
-Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (1, length(parent(vt)))
-Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, d::Integer) where {T} = d == 1 ? 1 : (d == 2 ? length(parent(vt)) : 1)
-Base.length(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = length(parent(vt))
-Base.axes(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (Base.OneTo(1), Base.OneTo(length(parent(vt))))
+Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix} = (1, length(parent(vt)))
+Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, d::Integer) where {T,Prefix} = d == 1 ? 1 : (d == 2 ? length(parent(vt)) : 1)
+Base.length(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix} = length(parent(vt))
+Base.axes(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix} = (Base.OneTo(1), Base.OneTo(length(parent(vt))))
 
 # Note: getindex is intentionally not defined for Vec adjoints
 # They should only be used in matrix operations like v' * w or v' * A
@@ -400,15 +400,15 @@ Base.axes(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (Base.OneTo(1), Ba
 # not on the Vec adjoint elements
 
 # Scalar multiplication with vectors
-Base.:*(α::Number, v::Vec{T}) where {T} = α .* v
-Base.:*(v::Vec{T}, α::Number) where {T} = α .* v
+Base.:*(α::Number, v::Vec{T,Prefix}) where {T,Prefix} = α .* v
+Base.:*(v::Vec{T,Prefix}, α::Number) where {T,Prefix} = α .* v
 
 # Scalar multiplication with adjoint vectors
-Base.:*(α::Number, vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (α * parent(vt))'
-Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, α::Number) where {T} = (α * parent(vt))'
+Base.:*(α::Number, vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix} = (α * parent(vt))'
+Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, α::Number) where {T,Prefix} = (α * parent(vt))'
 
 # Addition of adjoint vectors (row vectors)
-Base.:+(vt1::LinearAlgebra.Adjoint{T, <:Vec{T}}, vt2::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (parent(vt1) + parent(vt2))'
+Base.:+(vt1::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, vt2::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix} = (parent(vt1) + parent(vt2))'
 
 # Outer product: v * w' (returns Mat)
 function Base.:*(v::Vec{T,Prefix}, wt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix}

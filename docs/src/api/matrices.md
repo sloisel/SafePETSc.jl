@@ -8,6 +8,16 @@ Distributed matrix operations in SafePETSc.
 SafePETSc.Mat
 ```
 
+## Prefix Types
+
+The `Prefix` type parameter determines matrix storage format and PETSc configuration:
+
+```@docs
+SafePETSc.MPIAIJ
+SafePETSc.MPIDENSE
+SafePETSc.prefix
+```
+
 ## Constructors
 
 ```@docs
