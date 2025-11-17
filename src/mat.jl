@@ -65,6 +65,91 @@ function Mat_uniform(A::Matrix{T};
 end
 
 """
+    Mat_uniform(A::SparseMatrixCSC{T}; row_partition=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)), col_partition=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)), Prefix::Type=MPIAIJ) -> DRef{Mat{T,Prefix}}
+
+**MPI Collective**
+
+Create a distributed PETSc matrix from a sparse Julia matrix, asserting uniform distribution across ranks (on MPI.COMM_WORLD).
+
+- `A::SparseMatrixCSC{T}` must be identical on all ranks (`mpi_uniform`).
+- `row_partition` is a Vector{Int} of length nranks+1 where partition[i] is the start row (1-indexed) for rank i-1.
+- `col_partition` is a Vector{Int} of length nranks+1 where partition[i] is the start column (1-indexed) for rank i-1.
+- `Prefix` is a type parameter for MatSetOptionsPrefix() to set matrix-specific command-line options (default: MPIAIJ).
+- Returns a DRef that will destroy the PETSc Mat collectively when all ranks release their reference.
+
+Each rank inserts only the values from its assigned row partition using INSERT_VALUES mode.
+"""
+function Mat_uniform(A::SparseMatrixCSC{T};
+                     row_partition::Vector{Int}=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)),
+                     col_partition::Vector{Int}=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)),
+                     Prefix::Type=MPIAIJ) where T
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    rank   = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    # Preconditions - coalesced into single MPI synchronization
+    row_partition_valid = length(row_partition) == nranks + 1 &&
+                          row_partition[1] == 1 &&
+                          row_partition[end] == size(A, 1) + 1 &&
+                          all(r -> row_partition[r] <= row_partition[r+1], 1:nranks)
+    col_partition_valid = length(col_partition) == nranks + 1 &&
+                          col_partition[1] == 1 &&
+                          col_partition[end] == size(A, 2) + 1 &&
+                          all(r -> col_partition[r] <= col_partition[r+1], 1:nranks)
+
+    # Debug output for troubleshooting
+    if !row_partition_valid || !col_partition_valid
+        if rank == 0
+            println("[rank $rank] DEBUG Mat_uniform(::SparseMatrixCSC):")
+            println("  Matrix size: ", size(A))
+            println("  nranks: ", nranks)
+            println("  row_partition: ", row_partition)
+            println("  row_partition_valid: ", row_partition_valid)
+            println("  col_partition: ", col_partition)
+            println("  col_partition_valid: ", col_partition_valid)
+        end
+    end
+
+    @mpiassert SafeMPI.mpi_uniform(A) && row_partition_valid && col_partition_valid "Mat_uniform requires A to be mpi_uniform across all ranks; row_partition and col_partition must each have length nranks+1, start at 1, end at M+1/N+1 respectively, and be strictly increasing"
+
+    # Local sizes
+    row_lo = row_partition[rank+1]
+    row_hi = row_partition[rank+2] - 1
+    nlocal_rows = row_hi - row_lo + 1
+    nglobal_rows = size(A, 1)
+
+    col_lo = col_partition[rank+1]
+    col_hi = col_partition[rank+2] - 1
+    nlocal_cols = col_hi - col_lo + 1
+    nglobal_cols = size(A, 2)
+
+    # Create distributed PETSc Mat (no finalizer; collective destroy via DRef)
+    petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, nglobal_rows, nglobal_cols, Prefix)
+
+    # Set values from the local row partition only, using INSERT_VALUES mode
+    # Iterate through columns and extract nonzero entries
+    rows_csc = rowvals(A)
+    vals_csc = nonzeros(A)
+
+    for col in 1:size(A, 2)
+        for idx in nzrange(A, col)
+            row = rows_csc[idx]
+            # Only insert values that belong to this rank's row partition
+            if row_lo <= row <= row_hi
+                val = vals_csc[idx]
+                _mat_setvalues!(petsc_mat, [row], [col], [val], PETSc.INSERT_VALUES)
+            end
+        end
+    end
+
+    # Assemble the matrix
+    PETSc.assemble(petsc_mat)
+
+    # Wrap and DRef-manage with a manager bound to this communicator
+    obj = _Mat{T,Prefix}(petsc_mat, row_partition, col_partition)
+    return SafeMPI.DRef(obj)
+end
+
+"""
     Mat_sum(A::SparseMatrixCSC{T}; row_partition=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)), col_partition=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)), Prefix::Type=MPIAIJ, own_rank_only=false) -> DRef{Mat{T,Prefix}}
 
 **MPI Collective**

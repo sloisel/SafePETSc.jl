@@ -3,6 +3,7 @@ module SafeMPI
 using MPI
 using SHA
 using Serialization
+using SparseArrays
 
 export DistributedRefManager, DRef, check_and_destroy!, destroy_obj!, default_manager, enable_assert, set_assert
 export DestroySupport, CanDestroy, CannotDestroy, destroy_trait, mpi_any, mpierror, @mpiassert
@@ -448,6 +449,49 @@ macro mpiassert(cond, msg="")
         end
         nothing
     end
+end
+
+# Specialized method for SparseMatrixCSC to avoid serialization non-determinism
+function mpi_uniform(A::SparseArrays.SparseMatrixCSC)
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    if rank == 0
+        println("[DEBUG] Using specialized mpi_uniform for SparseMatrixCSC, size=$(size(A)), nnz=$(nnz(A))")
+    end
+
+    # Check dimensions
+    dims = [size(A, 1), size(A, 2)]
+    ref_dims = MPI.bcast(rank == 0 ? dims : Int[], 0, MPI.COMM_WORLD)
+    if dims != ref_dims
+        return false
+    end
+
+    # Check colptr (column pointers)
+    local_hash_colptr = sha1(reinterpret(UInt8, A.colptr))
+    ref_hash_colptr = MPI.bcast(rank == 0 ? local_hash_colptr : Vector{UInt8}(), 0, MPI.COMM_WORLD)
+    colptr_match = (local_hash_colptr == ref_hash_colptr)
+
+    # Check rowval (row indices)
+    local_hash_rowval = sha1(reinterpret(UInt8, A.rowval))
+    ref_hash_rowval = MPI.bcast(rank == 0 ? local_hash_rowval : Vector{UInt8}(), 0, MPI.COMM_WORLD)
+    rowval_match = (local_hash_rowval == ref_hash_rowval)
+
+    # Check nzval (non-zero values)
+    local_hash_nzval = sha1(reinterpret(UInt8, A.nzval))
+    ref_hash_nzval = MPI.bcast(rank == 0 ? local_hash_nzval : Vector{UInt8}(), 0, MPI.COMM_WORLD)
+    nzval_match = (local_hash_nzval == ref_hash_nzval)
+
+    # All components must match
+    local_equal = colptr_match && rowval_match && nzval_match
+
+    result = MPI.Allreduce(local_equal, MPI.LAND, MPI.COMM_WORLD)
+
+    # Debug output from all ranks if there's a mismatch
+    if !result
+        println("[rank $rank] DEBUG mpi_uniform SparseMatrixCSC: size=$(size(A)), colptr=$colptr_match, rowval=$rowval_match, nzval=$nzval_match, local_equal=$local_equal")
+    end
+
+    return result
 end
 
 function mpi_uniform(A)

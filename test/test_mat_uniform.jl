@@ -5,6 +5,7 @@ SafePETSc.Init()
 using PETSc
 using SafePETSc.SafeMPI
 using LinearAlgebra
+using SparseArrays
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
 using .MPITestHarness
 
@@ -115,6 +116,91 @@ function _mat_uniform_tests_body()
     @test dr_vals.obj.A isa PETSc.Mat
     SafeMPI.check_and_destroy!()
     MPI.Barrier(comm)
+
+    if rank == 0
+        println("[DEBUG] Starting sparse matrix tests")
+        flush(stdout)
+    end
+
+    # Test 8: Sparse identity matrix
+    A_sparse_id = sparse(1.0I, 8, 8)
+    dr_sparse_id = SafePETSc.Mat_uniform(A_sparse_id; Prefix=SafePETSc.MPIAIJ)
+    @test dr_sparse_id isa SafeMPI.DRef
+    @test dr_sparse_id.obj.A isa PETSc.Mat
+    # Verify values are preserved
+    A_reconstructed = Matrix(dr_sparse_id)
+    @test norm(A_reconstructed - Matrix(A_sparse_id)) < 1e-14
+    SafeMPI.check_and_destroy!()
+    MPI.Barrier(comm)
+
+    # Test 9: Sparse diagonal matrix
+    A_sparse_diag = spdiagm(0 => [1.0, 2.0, 3.0, 4.0, 5.0])
+    dr_sparse_diag = SafePETSc.Mat_uniform(A_sparse_diag; Prefix=SafePETSc.MPIAIJ)
+    @test dr_sparse_diag isa SafeMPI.DRef
+    A_diag_reconstructed = Matrix(dr_sparse_diag)
+    @test norm(A_diag_reconstructed - Matrix(A_sparse_diag)) < 1e-14
+    SafeMPI.check_and_destroy!()
+    MPI.Barrier(comm)
+
+    # Test 10: Sparse tridiagonal matrix
+    n = 10
+    A_sparse_tri = spdiagm(
+        -1 => fill(-1.0, n-1),
+        0 => fill(2.0, n),
+        1 => fill(-1.0, n-1)
+    )
+    dr_sparse_tri = SafePETSc.Mat_uniform(A_sparse_tri; Prefix=SafePETSc.MPIAIJ)
+    @test dr_sparse_tri isa SafeMPI.DRef
+    A_tri_reconstructed = Matrix(dr_sparse_tri)
+    @test norm(A_tri_reconstructed - Matrix(A_sparse_tri)) < 1e-14
+    SafeMPI.check_and_destroy!()
+    MPI.Barrier(comm)
+
+    # Test 11: Non-square sparse matrix
+    A_sparse_rect = sparse([1, 2, 3, 4], [1, 3, 2, 4], [1.5, 2.5, 3.5, 4.5], 6, 8)
+    dr_sparse_rect = SafePETSc.Mat_uniform(A_sparse_rect; Prefix=SafePETSc.MPIAIJ)
+    @test dr_sparse_rect isa SafeMPI.DRef
+    @test size(dr_sparse_rect) == (6, 8)
+    A_rect_reconstructed = Matrix(dr_sparse_rect)
+    @test norm(A_rect_reconstructed - Matrix(A_sparse_rect)) < 1e-14
+    SafeMPI.check_and_destroy!()
+    MPI.Barrier(comm)
+
+    # Test 12: Very sparse matrix (few non-zeros)
+    A_very_sparse = spzeros(20, 20)
+    A_very_sparse[5, 5] = 1.0
+    A_very_sparse[10, 15] = 2.0
+    A_very_sparse[15, 3] = 3.0
+    dr_very_sparse = SafePETSc.Mat_uniform(A_very_sparse; Prefix=SafePETSc.MPIAIJ)
+    @test dr_very_sparse isa SafeMPI.DRef
+    A_very_sparse_reconstructed = Matrix(dr_very_sparse)
+    @test norm(A_very_sparse_reconstructed - Matrix(A_very_sparse)) < 1e-14
+    SafeMPI.check_and_destroy!()
+    MPI.Barrier(comm)
+
+    # Test 13: Custom partitions with sparse matrix
+    if nranks == 4
+        A_sparse_custom = spdiagm(0 => collect(1.0:12.0))
+        custom_row_part = [1, 4, 7, 10, 13]
+        custom_col_part = [1, 4, 7, 10, 13]
+        dr_sparse_custom = SafePETSc.Mat_uniform(
+            A_sparse_custom;
+            row_partition=custom_row_part,
+            col_partition=custom_col_part,
+            Prefix=SafePETSc.MPIAIJ
+        )
+        @test dr_sparse_custom.obj.row_partition == custom_row_part
+        @test dr_sparse_custom.obj.col_partition == custom_col_part
+        A_custom_reconstructed = Matrix(dr_sparse_custom)
+        @test norm(A_custom_reconstructed - Matrix(A_sparse_custom)) < 1e-14
+        SafeMPI.check_and_destroy!()
+        MPI.Barrier(comm)
+    end
+
+    if rank == 0
+        println("[DEBUG] Sparse matrix tests completed")
+        flush(stdout)
+    end
 end
 
 # Keep output tidy and aggregate at the end
