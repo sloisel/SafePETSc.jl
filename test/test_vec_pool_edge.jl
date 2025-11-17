@@ -76,8 +76,8 @@ GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Create vector with DENSE prefix
-dr_b = SafePETSc.Vec_uniform(v; Prefix=SafePETSc.DENSE)
+# Create vector with MPIDENSE prefix
+dr_b = SafePETSc.Vec_uniform(v; Prefix=SafePETSc.MPIDENSE)
 dr_b = nothing
 GC.gc()
 SafeMPI.check_and_destroy!()
@@ -87,7 +87,7 @@ MPI.Barrier(comm)
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
     @test haskey(stats, (16, "MPIAIJ_", Float64))
-    @test haskey(stats, (16, "DENSE_", Float64))
+    @test haskey(stats, (16, "MPIDENSE_", Float64))
 end
 
 SafeMPI.check_and_destroy!()

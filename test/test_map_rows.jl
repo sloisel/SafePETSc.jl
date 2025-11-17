@@ -1,7 +1,7 @@
 using Test
 using MPI
 using SafePETSc
-using SafePETSc: DENSE, MPIAIJ
+using SafePETSc: MPIDENSE, MPIAIJ
 SafePETSc.Init()
 using PETSc
 using SafePETSc.SafeMPI
@@ -38,7 +38,7 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
     # Test 1: scalar output (sum of row elements)
     begin
         # Test with matrix returning scalar per row
-        B = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)
+        B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
 
         # map_rows with scalar output
         result = map_rows(sum, B)
@@ -61,7 +61,7 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
     # Test 2: vector output → Vec (sum and product per row)
     begin
         # Test from user's first example: map_rows((x)->[sum(x),prod(x)],B)
-        B = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)
+        B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
 
         result = map_rows(x -> [sum(x), prod(x)], B)
         expected = map_rows_native(x -> [sum(x), prod(x)], B_data)
@@ -83,9 +83,9 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
     # Test 3: adjoint vector output → Mat (sum and product per row as matrix)
     begin
         # Test from user's second example: map_rows((x)->[sum(x),prod(x)]',B)
-        B = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)
+        B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
 
-        result = map_rows(x -> [sum(x), prod(x)]', B; Prefix=DENSE)
+        result = map_rows(x -> [sum(x), prod(x)]', B; Prefix=MPIDENSE)
         expected = map_rows_native(x -> [sum(x), prod(x)]', B_data)
 
         # Should return a Mat with 5 rows, 2 cols
@@ -99,10 +99,10 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
     # Test 4: multiple inputs (matrix + vector)
     begin
         # Test from user's third example: map_rows((x,y)->[sum(x),prod(x),y[1]]',B,C)
-        B = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)
+        B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
         C = SafePETSc.Vec_uniform(C_data)
 
-        result = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C; Prefix=DENSE)
+        result = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C; Prefix=MPIDENSE)
 
         # For the native version, we need to reshape C_data for eachrow
         C_reshaped = reshape(C_data, :, 1)
@@ -165,7 +165,7 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
         # Convert vector to matrix by outputting row vectors
         C = SafePETSc.Vec_uniform(C_data)
 
-        result = map_rows(x -> [x[1], x[1]^2, x[1]^3]', C; Prefix=DENSE)
+        result = map_rows(x -> [x[1], x[1]^2, x[1]^3]', C; Prefix=MPIDENSE)
 
         @test size(result) == (5, 3)
 
@@ -200,8 +200,8 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
     begin
         # Element-wise operation on two matrices
         A_data = reshape(Float64.(1:15), 5, 3)  # Use deterministic data
-        A = SafePETSc.Mat_uniform(A_data; Prefix=DENSE)
-        B = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)
+        A = SafePETSc.Mat_uniform(A_data; Prefix=MPIDENSE)
+        B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
 
         # Compute dot product of corresponding rows
         result = map_rows((x, y) -> sum(x .* y), A, B)
@@ -222,11 +222,11 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
     # Test 10: prefix propagation
     begin
         # Test that prefix is properly set
-        B = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)
+        B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
         result = map_rows(sum, B)
 
         # Result should be a valid Vec
-        @test result isa SafePETSc.Vec{Float64,DENSE}
+        @test result isa SafePETSc.Vec{Float64,MPIDENSE}
     end
 end
 
