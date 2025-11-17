@@ -109,20 +109,14 @@ export default_check
 
 # PETSc constants for matrix operations
 # These match PETSc's MatReuse enum:
-#   MAT_INITIAL_MATRIX = 0, MAT_REUSE_MATRIX = 1, MAT_INPLACE_MATRIX = 2
+#   MAT_INITIAL_MATRIX = 0, MAT_REUSE_MATRIX = 1
 # Used in MatConvert, MatTranspose, MatMatMult, etc.
 const MAT_INITIAL_MATRIX = Cint(0)
 const MAT_REUSE_MATRIX   = Cint(1)
-const MAT_INPLACE_MATRIX = Cint(2)
-
-# PETSc boolean constants (PetscBool type)
-const PETSC_FALSE = PETSc.PetscBool(0)
-const PETSC_TRUE  = PETSc.PetscBool(1)
 
 # PETSc MatStructure enum values (used by MatAXPY and related ops)
 const SAME_NONZERO_PATTERN      = Cint(0)
 const DIFFERENT_NONZERO_PATTERN = Cint(1)
-const SUBSET_NONZERO_PATTERN    = Cint(2)
 
 """
     petsc_options_insert_string(options_string::String)

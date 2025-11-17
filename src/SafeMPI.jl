@@ -8,9 +8,6 @@ export DistributedRefManager, DRef, check_and_destroy!, destroy_obj!, default_ma
 export DestroySupport, CanDestroy, CannotDestroy, destroy_trait, mpi_any, mpierror, @mpiassert
 export default_check
 
-const RELEASE_TAG = 1001
-const RELEASE_DATA_TAG = 1002
-
 """
     default_check
 
