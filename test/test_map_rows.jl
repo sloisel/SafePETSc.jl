@@ -15,9 +15,6 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-# Ensure matrices with prefix "dense_" are mpidense
-SafePETSc.petsc_options_insert_string("-dense_mat_type mpidense")
-
 # Reference implementation for native Julia types
 map_rows_native(f, A...) = vcat((f.((eachrow.(A))...))...)
 

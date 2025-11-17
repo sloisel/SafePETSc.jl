@@ -358,6 +358,15 @@ function Init()
     petsc_options_insert_string("-MPIDENSE_mat_type mpidense -MPIDENSE_vec_type mpi")
     petsc_options_insert_string("-MPIAIJ_mat_type mpiaij -MPIAIJ_vec_type mpi")
 
+    # Exercise the options by creating dummy objects to prevent PETSc from
+    # complaining about unused options. These go out of scope immediately.
+    let
+        _ = Vec_uniform([1.0], Prefix=MPIDENSE)
+        _ = Vec_uniform([1.0], Prefix=MPIAIJ)
+        _ = Mat_uniform([1.0;;], Prefix=MPIDENSE)
+        _ = Mat_uniform([1.0;;], Prefix=MPIAIJ)
+    end
+
     return nothing
 end
 

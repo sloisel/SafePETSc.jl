@@ -14,9 +14,6 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-# Ensure matrices with prefix "dense_" are mpidense
-SafePETSc.petsc_options_insert_string("-dense_mat_type mpidense")
-
 ts = @testset MPITestHarness.QuietTestSet "eachrow on mpidense" begin
     # Build a simple 4x4 matrix with known rows
     A_data = reshape(Float64.(1:16), 4, 4)

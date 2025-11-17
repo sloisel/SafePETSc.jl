@@ -23,9 +23,6 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-# Configure PETSc options: matrices with prefix "dense_" will be created as mpidense
-SafePETSc.petsc_options_insert_string("-dense_mat_type mpidense")
-
 if rank == 0
     println("[DEBUG] Mat operations test starting")
     flush(stdout)
