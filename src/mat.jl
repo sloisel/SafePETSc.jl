@@ -502,6 +502,8 @@ function Base.:-(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
 end
 
 # Helper function to extract owned rows from a PETSc Mat to Julia SparseMatrixCSC
+# Uses efficient bulk operations: MatDenseGetArrayRead for dense matrices,
+# MatGetRow for sparse matrices (avoids element-by-element extraction)
 function _mat_to_local_sparse(A::Mat{T,Prefix}) where {T,Prefix}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
@@ -516,18 +518,51 @@ function _mat_to_local_sparse(A::Mat{T,Prefix}) where {T,Prefix}
     J = Int[]
     V = T[]
 
-    # Extract owned rows
-    for local_row in 1:nlocal_rows
-        global_row = row_lo + local_row - 1
-        # Get values for this row
-        for j in 1:n
-            # Use MatGetValues to get the entry
-            val = _mat_getvalue(A.obj.A, global_row, j)
-            if abs(val) > 0  # Only store nonzeros
-                push!(I, global_row)
-                push!(J, j)
-                push!(V, val)
+    # Use different extraction methods based on matrix type
+    if is_dense(A)
+        # Dense matrix: use MatDenseGetArrayRead to get entire local block at once
+        p = _matdense_get_array_read(A.obj.A)
+        local_data = unsafe_wrap(Array, p, (nlocal_rows, n); own=false)
+
+        try
+            # Extract nonzeros from dense local block
+            for local_row in 1:nlocal_rows
+                global_row = row_lo + local_row - 1
+                for j in 1:n
+                    val = local_data[local_row, j]
+                    if abs(val) > 0
+                        push!(I, global_row)
+                        push!(J, j)
+                        push!(V, val)
+                    end
+                end
             end
+        finally
+            _matdense_restore_array_read(A.obj.A, p)
+        end
+    else
+        # Sparse matrix: use MatGetRow to extract one row at a time
+        for local_row in 1:nlocal_rows
+            global_row = row_lo + local_row - 1
+
+            # Get sparse row structure from PETSc
+            ncols_row, cols_ptr, vals_ptr = _mat_get_row(A.obj.A, global_row)
+
+            if ncols_row > 0
+                # Wrap PETSc arrays (must copy since we'll restore them)
+                cols = unsafe_wrap(Array, cols_ptr, ncols_row; own=false)
+                vals = unsafe_wrap(Array, vals_ptr, ncols_row; own=false)
+
+                # Copy data and convert to 1-based indexing
+                for k in 1:ncols_row
+                    push!(I, global_row)
+                    push!(J, Int(cols[k]) + 1)  # Convert to 1-based
+                    push!(V, vals[k])
+                end
+            end
+
+            # Must restore row after use
+            _mat_restore_row(A.obj.A, global_row, ncols_row, cols_ptr, vals_ptr)
         end
     end
 
@@ -563,19 +598,6 @@ function _mat_to_local_sparse(v::Vec{T,Prefix}) where {T,Prefix}
     end
 
     return sparse(I, J, V, m, 1)
-end
-
-# Helper to get a single matrix value
-PETSc.@for_libpetsc begin
-    function _mat_getvalue(mat::PETSc.Mat{$PetscScalar}, row::Int, col::Int)
-        row_c = $PetscInt(row - 1)  # Convert to 0-based
-        col_c = $PetscInt(col - 1)
-        val = Ref{$PetscScalar}(0)
-        PETSc.@chk ccall((:MatGetValues, $libpetsc), PETSc.PetscErrorCode,
-                         (PETSc.CMat, $PetscInt, Ptr{$PetscInt}, $PetscInt, Ptr{$PetscInt}, Ptr{$PetscScalar}),
-                         mat, $PetscInt(1), Ref(row_c), $PetscInt(1), Ref(col_c), val)
-        return val[]
-    end
 end
 
 # Helper to extract Prefix type parameter from Vec or Mat
@@ -1858,8 +1880,10 @@ end
 Extract column k from matrix A, returning a distributed vector.
 
 Each rank extracts its owned rows from column k. The resulting vector has the same
-row partition as matrix A. This operation is intended for dense matrices; the user
-is responsible for ensuring A is dense.
+row partition as matrix A.
+
+Uses efficient bulk operations: MatDenseGetArrayRead for dense matrices,
+MatGetRow for sparse matrices.
 
 # Example
 ```julia
@@ -1881,11 +1905,39 @@ function Base.getindex(A::DRef{_Mat{T,Prefix}}, ::Colon, k::Int) where {T,Prefix
     row_hi = A.obj.row_partition[rank+2] - 1
     nlocal_rows = row_hi - row_lo + 1
 
-    # Extract local portion of column k
+    # Extract local portion of column k using efficient methods
     local_data = Vector{T}(undef, nlocal_rows)
-    for i in 1:nlocal_rows
-        global_row = row_lo + i - 1
-        local_data[i] = _mat_getvalue(A.obj.A, global_row, k)
+
+    if is_dense(A)
+        # Dense matrix: get entire local block and extract column
+        p = _matdense_get_array_read(A.obj.A)
+        try
+            local_block = unsafe_wrap(Array, p, (nlocal_rows, n); own=false)
+            @inbounds local_data[:] = @view local_block[:, k]
+        finally
+            _matdense_restore_array_read(A.obj.A, p)
+        end
+    else
+        # Sparse matrix: use MatGetRow for each row and extract column k
+        for i in 1:nlocal_rows
+            global_row = row_lo + i - 1
+            ncols_row, cols_ptr, vals_ptr = _mat_get_row(A.obj.A, global_row)
+
+            # Find column k in this row (PETSc uses 0-based indexing)
+            local_data[i] = zero(T)  # Default value
+            if ncols_row > 0
+                cols = unsafe_wrap(Array, cols_ptr, ncols_row; own=false)
+                vals = unsafe_wrap(Array, vals_ptr, ncols_row; own=false)
+                for j in 1:ncols_row
+                    if Int(cols[j]) + 1 == k
+                        local_data[i] = vals[j]
+                        break
+                    end
+                end
+            end
+
+            _mat_restore_row(A.obj.A, global_row, ncols_row, cols_ptr, vals_ptr)
+        end
     end
 
     # Create distributed PETSc Vec
