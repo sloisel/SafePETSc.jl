@@ -109,17 +109,16 @@ x = Vec_uniform([1.0, 2.0, 3.0])
 y = Vec_uniform([4.0, 5.0, 6.0])
 
 # Vertical concatenation (stacking) - creates a longer vector
-v = vcat(x, y)  # 6×1 Mat{Float64,MPIAIJ}
+v = vcat(x, y)  # Vec{Float64,MPIAIJ} with 6 elements
 
 # Horizontal concatenation - creates a matrix (auto-upgrades to MPIDENSE)
 M = hcat(x, y)  # 3×2 Mat{Float64,MPIDENSE}
 ```
 
-!!! tip "Vector Concatenation Returns Matrices"
-    Note that concatenating vectors returns `Mat{T,Prefix}` objects, not `Vec{T,Prefix}`.
-    This is because:
-    - `vcat` creates a single-column matrix (conceptually still a vector)
-    - `hcat` creates a multi-column matrix (necessarily dense)
+!!! tip "Vector Concatenation Behavior"
+    - `vcat` of vectors returns a `Vec{T,Prefix}` (preserves vector type)
+    - `hcat` of vectors returns a `Mat{T,Prefix}` (creates a multi-column matrix)
+    - `vcat` of matrices returns a `Mat{T,Prefix}`
 
     The `Prefix` is automatically upgraded to `MPIDENSE` for horizontal concatenation
     since vectors are inherently dense.

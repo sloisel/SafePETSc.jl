@@ -522,7 +522,7 @@ function _compute_output_width(As, dims)
 end
 
 """
-    Base.cat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...; dims) -> Mat{T,Prefix}
+    Base.cat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...; dims) -> Union{Vec{T,Prefix}, Mat{T,Prefix}}
 
 **MPI Collective**
 
@@ -531,6 +531,10 @@ Concatenate distributed PETSc vectors and/or matrices along dimension `dims`.
 # Arguments
 - `As::Union{Vec{T,Prefix},Mat{T,Prefix}}...`: One or more vectors or matrices with the same element type `T`
 - `dims`: Concatenation dimension (1 for vertical/vcat, 2 for horizontal/hcat)
+
+# Return Type
+- Returns `Vec{T,Prefix}` when `dims=1` and result has a single column (vertical stacking of vectors)
+- Returns `Mat{T,Prefix}` otherwise (horizontal concatenation or matrix inputs)
 
 # Requirements
 All inputs must:
@@ -552,26 +556,25 @@ since vectors are inherently dense and horizontal concatenation creates a dense 
 The concatenation is performed by:
 1. Each rank extracts its owned rows from each input as a Julia sparse matrix
 2. Standard Julia `cat` is applied locally on each rank
-3. The results are combined across ranks using `Mat_sum` with appropriate partitioning
+3. The results are combined across ranks using `Vec_sum` (for single-column results) or `Mat_sum` (otherwise)
 
 # Examples
 ```julia
-# Vertical concatenation (stacking)
-C = cat(A, B; dims=1)  # or vcat(A, B)
-
-# Horizontal concatenation (side-by-side)
-D = cat(A, B; dims=2)  # or hcat(A, B)
-
-# Convert two vectors to a dense matrix
+# Vertical concatenation (stacking) - returns Vec
 x = Vec_uniform([1.0, 2.0, 3.0])
 y = Vec_uniform([4.0, 5.0, 6.0])
-M = hcat(x, y)  # Creates 3×2 Mat{Float64,MPIDENSE}
+v = vcat(x, y)  # Returns Vec{Float64,MPIAIJ} with 6 elements
 
-# Vertical stacking of vectors keeps sparse format
-v = vcat(x, y)  # Creates 6×1 Mat{Float64,MPIAIJ}
+# Horizontal concatenation - returns Mat
+M = hcat(x, y)  # Returns Mat{Float64,MPIDENSE} of size 3×2
+
+# Matrix concatenation - returns Mat
+A = Mat_uniform(sparse([1 2; 3 4]))
+B = Mat_uniform(sparse([5 6; 7 8]))
+C = vcat(A, B)  # Returns Mat{Float64,MPIAIJ} of size 4×2
 ```
 
-See also: [`vcat`](@ref), [`hcat`](@ref), [`Mat_sum`](@ref)
+See also: [`vcat`](@ref), [`hcat`](@ref), [`Vec_sum`](@ref), [`Mat_sum`](@ref)
 """
 function Base.cat(As::Union{Vec{T},Mat{T}}...; dims) where {T}
     n = length(As)
@@ -634,16 +637,26 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims) where {T}
         result_row_partition = _get_row_partition(As[1])
     end
 
-    # Use Mat_sum to combine results across ranks
-    return Mat_sum(local_result;
-                   row_partition=result_row_partition,
-                   col_partition=result_col_partition,
-                   Prefix=Prefix,
-                   own_rank_only=false)
+    # Return Vec for single-column vertical concatenation, Mat otherwise
+    if dims == 1 && size(local_result, 2) == 1
+        # Extract single column as sparse vector
+        local_vec = sparsevec(local_result[:, 1])
+        return Vec_sum(local_vec;
+                       row_partition=result_row_partition,
+                       Prefix=Prefix,
+                       own_rank_only=false)
+    else
+        # Use Mat_sum to combine results across ranks
+        return Mat_sum(local_result;
+                       row_partition=result_row_partition,
+                       col_partition=result_col_partition,
+                       Prefix=Prefix,
+                       own_rank_only=false)
+    end
 end
 
 """
-    Base.vcat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...) -> Mat{T,Prefix}
+    Base.vcat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...) -> Union{Vec{T,Prefix}, Mat{T,Prefix}}
 
 **MPI Collective**
 
@@ -651,6 +664,10 @@ Vertically concatenate (stack) distributed PETSc vectors and/or matrices.
 
 Equivalent to `cat(As...; dims=1)`. Stacks inputs vertically, increasing the number of rows
 while keeping the number of columns constant.
+
+# Return Type
+- Returns `Vec{T,Prefix}` when concatenating only vectors (single-column result)
+- Returns `Mat{T,Prefix}` when concatenating matrices or when result has multiple columns
 
 # Requirements
 All inputs must have the same number of columns and the same column partition.
@@ -661,13 +678,15 @@ All inputs must have the same number of columns and the same column partition.
 
 # Examples
 ```julia
+# Concatenating vectors returns a Vec
 x = Vec_uniform([1.0, 2.0])
 y = Vec_uniform([3.0, 4.0])
-v = vcat(x, y)  # 4×1 Mat{Float64,MPIAIJ}
+v = vcat(x, y)  # Vec{Float64,MPIAIJ} with 4 elements
 
+# Concatenating matrices returns a Mat
 A = Mat_uniform(sparse([1 2; 3 4]))
 B = Mat_uniform(sparse([5 6; 7 8]))
-C = vcat(A, B)  # 4×2 matrix
+C = vcat(A, B)  # Mat{Float64,MPIAIJ} of size 4×2
 ```
 
 See also: [`cat`](@ref), [`hcat`](@ref)
