@@ -746,7 +746,7 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    Vector(x::Vec{T}) -> Vector{T}
+    Vector(x::Vec{T,Prefix}) -> Vector{T}
 
 **MPI Collective**
 
@@ -791,7 +791,7 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    own_row(v::Vec{T}) -> UnitRange{Int}
+    own_row(v::Vec{T,Prefix}) -> UnitRange{Int}
 
 **MPI Non-Collective**
 
@@ -889,7 +889,7 @@ function Base.getindex(v::DRef{_Vec{T,Prefix}}, range::UnitRange{Int}) where {T,
 end
 
 """
-    Base.show(io::IO, x::Vec{T})
+    Base.show(io::IO, x::Vec{T,Prefix})
 
 **MPI Collective**
 
@@ -901,7 +901,7 @@ To print only on rank 0, use: `println(io0(), v)`
 Base.show(io::IO, x::Vec{T}) where T = show(io, Vector(x))
 
 """
-    Base.show(io::IO, mime::MIME, x::Vec{T})
+    Base.show(io::IO, mime::MIME, x::Vec{T,Prefix})
 
 **MPI Collective**
 

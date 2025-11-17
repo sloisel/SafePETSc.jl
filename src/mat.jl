@@ -1397,7 +1397,7 @@ function Base.iterate(it::_EachRowDense{T,Prefix}, st::Int) where {T,Prefix}
 end
 
 """
-    Base.eachrow(A::Mat{T}) -> Iterator
+    Base.eachrow(A::Mat{T,Prefix}) -> Iterator
 
 **MPI Non-Collective**
 
@@ -1469,7 +1469,7 @@ function Base.getindex(A::DRef{_Mat{T,Prefix}}, ::Colon, k::Int) where {T,Prefix
 end
 
 """
-    own_row(A::Mat{T}) -> UnitRange{Int}
+    own_row(A::Mat{T,Prefix}) -> UnitRange{Int}
 
 **MPI Non-Collective**
 
@@ -1809,7 +1809,7 @@ PETSc.@for_libpetsc begin
 end
 
 """
-    is_dense(x::Mat{T}) -> Bool
+    is_dense(x::Mat{T,Prefix}) -> Bool
 
 **MPI Non-Collective**
 
@@ -1825,7 +1825,7 @@ function is_dense(x::Mat{T,Prefix}) where {T,Prefix}
 end
 
 """
-    Matrix(x::Mat{T}) -> Matrix{T}
+    Matrix(x::Mat{T,Prefix}) -> Matrix{T}
 
 **MPI Collective**
 
@@ -1907,7 +1907,7 @@ function Base.Matrix(x::Mat{T,Prefix}) where {T,Prefix}
 end
 
 """
-    SparseArrays.sparse(x::Mat{T}) -> SparseMatrixCSC{T, Int}
+    SparseArrays.sparse(x::Mat{T,Prefix}) -> SparseMatrixCSC{T, Int}
 
 **MPI Collective**
 
@@ -1982,7 +1982,7 @@ function SparseArrays.sparse(x::Mat{T,Prefix}) where {T,Prefix}
 end
 
 """
-    Base.show(io::IO, x::Mat{T})
+    Base.show(io::IO, x::Mat{T,Prefix})
 
 **MPI Collective**
 
@@ -1995,7 +1995,7 @@ To print only on rank 0, use: `println(io0(), A)`
 Base.show(io::IO, x::Mat{T,Prefix}) where {T,Prefix} = show(io, is_dense(x) ? Matrix(x) : sparse(x))
 
 """
-    Base.show(io::IO, mime::MIME, x::Mat{T})
+    Base.show(io::IO, mime::MIME, x::Mat{T,Prefix})
 
 **MPI Collective**
 
