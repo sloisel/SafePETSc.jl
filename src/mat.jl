@@ -1455,12 +1455,17 @@ Each pair `k => v` places the vector `v` on the `k`-th diagonal:
 - `k > 0`: superdiagonal
 - `k < 0`: subdiagonal
 
-All vectors must have the same element type `T` and prefix. The matrix dimensions
+All vectors must have the same element type `T`. The matrix dimensions
 are inferred from the diagonal positions and vector lengths, or can be specified explicitly.
 
-Optional keyword arguments:
-- `row_partition`: override the default equal-row partitioning (length `nranks+1`, start at 1, end at `m+1`, non-decreasing). Defaults to `default_row_partition(m, nranks)`.
-- `col_partition`: override the default equal-column partitioning (length `nranks+1`, start at 1, end at `n+1`, non-decreasing). Defaults to `default_row_partition(n, nranks)`.
+# Optional Keyword Arguments
+- `prefix`: Matrix prefix type to use for the result. Defaults to the input vector's prefix.
+  Use this to create a matrix with a different prefix than the input vectors (e.g., create
+  MPIAIJ from MPIDENSE vectors, or vice versa).
+- `row_partition`: Override the default equal-row partitioning (length `nranks+1`, start at 1,
+  end at `m+1`, non-decreasing). Defaults to `default_row_partition(m, nranks)`.
+- `col_partition`: Override the default equal-column partitioning (length `nranks+1`, start at 1,
+  end at `n+1`, non-decreasing). Defaults to `default_row_partition(n, nranks)`.
 
 # Examples
 ```julia
@@ -1469,6 +1474,10 @@ A = spdiagm(-1 => lower, 0 => diag, 1 => upper)
 
 # Create a 100×100 matrix with specified vectors on diagonals
 B = spdiagm(100, 100, 0 => v1, 1 => v2)
+
+# Create MPIAIJ (sparse) matrix from MPIDENSE vector
+v_dense = Vec_uniform(data; Prefix=MPIDENSE)
+A_sparse = spdiagm(0 => v_dense; prefix=MPIAIJ)
 ```
 """
 function spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...; prefix=Prefix, kwargs...) where {T,Prefix}

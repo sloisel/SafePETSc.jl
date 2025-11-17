@@ -111,9 +111,10 @@ n = size(A, 2)                         # Columns
 ### Iteration
 
 ```julia
-# Iterate over rows (dense matrices only)
+# Iterate over rows (works for both dense and sparse matrices)
 for row in eachrow(A)
-    # row is a view of the matrix row
+    # For dense (MPIDENSE): row is a view of the matrix row
+    # For sparse (MPIAIJ): row is a dense Vector representation
     process(row)
 end
 ```
