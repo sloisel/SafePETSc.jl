@@ -37,6 +37,8 @@ test_output*.txt
 spd*.log
 final*.log
 verify*.log
+test_*_debug.jl
+test_debug*.jl
 
 # Compiled binaries and debug symbols
 *.o
