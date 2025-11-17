@@ -314,20 +314,21 @@ Base.size(r::SafeMPI.DRef{<:_Mat}, d::Integer) = Base.size(r.obj, d)
 Base.adjoint(A::Mat{T}) where {T} = LinearAlgebra.Adjoint(A)
 
 """
-    Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) -> Mat{T,Prefix}
+    Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) -> Mat{T,PrefixResult}
 
 **MPI Collective**
 
 Materialize an adjoint matrix into a new transposed Mat.
 
 Creates a new matrix B = A^T using PETSc's transpose operations.
+The result prefix is determined by querying what PETSc creates.
 """
 function Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) where {T,Prefix}
     A = parent(adj)::Mat{T,Prefix}
-    # Create B = A^T via PETSc (MAT_INITIAL_MATRIX) and preserve prefix
-    B_petsc = _mat_transpose(A.obj.A, Prefix)
+    # Create B = A^T via PETSc (MAT_INITIAL_MATRIX) - returns both matrix and prefix
+    B_petsc, ResultPrefix = _mat_transpose(A.obj.A)
     # Swap row/col partitions for the transpose
-    obj = _Mat{T,Prefix}(B_petsc, A.obj.col_partition, A.obj.row_partition)
+    obj = _Mat{T,ResultPrefix}(B_petsc, A.obj.col_partition, A.obj.row_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -898,13 +899,16 @@ function blockdiag(As::Mat{T,Prefix}...) where {T,Prefix}
 end
 
 """
-    Base.:*(A::Mat{T,Prefix}, B::Mat{T,Prefix}) -> Mat{T,Prefix}
+    Base.:*(A::Mat{T,PrefixA}, B::Mat{T,PrefixB}) -> Mat{T,PrefixC}
 
 **MPI Collective**
 
 Multiply two distributed PETSc matrices using PETSc's MatMatMult.
 
-Both matrices must have the same element type `T` and the same prefix.
+Both matrices must have the same element type `T`, but can have different prefixes
+(e.g., MPIAIJ × MPIDENSE is supported). The result prefix is determined by querying
+what type PETSc actually creates.
+
 The number of columns in A must match the number of rows in B.
 
 # Example
@@ -912,7 +916,7 @@ The number of columns in A must match the number of rows in B.
 C = A * B  # Matrix multiplication
 ```
 """
-function Base.:*(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
+function Base.:*(A::Mat{T,PrefixA}, B::Mat{T,PrefixB}) where {T,PrefixA,PrefixB}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -926,25 +930,26 @@ function Base.:*(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
     result_row_partition = A.obj.row_partition
     result_col_partition = B.obj.col_partition
 
-    # Use PETSc's MatMatMult
-    C_mat = _mat_mat_mult(A.obj.A, B.obj.A, Prefix)
+    # Use PETSc's MatMatMult - it returns both the matrix and the result Prefix
+    C_mat, ResultPrefix = _mat_mat_mult(A.obj.A, B.obj.A)
 
-    # Wrap in our _Mat type and return as DRef
-    obj = _Mat{T,Prefix}(C_mat, result_row_partition, result_col_partition)
+    # Wrap in our _Mat type with the queried Prefix and return as DRef
+    obj = _Mat{T,ResultPrefix}(C_mat, result_row_partition, result_col_partition)
     return SafeMPI.DRef(obj)
 end
 
 """
-    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, B::Mat{T,Prefix}) -> Mat{T,Prefix}
+    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, B::Mat{T,PrefixB}) -> Mat{T,PrefixC}
 
 **MPI Collective**
 
 Transpose-matrix multiplication using PETSc's MatTransposeMatMult.
 
 Computes C = A' * B where A' is the transpose (adjoint for real matrices) of A.
+Matrices can have different prefixes; the result prefix is determined by PETSc.
 """
-function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, B::Mat{T,Prefix}) where {T,Prefix}
-    A = parent(At)::Mat{T,Prefix}
+function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, B::Mat{T,PrefixB}) where {T,PrefixA,PrefixB}
+    A = parent(At)::Mat{T,PrefixA}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -957,25 +962,26 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, B::Mat{T,Pref
     result_row_partition = A.obj.col_partition
     result_col_partition = B.obj.col_partition
 
-    # Use PETSc's MatTransposeMatMult
-    C_mat = _mat_transpose_mat_mult(A.obj.A, B.obj.A, Prefix)
+    # Use PETSc's MatTransposeMatMult - it returns both the matrix and the result Prefix
+    C_mat, ResultPrefix = _mat_transpose_mat_mult(A.obj.A, B.obj.A)
 
-    # Wrap in our _Mat type and return as DRef
-    obj = _Mat{T,Prefix}(C_mat, result_row_partition, result_col_partition)
+    # Wrap in our _Mat type with the queried Prefix and return as DRef
+    obj = _Mat{T,ResultPrefix}(C_mat, result_row_partition, result_col_partition)
     return SafeMPI.DRef(obj)
 end
 
 """
-    Base.:*(A::Mat{T,Prefix}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) -> Mat{T,Prefix}
+    Base.:*(A::Mat{T,PrefixA}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixB}}) -> Mat{T,PrefixC}
 
 **MPI Collective**
 
 Matrix-transpose multiplication using PETSc's MatMatTransposeMult.
 
 Computes C = A * B' where B' is the transpose (adjoint for real matrices) of B.
+Matrices can have different prefixes; the result prefix is determined by PETSc.
 """
-function Base.:*(A::Mat{T,Prefix}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) where {T,Prefix}
-    B = parent(Bt)::Mat{T,Prefix}
+function Base.:*(A::Mat{T,PrefixA}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixB}}) where {T,PrefixA,PrefixB}
+    B = parent(Bt)::Mat{T,PrefixB}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -988,16 +994,16 @@ function Base.:*(A::Mat{T,Prefix}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefi
     result_row_partition = A.obj.row_partition
     result_col_partition = B.obj.row_partition
 
-    # Use PETSc's MatMatTransposeMult
-    C_mat = _mat_mat_transpose_mult(A.obj.A, B.obj.A, Prefix)
+    # Use PETSc's MatMatTransposeMult - it returns both the matrix and the result Prefix
+    C_mat, ResultPrefix = _mat_mat_transpose_mult(A.obj.A, B.obj.A)
 
-    # Wrap in our _Mat type and return as DRef
-    obj = _Mat{T,Prefix}(C_mat, result_row_partition, result_col_partition)
+    # Wrap in our _Mat type with the queried Prefix and return as DRef
+    obj = _Mat{T,ResultPrefix}(C_mat, result_row_partition, result_col_partition)
     return SafeMPI.DRef(obj)
 end
 
 """
-    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) -> Mat{T,Prefix}
+    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixB}}) -> Mat{T,PrefixC}
 
 **MPI Collective**
 
@@ -1005,10 +1011,11 @@ Transpose-transpose multiplication: C = A' * B'.
 
 Since PETSc does not have a direct AtBt product type, this is computed as
 C = (B * A)' by materializing the transpose of the result.
+Matrices can have different prefixes; the result prefix is determined by PETSc.
 """
-function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) where {T,Prefix}
-    A = parent(At)::Mat{T,Prefix}
-    B = parent(Bt)::Mat{T,Prefix}
+function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixB}}) where {T,PrefixA,PrefixB}
+    A = parent(At)::Mat{T,PrefixA}
+    B = parent(Bt)::Mat{T,PrefixB}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -1017,19 +1024,17 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, Bt::LinearAlg
                 A.obj.row_partition == B.obj.col_partition) "Transpose-transpose multiplication A'*B' requires compatible dimensions (A rows must equal B cols for A'*B') and matching partitions (A.row_partition must equal B.col_partition)"
 
     # Compute as (B * A)' since PETSc doesn't have AtBt product type
-    # First compute BA
-    BA_mat = _mat_mat_mult(B.obj.A, A.obj.A, Prefix)
+    # First compute BA - it returns both the matrix and its Prefix
+    BA_mat, BAPrefix = _mat_mat_mult(B.obj.A, A.obj.A)
 
     # Then transpose it to get (BA)' = A'B'
     # BA has partitions (B.row_partition, A.col_partition), so transpose has swapped
     result_row_partition = A.obj.col_partition
     result_col_partition = B.obj.row_partition
-    C_mat = _mat_transpose(BA_mat, Prefix)
+    C_mat, ResultPrefix = _mat_transpose(BA_mat)
 
-    # Result partitions: rows from A's columns, columns from B's rows
-
-    # Wrap in our _Mat type
-    obj = _Mat{T,Prefix}(C_mat, result_row_partition, result_col_partition)
+    # Wrap in our _Mat type with the queried Prefix
+    obj = _Mat{T,ResultPrefix}(C_mat, result_row_partition, result_col_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -1401,21 +1406,68 @@ PETSc.@for_libpetsc begin
     end
 end
 
-# PETSc matrix-matrix multiplication wrapper
+# Helper function to determine Prefix type from PETSc MatType string
+function _petsc_type_to_prefix(mat_type_str::String)
+    # Map PETSc type strings to our Prefix types
+    lowercase_type = lowercase(mat_type_str)
+    if occursin("dense", lowercase_type)
+        return MPIDENSE
+    else
+        # Default to MPIAIJ for sparse types (mpiaij, seqaij, etc.)
+        return MPIAIJ
+    end
+end
+
+# PETSc matrix transpose wrapper
 PETSc.@for_libpetsc begin
-    function _mat_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, Prefix::Type)
+    # Create new transposed matrix
+    function _mat_transpose(A::PETSc.Mat{$PetscScalar})
+        B = Ref{PETSc.CMat}(C_NULL)
+        PETSc.@chk ccall((:MatTranspose, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CMat, Cint, Ptr{PETSc.CMat}),
+                         A, MAT_INITIAL_MATRIX, B)
+        Bmat = PETSc.Mat{$PetscScalar}(B[])
+
+        # Query what type PETSc actually created
+        mat_type_str = _mat_type_string(Bmat)
+        ResultPrefix = _petsc_type_to_prefix(mat_type_str)
+
+        # Set the options prefix based on the result type
+        prefix_str = SafePETSc.prefix(ResultPrefix)
+        if !isempty(prefix_str)
+            PETSc.@chk ccall((:MatSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
+                             (PETSc.CMat, Cstring), Bmat, prefix_str)
+        end
+
+        return Bmat, ResultPrefix
+    end
+end
+
+# Note: _mat_transpose! is defined in ksp.jl with MatTransposeSetPrecursor support
+
+# PETSc matrix-matrix multiplication wrapper
+# Now queries the result type and returns both the matrix and its Prefix
+PETSc.@for_libpetsc begin
+    function _mat_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar})
         C = Ref{PETSc.CMat}(C_NULL)
         PETSC_DEFAULT_REAL = $PetscReal(-2.0)
         PETSc.@chk ccall((:MatMatMult, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CMat, PETSc.CMat, Cint, $PetscReal, Ptr{PETSc.CMat}),
                          A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT_REAL, C)
         Cmat = PETSc.Mat{$PetscScalar}(C[])
-        prefix_str = SafePETSc.prefix(Prefix)
+
+        # Query what type PETSc actually created
+        mat_type_str = _mat_type_string(Cmat)
+        ResultPrefix = _petsc_type_to_prefix(mat_type_str)
+
+        # Set the options prefix based on the result type
+        prefix_str = SafePETSc.prefix(ResultPrefix)
         if !isempty(prefix_str)
             PETSc.@chk ccall((:MatSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
                              (PETSc.CMat, Cstring), Cmat, prefix_str)
         end
-        return Cmat
+
+        return Cmat, ResultPrefix
     end
 
     # In-place version using MAT_REUSE_MATRIX
@@ -1429,35 +1481,49 @@ PETSc.@for_libpetsc begin
     end
 
     # Transpose-matrix multiplication: C = A' * B
-    function _mat_transpose_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, Prefix::Type)
+    function _mat_transpose_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar})
         C = Ref{PETSc.CMat}(C_NULL)
         PETSC_DEFAULT_REAL = $PetscReal(-2.0)
         PETSc.@chk ccall((:MatTransposeMatMult, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CMat, PETSc.CMat, Cint, $PetscReal, Ptr{PETSc.CMat}),
                          A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT_REAL, C)
         Cmat = PETSc.Mat{$PetscScalar}(C[])
-        prefix_str = SafePETSc.prefix(Prefix)
+
+        # Query what type PETSc actually created
+        mat_type_str = _mat_type_string(Cmat)
+        ResultPrefix = _petsc_type_to_prefix(mat_type_str)
+
+        # Set the options prefix based on the result type
+        prefix_str = SafePETSc.prefix(ResultPrefix)
         if !isempty(prefix_str)
             PETSc.@chk ccall((:MatSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
                              (PETSc.CMat, Cstring), Cmat, prefix_str)
         end
-        return Cmat
+
+        return Cmat, ResultPrefix
     end
 
     # Matrix-transpose multiplication: C = A * B'
-    function _mat_mat_transpose_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, Prefix::Type)
+    function _mat_mat_transpose_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar})
         C = Ref{PETSc.CMat}(C_NULL)
         PETSC_DEFAULT_REAL = $PetscReal(-2.0)
         PETSc.@chk ccall((:MatMatTransposeMult, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CMat, PETSc.CMat, Cint, $PetscReal, Ptr{PETSc.CMat}),
                          A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT_REAL, C)
         Cmat = PETSc.Mat{$PetscScalar}(C[])
-        prefix_str = SafePETSc.prefix(Prefix)
+
+        # Query what type PETSc actually created
+        mat_type_str = _mat_type_string(Cmat)
+        ResultPrefix = _petsc_type_to_prefix(mat_type_str)
+
+        # Set the options prefix based on the result type
+        prefix_str = SafePETSc.prefix(ResultPrefix)
         if !isempty(prefix_str)
             PETSc.@chk ccall((:MatSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
                              (PETSc.CMat, Cstring), Cmat, prefix_str)
         end
-        return Cmat
+
+        return Cmat, ResultPrefix
     end
 end
 

@@ -381,7 +381,200 @@ end
 println(io0(), "="^70)
 
 println(io0(), "\n" * "="^70)
-println(io0(), "Phase 3: Testing amgb(...) solver")
+println(io0(), "Phase 3: Testing amg_helper")
+println(io0(), "="^70)
+
+# Test the unexported amg_helper function
+# This creates AMG{T,X,W,M,Discretization} objects
+println(io0(), "\nCalling amg_helper with native geometry...")
+
+# Define state variables and D matrix
+state_variables = [:u :dirichlet ; :s :full]
+D = [:u :id
+     :u :dx
+     :u :dy
+     :s :id]
+
+println(io0(), "  state_variables = ", state_variables)
+println(io0(), "  D = ", D)
+
+try
+    # Call amg_helper with native geometry
+    amg_native = MultiGridBarrier.amg_helper(g_native, state_variables, D)
+    println(io0(), "  ✓ amg_helper succeeded with native geometry")
+    println(io0(), "  AMG type: ", typeof(amg_native))
+
+    # Discover what fields the AMG object has
+    println(io0(), "  AMG fields: ", fieldnames(typeof(amg_native)))
+
+    # Call amg_helper with PETSc geometry
+    println(io0(), "\nCalling amg_helper with PETSc geometry...")
+    amg_petsc = MultiGridBarrier.amg_helper(g_petsc, state_variables, D)
+    println(io0(), "  ✓ amg_helper succeeded with PETSc geometry")
+    println(io0(), "  AMG type: ", typeof(amg_petsc))
+    println(io0(), "  AMG fields: ", fieldnames(typeof(amg_petsc)))
+
+    # Print dimensions for debugging Phase 5
+    println(io0(), "\nDimension analysis:")
+    println(io0(), "  geometry.x size: ", size(amg_native.geometry.x))
+    println(io0(), "  AMG.x size: ", size(amg_native.x))
+    println(io0(), "  AMG.w size: ", size(amg_native.w))
+    println(io0(), "  AMG.D size: ", size(amg_native.D))
+    println(io0(), "  Number of nodes: ", size(amg_native.geometry.x, 1))
+    println(io0(), "  Number of state vars per node: ", size(amg_native.x, 2))
+    println(io0(), "  Number of D components per node: ", size(amg_native.D, 1))
+    println(io0(), "  Expected state vector length (n_nodes * n_state_vars): ", size(amg_native.geometry.x, 1) * size(amg_native.x, 2))
+    println(io0(), "  Expected D vector length (n_nodes * n_D_components): ", size(amg_native.geometry.x, 1) * size(amg_native.D, 1))
+
+    # Compare the AMG operators (restriction and refinement matrices)
+    # Note: R_fine and R_coarse are vectors of matrices
+    println(io0(), "\nComparing AMG operators...")
+
+    max_diff = 0.0
+
+    # Compare R_fine matrices (vector of matrices)
+    println(io0(), "  R_fine has ", length(amg_native.R_fine), " matrices")
+    for i in 1:length(amg_native.R_fine)
+        R_fine_i_native = amg_native.R_fine[i]
+        R_fine_i_petsc_native = Matrix(amg_petsc.R_fine[i])
+        println(io0(), "    R_fine[$i] size: ", size(R_fine_i_native))
+        diff = norm(R_fine_i_native - R_fine_i_petsc_native)
+        println(io0(), "    ||R_fine[$i]_native - R_fine[$i]_petsc|| = ", diff)
+        max_diff = max(max_diff, diff)
+    end
+
+    # Compare R_coarse matrices (vector of matrices)
+    println(io0(), "  R_coarse has ", length(amg_native.R_coarse), " matrices")
+    for i in 1:length(amg_native.R_coarse)
+        R_coarse_i_native = amg_native.R_coarse[i]
+        R_coarse_i_petsc_native = Matrix(amg_petsc.R_coarse[i])
+        println(io0(), "    R_coarse[$i] size: ", size(R_coarse_i_native))
+        diff = norm(R_coarse_i_native - R_coarse_i_petsc_native)
+        println(io0(), "    ||R_coarse[$i]_native - R_coarse[$i]_petsc|| = ", diff)
+        max_diff = max(max_diff, diff)
+    end
+
+    if max_diff < 1e-14
+        println(io0(), "\n" * "="^70)
+        println(io0(), "✓ Phase 3 completed successfully!")
+        println(io0(), "✓ amg_helper produces identical results for native and PETSc!")
+        println(io0(), "="^70)
+    else
+        println(io0(), "\n" * "="^70)
+        println(io0(), "⚠ Phase 3 completed with differences")
+        println(io0(), "  Matrices differ by ", A_diff)
+        println(io0(), "="^70)
+    end
+
+catch e
+    println(io0(), "\n" * "="^70)
+    println(io0(), "✗ Phase 3 FAILED with error:")
+    println(io0(), "="^70)
+    println(io0(), e)
+    println(io0(), "")
+    for (exc, bt) in Base.catch_stack()
+        showerror(io0(), exc, bt)
+        println(io0())
+    end
+    println(io0(), "="^70)
+
+    println(io0(), "\nThis indicates an issue that needs to be addressed.")
+    println(io0(), "Please review the error above.")
+end
+
+println(io0(), "\n" * "="^70)
+println(io0(), "Phase 4: Testing amg function (returns pair of AMG objects)")
+println(io0(), "="^70)
+
+# Test the amg function which returns a pair of AMG objects
+println(io0(), "\nCalling amg with native geometry...")
+
+try
+    # Call amg with native geometry - it should return a tuple of AMG objects
+    amg_pair_native = MultiGridBarrier.amg(g_native; state_variables=state_variables, D=D)
+    println(io0(), "  ✓ amg succeeded with native geometry")
+    println(io0(), "  Result type: ", typeof(amg_pair_native))
+    println(io0(), "  Number of AMG objects: ", length(amg_pair_native))
+
+    # Examine each AMG in the pair - discover fields
+    for (i, amg_obj) in enumerate(amg_pair_native)
+        println(io0(), "  AMG[$i] type: ", typeof(amg_obj))
+        println(io0(), "  AMG[$i] fields: ", fieldnames(typeof(amg_obj)))
+    end
+
+    # Call amg with PETSc geometry
+    println(io0(), "\nCalling amg with PETSc geometry...")
+    amg_pair_petsc = MultiGridBarrier.amg(g_petsc; state_variables=state_variables, D=D)
+    println(io0(), "  ✓ amg succeeded with PETSc geometry")
+    println(io0(), "  Result type: ", typeof(amg_pair_petsc))
+    println(io0(), "  Number of AMG objects: ", length(amg_pair_petsc))
+
+    # Examine each AMG in the pair
+    for (i, amg_obj) in enumerate(amg_pair_petsc)
+        println(io0(), "  AMG[$i] type: ", typeof(amg_obj))
+        println(io0(), "  AMG[$i] fields: ", fieldnames(typeof(amg_obj)))
+    end
+
+    # Compare the operators from both AMG objects in each pair
+    # Note: R_fine and R_coarse are vectors of matrices
+    println(io0(), "\nComparing AMG operators...")
+    all_match = true
+
+    for amg_idx in 1:length(amg_pair_native)
+        println(io0(), "  AMG[$amg_idx]:")
+
+        # Compare R_fine matrices (vector of matrices)
+        for i in 1:length(amg_pair_native[amg_idx].R_fine)
+            R_fine_i_native = amg_pair_native[amg_idx].R_fine[i]
+            R_fine_i_petsc_native = Matrix(amg_pair_petsc[amg_idx].R_fine[i])
+            diff = norm(R_fine_i_native - R_fine_i_petsc_native)
+            println(io0(), "    ||R_fine[$i]_native - R_fine[$i]_petsc|| = ", diff)
+            if diff >= 1e-14
+                all_match = false
+            end
+        end
+
+        # Compare R_coarse matrices (vector of matrices)
+        for i in 1:length(amg_pair_native[amg_idx].R_coarse)
+            R_coarse_i_native = amg_pair_native[amg_idx].R_coarse[i]
+            R_coarse_i_petsc_native = Matrix(amg_pair_petsc[amg_idx].R_coarse[i])
+            diff = norm(R_coarse_i_native - R_coarse_i_petsc_native)
+            println(io0(), "    ||R_coarse[$i]_native - R_coarse[$i]_petsc|| = ", diff)
+            if diff >= 1e-14
+                all_match = false
+            end
+        end
+    end
+
+    if all_match
+        println(io0(), "\n" * "="^70)
+        println(io0(), "✓ Phase 4 completed successfully!")
+        println(io0(), "✓ amg produces identical AMG pairs for native and PETSc!")
+        println(io0(), "="^70)
+    else
+        println(io0(), "\n" * "="^70)
+        println(io0(), "⚠ Phase 4 completed with differences")
+        println(io0(), "="^70)
+    end
+
+catch e
+    println(io0(), "\n" * "="^70)
+    println(io0(), "✗ Phase 4 FAILED with error:")
+    println(io0(), "="^70)
+    println(io0(), e)
+    println(io0(), "")
+    for (exc, bt) in Base.catch_stack()
+        showerror(io0(), exc, bt)
+        println(io0())
+    end
+    println(io0(), "="^70)
+
+    println(io0(), "\nThis indicates an issue that needs to be addressed.")
+    println(io0(), "Please review the error above.")
+end
+
+println(io0(), "\n" * "="^70)
+println(io0(), "Phase 5: Testing amgb(...) solver")
 println(io0(), "="^70)
 
 # Now try running amgb with both native and PETSc geometries
@@ -419,18 +612,19 @@ try
     # Default forcing: zero
 
     # Create native grids matching MultiGridBarrier defaults
-    g_grid_native = zeros(n_nodes, dim + 2)  # [u, dirichlet; s, full]
+    # state_variables = [:u :dirichlet ; :s :full] means 2 state variables (u and s)
+    # So g_grid and f_grid should have size (n_nodes, 2), not (n_nodes, 4)
+    n_state_vars = 2  # u and s
+    g_grid_native = zeros(n_nodes, n_state_vars)
     for i in 1:n_nodes
         x_coord = g_native.x[i, :]
         g_grid_native[i, 1] = norm(x_coord)^p_value  # u boundary value
         g_grid_native[i, 2] = 100.0  # s boundary value (large for slack)
     end
 
-    f_grid_native = zeros(n_nodes, dim + 2)  # forcing term (typically zero)
+    f_grid_native = zeros(n_nodes, n_state_vars)  # forcing term (typically zero)
     f_grid_native[:, 1] .= 0.5  # u forcing
-    f_grid_native[:, dim + 2] .= 0.0  # s forcing
-    f_grid_native[:, 2:dim+1] .= 0.0  # gradient components forcing
-    f_grid_native[:, dim + 2] .= 1.0  # s forcing (constraint enforcement)
+    f_grid_native[:, 2] .= 1.0  # s forcing (constraint enforcement)
 
     # Convert to PETSc types
     g_grid_petsc = Mat_uniform(g_grid_native; Prefix=MPIDENSE)
