@@ -416,6 +416,46 @@ function LinearAlgebra.mul!(y::Vec{T,Prefix}, A::Mat{T,Prefix}, x::Vec{T,Prefix}
     return y
 end
 
+"""
+    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,PrefixX}) -> Vec{T,PrefixX}
+
+**MPI Collective**
+
+Transpose-matrix-vector multiplication: y = A' * x.
+
+Computes the product of a transposed matrix and a vector using PETSc's MatMultTranspose.
+Matrices and vectors can have different prefixes.
+
+Returns a new distributed vector with the result.
+"""
+function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
+    A = parent(At)::Mat{T,PrefixA}
+
+    # Check dimensions and partitioning - coalesced into single MPI synchronization
+    m, n = size(A)
+    vec_length = size(x)[1]
+    @mpiassert m == vec_length && A.obj.row_partition == x.obj.row_partition "Matrix rows must match vector length (A: $(m)×$(n), x: $(vec_length)) and row partition of A must match row partition of x"
+
+    # Create result vector with A's column partition (since A' has dimensions n×m)
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    col_lo = A.obj.col_partition[rank+1]
+    col_hi = A.obj.col_partition[rank+2] - 1
+    nlocal = col_hi - col_lo + 1
+
+    y_petsc = _vec_create_mpi_for_T(T, nlocal, n, PrefixX, A.obj.col_partition)
+
+    # Perform y = A^T * x using PETSc
+    _mat_mult_transpose_vec!(y_petsc, A.obj.A, x.obj.v)
+
+    PETSc.assemble(y_petsc)
+
+    # Wrap in DRef
+    obj = _Vec{T,PrefixX}(y_petsc, A.obj.col_partition)
+    return SafeMPI.DRef(obj)
+end
+
 # PETSc matrix-vector multiplication wrapper
 PETSc.@for_libpetsc begin
     function _mat_mult_vec!(y::PETSc.Vec{$PetscScalar}, A::PETSc.Mat{$PetscScalar}, x::PETSc.Vec{$PetscScalar})

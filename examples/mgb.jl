@@ -470,13 +470,14 @@ catch e
     println(io0(), "\n" * "="^70)
     println(io0(), "✗ Phase 3 FAILED with error:")
     println(io0(), "="^70)
-    println(io0(), e)
-    println(io0(), "")
-    for (exc, bt) in Base.catch_stack()
-        showerror(io0(), exc, bt)
-        println(io0())
+    println(io0(), "Error type: ", typeof(e))
+    if e isa MethodError
+        println(io0(), "MethodError: no method matching ", e.f)
+        println(io0(), "Argument types: ", typeof.(e.args))
     end
-    println(io0(), "="^70)
+    println(io0(), "\nStacktrace:")
+    Base.show_backtrace(io0(), catch_backtrace())
+    println(io0(), "\n" * "="^70)
 
     println(io0(), "\nThis indicates an issue that needs to be addressed.")
     println(io0(), "Please review the error above.")
@@ -666,13 +667,14 @@ catch e
     println(io0(), "\n" * "="^70)
     println(io0(), "✗ Phase 3 FAILED with error:")
     println(io0(), "="^70)
-    println(io0(), e)
-    println(io0(), "")
-    for (exc, bt) in Base.catch_stack()
-        showerror(io0(), exc, bt)
-        println(io0())
+    println(io0(), "Error type: ", typeof(e))
+    if e isa MethodError
+        println(io0(), "MethodError: no method matching ", e.f)
+        println(io0(), "Argument types: ", typeof.(e.args))
     end
-    println(io0(), "="^70)
+    println(io0(), "\nStacktrace:")
+    Base.show_backtrace(io0(), catch_backtrace())
+    println(io0(), "\n" * "="^70)
 
     println(io0(), "\nThis is expected - amgb may need additional work to support PETSc types.")
     println(io0(), "The error above indicates what needs to be fixed in SafePETSc.jl or")
