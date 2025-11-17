@@ -85,7 +85,7 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
         # Test from user's second example: map_rows((x)->[sum(x),prod(x)]',B)
         B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
 
-        result = map_rows(x -> [sum(x), prod(x)]', B; Prefix=MPIDENSE)
+        result = map_rows(x -> [sum(x), prod(x)]', B)
         expected = map_rows_native(x -> [sum(x), prod(x)]', B_data)
 
         # Should return a Mat with 5 rows, 2 cols
@@ -102,7 +102,7 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
         B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
         C = SafePETSc.Vec_uniform(C_data)
 
-        result = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C; Prefix=MPIDENSE)
+        result = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C)
 
         # For the native version, we need to reshape C_data for eachrow
         C_reshaped = reshape(C_data, :, 1)
@@ -165,7 +165,7 @@ ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
         # Convert vector to matrix by outputting row vectors
         C = SafePETSc.Vec_uniform(C_data)
 
-        result = map_rows(x -> [x[1], x[1]^2, x[1]^3]', C; Prefix=MPIDENSE)
+        result = map_rows(x -> [x[1], x[1]^2, x[1]^3]', C)
 
         @test size(result) == (5, 3)
 

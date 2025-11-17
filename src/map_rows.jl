@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 """
-    map_rows(f::Function, A::Union{Vec{T,Prefix},Mat{T,Prefix}}...; col_partition=nothing) -> Union{Vec{T,Prefix},Mat{T,Prefix}}
+    map_rows(f::Function, A::Union{Vec{T,Prefix},Mat{T,Prefix}}...; col_partition=nothing) -> Union{Vec{T,MPIDENSE},Mat{T,MPIDENSE}}
 
 **MPI Collective**
 
@@ -19,9 +19,9 @@ results are concatenated into a new distributed vector or matrix.
 - `col_partition::Union{Vector{Int},Nothing}`: Column partition for result matrix (default: use default_row_partition). Only used when `f` returns an adjoint vector (creating a matrix).
 
 # Return value
-The return type depends on what `f` returns:
-- If `f` returns a scalar or Julia Vector → returns a `Vec{T,Prefix}` (Prefix from first input)
-- If `f` returns an adjoint Julia Vector (row vector) → returns a `Mat{T,MPIDENSE}` (always dense)
+Always returns `Vec{T,MPIDENSE}` or `Mat{T,MPIDENSE}` (dense format). The return type depends on what `f` returns:
+- If `f` returns a scalar or Julia Vector → returns a `Vec{T,MPIDENSE}`
+- If `f` returns an adjoint Julia Vector (row vector) → returns a `Mat{T,MPIDENSE}`
 
 # Size behavior
 If inputs have `m` rows and `f` returns:
@@ -32,14 +32,14 @@ If inputs have `m` rows and `f` returns:
 ```julia
 # Example 1: Sum rows of a matrix
 B = Mat_uniform(randn(5, 3))
-sums = map_rows(sum, B)  # Returns Vec with 5 elements (one sum per row)
+sums = map_rows(sum, B)  # Returns Vec{Float64,MPIDENSE} with 5 elements
 
 # Example 2: Compute [sum, product] for each row (returns matrix)
-stats = map_rows(x -> [sum(x), prod(x)]', B)  # Returns 5×2 Mat
+stats = map_rows(x -> [sum(x), prod(x)]', B)  # Returns 5×2 Mat{Float64,MPIDENSE}
 
 # Example 3: Combine matrix and vector row-wise
 C = Vec_uniform(randn(5))
-combined = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C)  # Returns 5×3 Mat
+combined = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C)  # Returns 5×3 Mat{Float64,MPIDENSE}
 ```
 
 # Implementation notes
@@ -47,20 +47,16 @@ combined = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C)  # Returns 5×3 Ma
 - The function `f` is assumed to be homogeneous (always returns the same type of output)
 - For vectors, `f` receives a scalar value per row
 - For matrices, `f` receives a view of the row (similar to eachrow)
+- The result always uses MPIDENSE prefix regardless of input prefix
 """
 function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
-                  col_partition::Union{Vector{Int},Nothing}=nothing,
-                  Prefix::Union{Type,Nothing}=nothing) where {T}
+                  col_partition::Union{Vector{Int},Nothing}=nothing) where {T}
 
     # Validate inputs
     isempty(A) && throw(ArgumentError("map_rows requires at least one input"))
 
-    # Extract Prefix from first input if not explicitly provided
-    if Prefix === nothing
-        # Get the Prefix type parameter from the first input
-        first_obj_type = typeof(A[1].obj)
-        Prefix = first_obj_type.parameters[2]  # Second parameter is Prefix
-    end
+    # Always use MPIDENSE for outputs
+    Prefix = MPIDENSE
 
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
@@ -174,11 +170,6 @@ function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
     output_type = output_type_ref[] == 1 ? :vec_scalar : (output_type_ref[] == 2 ? :vec_vector : :mat)
     output_rows = output_rows_ref[]
     output_cols = output_cols_ref[]
-
-    # Use MPIDENSE for matrix results (they are always dense)
-    if output_type == :mat
-        Prefix = MPIDENSE
-    end
 
     # Create output based on type
     if output_type == :vec_scalar || output_type == :vec_vector

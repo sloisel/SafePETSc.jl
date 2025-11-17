@@ -5,11 +5,9 @@
 
 using MPI
 using SafePETSc
+using SafePETSc: MPIDENSE
 SafePETSc.Init()
 using LinearAlgebra
-
-# Setup dense matrix type for demonstration
-SafePETSc.petsc_options_insert_string("-dense_mat_type mpidense")
 
 println(io0(), "\n" * "="^70)
 println(io0(), "map_rows() Demonstration")
@@ -29,7 +27,8 @@ C_data = [0.5718337774182461,
           -0.016672510170726528]
 
 # Create distributed PETSc objects
-B = SafePETSc.Mat_uniform(B_data; prefix="dense_")
+# map_rows always returns MPIDENSE, so we use MPIDENSE for inputs too
+B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
 C = SafePETSc.Vec_uniform(C_data)
 
 println(io0(), "\n1. Scalar output - compute sum of each row:")
@@ -44,21 +43,21 @@ println(io0(), "   Result (10 elements, 5 rows × 2 values): ", Vector(result2))
 
 println(io0(), "\n3. Matrix output - compute [sum, product] as matrix rows:")
 println(io0(), "   map_rows(x -> [sum(x), prod(x)]', B)")
-result3 = map_rows(x -> [sum(x), prod(x)]', B; prefix="dense_")
+result3 = map_rows(x -> [sum(x), prod(x)]', B)
 println(io0(), "   Result (5×2 matrix):")
 show(io0(), MIME("text/plain"), Matrix(result3))
 println(io0(), "\n")
 
 println(io0(), "\n4. Multiple inputs - combine matrix and vector:")
 println(io0(), "   map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C)")
-result4 = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C; prefix="dense_")
+result4 = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C)
 println(io0(), "   Result (5×3 matrix):")
 show(io0(), MIME("text/plain"), Matrix(result4))
 println(io0(), "\n")
 
 println(io0(), "\n5. Vec to Mat transformation:")
 println(io0(), "   map_rows(x -> [x[1], x[1]^2, x[1]^3]', C)")
-result5 = map_rows(x -> [x[1], x[1]^2, x[1]^3]', C; prefix="dense_")
+result5 = map_rows(x -> [x[1], x[1]^2, x[1]^3]', C)
 println(io0(), "   Result (5×3 matrix, [value, value², value³] per row):")
 show(io0(), MIME("text/plain"), Matrix(result5))
 println(io0(), "\n")
@@ -66,6 +65,3 @@ println(io0(), "\n")
 println(io0(), "\n" * "="^70)
 println(io0(), "All examples completed successfully!")
 println(io0(), "="^70)
-
-# Clean up
-SafePETSc.SafeMPI.check_and_destroy!()
