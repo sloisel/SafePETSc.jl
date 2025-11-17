@@ -245,6 +245,87 @@ end
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
+# Test 9: prefix parameter - MPIDENSE Vec to MPIAIJ Mat
+if rank == 0
+    println("[DEBUG] Test 9: prefix MPIDENSE -> MPIAIJ")
+    flush(stdout)
+end
+
+using SafePETSc: MPIAIJ, MPIDENSE
+diag_data = Float64.(1:5)
+drdiag_dense = SafePETSc.Vec_uniform(diag_data; Prefix=MPIDENSE)
+
+# Create sparse matrix from dense vector using prefix parameter
+drA = spdiagm(0 => drdiag_dense; prefix=MPIAIJ)
+@test drA isa SafeMPI.DRef
+@test size(drA) == (5, 5)
+@test typeof(drA.obj) == SafePETSc._Mat{Float64, MPIAIJ}
+
+# Verify result is correct
+A_local = SafePETSc._mat_to_local_sparse(drA)
+A_julia = spdiagm(0 => diag_data)
+A_sum = zeros(5, 5)
+MPI.Reduce!(Matrix(A_local), A_sum, +, 0, comm)
+if rank == 0
+    @test all(isapprox.(A_sum, Matrix(A_julia), rtol=1e-10))
+end
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 10: prefix parameter - MPIDENSE Vec to MPIDENSE Mat
+if rank == 0
+    println("[DEBUG] Test 10: prefix MPIDENSE -> MPIDENSE")
+    flush(stdout)
+end
+
+drdiag_dense = SafePETSc.Vec_uniform(diag_data; Prefix=MPIDENSE)
+drA = spdiagm(0 => drdiag_dense; prefix=MPIDENSE)
+@test drA isa SafeMPI.DRef
+@test size(drA) == (5, 5)
+@test typeof(drA.obj) == SafePETSc._Mat{Float64, MPIDENSE}
+
+# Verify result is correct
+A_local = SafePETSc._mat_to_local_sparse(drA)
+A_sum = zeros(5, 5)
+MPI.Reduce!(Matrix(A_local), A_sum, +, 0, comm)
+if rank == 0
+    @test all(isapprox.(A_sum, Matrix(A_julia), rtol=1e-10))
+end
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 11: prefix parameter with multiple diagonals
+if rank == 0
+    println("[DEBUG] Test 11: prefix with tridiagonal MPIDENSE -> MPIAIJ")
+    flush(stdout)
+end
+
+lower_data = ones(Float64, 4) * (-1.0)
+diag_data = ones(Float64, 5) * 2.0
+upper_data = ones(Float64, 4) * (-1.0)
+drlower_dense = SafePETSc.Vec_uniform(lower_data; Prefix=MPIDENSE)
+drdiag_dense = SafePETSc.Vec_uniform(diag_data; Prefix=MPIDENSE)
+drupper_dense = SafePETSc.Vec_uniform(upper_data; Prefix=MPIDENSE)
+
+drA = spdiagm(-1 => drlower_dense, 0 => drdiag_dense, 1 => drupper_dense; prefix=MPIAIJ)
+@test drA isa SafeMPI.DRef
+@test size(drA) == (5, 5)
+@test typeof(drA.obj) == SafePETSc._Mat{Float64, MPIAIJ}
+
+# Verify result
+A_local = SafePETSc._mat_to_local_sparse(drA)
+A_julia = spdiagm(-1 => lower_data, 0 => diag_data, 1 => upper_data)
+A_sum = zeros(5, 5)
+MPI.Reduce!(Matrix(A_local), A_sum, +, 0, comm)
+if rank == 0
+    @test all(isapprox.(A_sum, Matrix(A_julia), rtol=1e-10))
+end
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
 if rank == 0
     println("[DEBUG] All spdiagm tests completed")
     flush(stdout)

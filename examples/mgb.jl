@@ -19,6 +19,69 @@ if !haskey(Pkg.project().dependencies, "MultiGridBarrier")
 end
 using MultiGridBarrier
 
+# ============================================================================
+# MultiGridBarrier API Implementation for SafePETSc Types
+# ============================================================================
+# These methods teach MultiGridBarrier how to work with PETSc distributed types
+
+# Import the functions we need to extend
+import MultiGridBarrier: amgb_zeros, amgb_all_isfinite, amgb_hcat, amgb_diag, amgb_blockdiag, map_rows
+
+# amgb_zeros: Create zero matrices with appropriate type
+# For sparse PETSc matrices (MPIAIJ)
+MultiGridBarrier.amgb_zeros(::Mat{T, MPIAIJ}, m, n) where {T} = Mat_uniform(spzeros(T, m, n); Prefix=MPIAIJ)
+MultiGridBarrier.amgb_zeros(::LinearAlgebra.Adjoint{T, <:Mat{T, MPIAIJ}}, m, n) where {T} = Mat_uniform(spzeros(T, m, n); Prefix=MPIAIJ)
+
+# For dense PETSc matrices (MPIDENSE)
+MultiGridBarrier.amgb_zeros(::Mat{T, MPIDENSE}, m, n) where {T} = Mat_uniform(zeros(T, m, n); Prefix=MPIDENSE)
+MultiGridBarrier.amgb_zeros(::LinearAlgebra.Adjoint{T, <:Mat{T, MPIDENSE}}, m, n) where {T} = Mat_uniform(zeros(T, m, n); Prefix=MPIDENSE)
+
+# amgb_all_isfinite: Check if all elements are finite
+# For PETSc vectors, convert to native and check
+MultiGridBarrier.amgb_all_isfinite(z::Vec{T}) where {T} = all(isfinite.(Vector(z)))
+
+# amgb_hcat: Horizontal concatenation
+# Always return MPIAIJ (sparse) to match geometry operators
+# This is needed because g_grid/f_grid are MPIDENSE but results must be MPIAIJ
+MultiGridBarrier.amgb_hcat(A::Mat...) = begin
+    result = hcat(A...)
+    # If result is already MPIAIJ, return it; otherwise convert
+    if typeof(result.obj) == SafePETSc._Mat{eltype(result), MPIAIJ}
+        return result
+    else
+        # Convert to sparse
+        return Mat_uniform(sparse(Matrix(result)); Prefix=MPIAIJ)
+    end
+end
+
+# amgb_diag: Create diagonal matrix from vector
+# Returns matrix with same Prefix as prototype (first argument)
+MultiGridBarrier.amgb_diag(::Mat{T, MPIAIJ}, z::Vec{T}, m=length(z), n=length(z)) where {T} =
+    spdiagm(m, n, 0 => z; prefix=MPIAIJ)
+MultiGridBarrier.amgb_diag(::Mat{T, MPIAIJ}, z::Vector{T}, m=length(z), n=length(z)) where {T} =
+    Mat_uniform(spdiagm(m, n, 0 => z); Prefix=MPIAIJ)
+
+MultiGridBarrier.amgb_diag(::Mat{T, MPIDENSE}, z::Vec{T}, m=length(z), n=length(z)) where {T} =
+    spdiagm(m, n, 0 => z; prefix=MPIDENSE)
+MultiGridBarrier.amgb_diag(::Mat{T, MPIDENSE}, z::Vector{T}, m=length(z), n=length(z)) where {T} =
+    Mat_uniform(spdiagm(m, n, 0 => z); Prefix=MPIDENSE)
+
+# amgb_blockdiag: Block diagonal concatenation
+# Use SafePETSc's blockdiag directly
+MultiGridBarrier.amgb_blockdiag(args::Mat{T, MPIAIJ}...) where {T} = blockdiag(args...)
+MultiGridBarrier.amgb_blockdiag(args::Mat{T, MPIDENSE}...) where {T} = blockdiag(args...)
+
+# map_rows: Apply function to each row
+# Use SafePETSc's map_rows which handles both sparse and dense PETSc matrices
+MultiGridBarrier.map_rows(f, A::Mat...) = SafePETSc.map_rows(f, A...)
+
+# Additional base functions needed for MultiGridBarrier
+# These work by converting to native arrays temporarily
+Base.minimum(v::Vec{T}) where {T} = minimum(Vector(v))
+Base.maximum(v::Vec{T}) where {T} = maximum(Vector(v))
+
+println(io0(), "✓ MultiGridBarrier API implemented for SafePETSc types")
+
 println(io0(), "\n" * "="^70)
 println(io0(), "MultiGridBarrier + SafePETSc Integration Example")
 println(io0(), "="^70)
@@ -42,8 +105,8 @@ function geometry_native_to_petsc(g_native)
     # Convert x (geometry coordinates) to MPIDENSE Mat
     x_petsc = Mat_uniform(g_native.x; Prefix=MPIDENSE)
 
-    # Convert w (weights) to MPIDENSE Vec
-    w_petsc = Vec_uniform(g_native.w)
+    # Convert w (weights) to MPIDENSE Vec (weights are uniform/dense data)
+    w_petsc = Vec_uniform(g_native.w; Prefix=MPIDENSE)
 
     # Convert all operators to MPIAIJ Mat
     # Sort keys to ensure deterministic order across all ranks

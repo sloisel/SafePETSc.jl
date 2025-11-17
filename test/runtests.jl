@@ -103,6 +103,10 @@ end
         run_mpi_test(joinpath(@__DIR__, "test_map_rows.jl"); nprocs=4, expect_success=true)
     end
 
+    @testset "map_rows Sparse Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_map_rows_sparse.jl"); nprocs=4, expect_success=true)
+    end
+
     @testset "Vec Pooling Edge Cases Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_vec_pool_edge.jl"); nprocs=4, expect_success=true)
     end

@@ -1471,7 +1471,7 @@ A = spdiagm(-1 => lower, 0 => diag, 1 => upper)
 B = spdiagm(100, 100, 0 => v1, 1 => v2)
 ```
 """
-function spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...; kwargs...) where {T,Prefix}
+function spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...; prefix=Prefix, kwargs...) where {T,Prefix}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
@@ -1493,12 +1493,13 @@ function spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...; kwargs...) where {T,Pr
         end
     end
 
-    return spdiagm(m, n, kv...; kwargs...)
+    return spdiagm(m, n, kv...; prefix=prefix, kwargs...)
 end
 
 function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...;
                  row_partition::Vector{Int}=default_row_partition(m, MPI.Comm_size(MPI.COMM_WORLD)),
-                 col_partition::Vector{Int}=default_row_partition(n, MPI.Comm_size(MPI.COMM_WORLD))) where {T,Prefix}
+                 col_partition::Vector{Int}=default_row_partition(n, MPI.Comm_size(MPI.COMM_WORLD)),
+                 prefix=Prefix) where {T,Prefix}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
@@ -1616,7 +1617,7 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...
     return Mat_sum(local_result;
                    row_partition=row_partition,
                    col_partition=col_partition,
-                   Prefix=Prefix,
+                   Prefix=prefix,
                    own_rank_only=false)
 end
 
@@ -1636,11 +1637,13 @@ PETSc.@for_libpetsc begin
 end
 
 # -----------------------------------------------------------------------------
-# eachrow for distributed MPIDENSE matrices
-# - Assumes A is MATMPIDENSE; iterates local rows and yields SubArray views
-# - Performs exactly one MatDenseGetArrayRead per iterator and restores on finish
+# eachrow for distributed matrices (both MPIDENSE and MPIAIJ)
+# - For dense matrices: uses MatDenseGetArrayRead and yields SubArray views
+# - For sparse matrices: uses MatGetRow and yields sparse vector representations
+# - Performs exactly one MatDenseGetArrayRead per iterator (dense) and restores on finish
 # -----------------------------------------------------------------------------
 
+# Dense matrix iterator
 mutable struct _EachRowDense{T,Prefix}
     aref::SafeMPI.DRef{_Mat{T,Prefix}}           # keep the matrix alive
     petscA::PETSc.Mat{T}                  # underlying PETSc Mat
@@ -1741,6 +1744,72 @@ function Base.iterate(it::_EachRowDense{T,Prefix}, st::Int) where {T,Prefix}
     return (row, i)
 end
 
+# -----------------------------------------------------------------------------
+# Sparse matrix iterator (MPIAIJ)
+# -----------------------------------------------------------------------------
+
+mutable struct _EachRowSparse{T,Prefix}
+    aref::SafeMPI.DRef{_Mat{T,Prefix}}     # keep the matrix alive
+    petscA::PETSc.Mat{T}                   # underlying PETSc Mat
+    row_lo::Int                            # global start row (1-based)
+    nloc::Int                              # number of local rows
+    ncols::Int                             # global number of columns
+end
+
+function _eachrow_sparse(A::Mat{T,Prefix}) where {T,Prefix}
+    # Determine local row range from stored partition
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    row_lo = A.obj.row_partition[rank+1]
+    row_hi = A.obj.row_partition[rank+2] - 1
+    nloc = row_hi - row_lo + 1
+    ncols = size(A, 2)
+
+    return _EachRowSparse{T,Prefix}(A, A.obj.A, row_lo, nloc, ncols)
+end
+
+Base.IteratorEltype(::Type{_EachRowSparse{T,Prefix}}) where {T,Prefix} = Base.HasEltype()
+Base.eltype(::Type{_EachRowSparse{T,Prefix}}) where {T,Prefix} = Vector{T}
+Base.IteratorSize(::Type{_EachRowSparse{T,Prefix}}) where {T,Prefix} = Base.HasLength()
+Base.length(it::_EachRowSparse) = it.nloc
+
+function Base.iterate(it::_EachRowSparse{T,Prefix}) where {T,Prefix}
+    it.nloc == 0 && return nothing
+    return _iterate_sparse_row(it, 0)
+end
+
+function Base.iterate(it::_EachRowSparse{T,Prefix}, st::Int) where {T,Prefix}
+    i = st + 1
+    i > it.nloc && return nothing
+    return _iterate_sparse_row(it, st)
+end
+
+function _iterate_sparse_row(it::_EachRowSparse{T,Prefix}, st::Int) where {T,Prefix}
+    i = st + 1
+    global_row = it.row_lo + i - 1
+
+    # Get the sparse row from PETSc
+    ncols_row, cols_ptr, vals_ptr = _mat_get_row(it.petscA, global_row)
+
+    # Create a dense vector representation of the row
+    row_vec = zeros(T, it.ncols)
+
+    # Copy sparse data into dense vector
+    if ncols_row > 0
+        cols = unsafe_wrap(Array, cols_ptr, ncols_row; own=false)
+        vals = unsafe_wrap(Array, vals_ptr, ncols_row; own=false)
+
+        for j in 1:ncols_row
+            col_idx = cols[j] + 1  # Convert from 0-based to 1-based
+            row_vec[col_idx] = vals[j]
+        end
+    end
+
+    # Restore the row data to PETSc
+    _mat_restore_row(it.petscA, global_row, ncols_row, cols_ptr, vals_ptr)
+
+    return (row_vec, i)
+end
+
 """
     Base.eachrow(A::Mat{T,Prefix}) -> Iterator
 
@@ -1748,10 +1817,18 @@ end
 
 Iterate over the rows of a distributed matrix.
 
-Only iterates over rows owned by the current rank. Each row is returned as a view.
+Only iterates over rows owned by the current rank. Each row is returned as a view (for dense)
+or a dense Vector (for sparse matrices converted from sparse representation).
+
+For MPIDENSE matrices: returns views of the underlying dense storage
+For MPIAIJ matrices: returns dense Vector{T} representations of each sparse row
 """
-function Base.eachrow(A::Mat{T,Prefix}) where {T,Prefix}
+function Base.eachrow(A::Mat{T,MPIDENSE}) where {T}
     return _eachrow_dense(A)
+end
+
+function Base.eachrow(A::Mat{T,MPIAIJ}) where {T}
+    return _eachrow_sparse(A)
 end
 
 # -----------------------------------------------------------------------------
