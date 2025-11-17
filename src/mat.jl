@@ -1053,7 +1053,7 @@ PETSc.@for_libpetsc begin
             PETSc.PetscErrorCode,
             (PETSc.CMat, Cint, Ptr{PETSc.CMat}),
             A.obj.A,
-            Cint(0),  # MAT_COPY_VALUES
+            Cint(1),  # MAT_COPY_VALUES
             result_mat_ref
         )
         result_mat = PETSc.Mat{$PetscScalar}(result_mat_ref[])
@@ -1106,7 +1106,7 @@ PETSc.@for_libpetsc begin
             PETSc.PetscErrorCode,
             (PETSc.CMat, Cint, Ptr{PETSc.CMat}),
             A.obj.A,
-            Cint(0),  # MAT_COPY_VALUES
+            Cint(1),  # MAT_COPY_VALUES
             result_mat_ref
         )
         result_mat = PETSc.Mat{$PetscScalar}(result_mat_ref[])
@@ -1136,6 +1136,154 @@ PETSc.@for_libpetsc begin
     Requires A to be square.
     """
     Base.:+(A::Mat{$PetscScalar,Prefix}, α::Number) where {Prefix} = α + A
+
+    """
+        Base.:-(A::Mat{T,Prefix}, α::Number) -> Mat{T,Prefix}
+
+    **MPI Collective**
+
+    Matrix-scalar subtraction: A - α.
+
+    Subtracts scalar α from the diagonal of matrix A (equivalent to A - α*I).
+    Requires A to be square.
+    """
+    function Base.:-(A::Mat{$PetscScalar,Prefix}, α::Number) where {Prefix}
+        @mpiassert size(A, 1) == size(A, 2) "Scalar-matrix subtraction requires square matrix"
+
+        # Duplicate the matrix
+        result_mat_ref = Ref{PETSc.CMat}(C_NULL)
+        PETSc.@chk ccall(
+            (:MatDuplicate, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, Cint, Ptr{PETSc.CMat}),
+            A.obj.A,
+            Cint(1),  # MAT_COPY_VALUES
+            result_mat_ref
+        )
+        result_mat = PETSc.Mat{$PetscScalar}(result_mat_ref[])
+
+        # Shift the diagonal by -α (A := A - α*I)
+        PETSc.@chk ccall(
+            (:MatShift, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, $PetscScalar),
+            result_mat,
+            $PetscScalar(-α)
+        )
+
+        # Wrap in our _Mat type
+        obj = _Mat{$PetscScalar,Prefix}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition))
+        return SafeMPI.DRef(obj)
+    end
+
+    """
+        Base.:-(α::Number, A::Mat{T,Prefix}) -> Mat{T,Prefix}
+
+    **MPI Collective**
+
+    Scalar-matrix subtraction: α - A.
+
+    Computes α*I - A (negates A and adds α to the diagonal).
+    Requires A to be square.
+    """
+    function Base.:-(α::Number, A::Mat{$PetscScalar,Prefix}) where {Prefix}
+        @mpiassert size(A, 1) == size(A, 2) "Scalar-matrix subtraction requires square matrix"
+
+        # Duplicate the matrix
+        result_mat_ref = Ref{PETSc.CMat}(C_NULL)
+        PETSc.@chk ccall(
+            (:MatDuplicate, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, Cint, Ptr{PETSc.CMat}),
+            A.obj.A,
+            Cint(1),  # MAT_COPY_VALUES
+            result_mat_ref
+        )
+        result_mat = PETSc.Mat{$PetscScalar}(result_mat_ref[])
+
+        # Scale by -1 (negate the matrix)
+        PETSc.@chk ccall(
+            (:MatScale, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, $PetscScalar),
+            result_mat,
+            $PetscScalar(-1)
+        )
+
+        # Shift the diagonal by α (A := -A + α*I)
+        PETSc.@chk ccall(
+            (:MatShift, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, $PetscScalar),
+            result_mat,
+            $PetscScalar(α)
+        )
+
+        # Wrap in our _Mat type
+        obj = _Mat{$PetscScalar,Prefix}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition))
+        return SafeMPI.DRef(obj)
+    end
+end
+
+# UniformScaling operations (for working with LinearAlgebra.I)
+using LinearAlgebra: UniformScaling
+
+PETSc.@for_libpetsc begin
+    """
+        Base.:+(A::Mat{T,Prefix}, J::UniformScaling) -> Mat{T,Prefix}
+
+    **MPI Collective**
+
+    Matrix-UniformScaling addition: A + J.
+
+    Adds J.λ to the diagonal of matrix A (equivalent to A + J.λ*I).
+    Requires A to be square.
+    """
+    function Base.:+(A::Mat{$PetscScalar,Prefix}, J::UniformScaling) where {Prefix}
+        return A + $PetscScalar(J.λ)
+    end
+
+    """
+        Base.:+(J::UniformScaling, A::Mat{T,Prefix}) -> Mat{T,Prefix}
+
+    **MPI Collective**
+
+    UniformScaling-matrix addition: J + A.
+
+    Adds J.λ to the diagonal of matrix A (equivalent to J.λ*I + A).
+    Requires A to be square.
+    """
+    function Base.:+(J::UniformScaling, A::Mat{$PetscScalar,Prefix}) where {Prefix}
+        return A + $PetscScalar(J.λ)
+    end
+
+    """
+        Base.:-(A::Mat{T,Prefix}, J::UniformScaling) -> Mat{T,Prefix}
+
+    **MPI Collective**
+
+    Matrix-UniformScaling subtraction: A - J.
+
+    Subtracts J.λ from the diagonal of matrix A (equivalent to A - J.λ*I).
+    Requires A to be square.
+    """
+    function Base.:-(A::Mat{$PetscScalar,Prefix}, J::UniformScaling) where {Prefix}
+        return A - $PetscScalar(J.λ)
+    end
+
+    """
+        Base.:-(J::UniformScaling, A::Mat{T,Prefix}) -> Mat{T,Prefix}
+
+    **MPI Collective**
+
+    UniformScaling-matrix subtraction: J - A.
+
+    Computes J.λ*I - A (negates A and adds J.λ to the diagonal).
+    Requires A to be square.
+    """
+    function Base.:-(J::UniformScaling, A::Mat{$PetscScalar,Prefix}) where {Prefix}
+        return $PetscScalar(J.λ) - A
+    end
 end
 
 # PETSc matrix-matrix multiplication wrapper

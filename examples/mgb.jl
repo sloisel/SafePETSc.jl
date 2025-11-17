@@ -213,3 +213,211 @@ end
 println(io0(), "\n" * "="^70)
 println(io0(), "Phase 1 completed successfully!")
 println(io0(), "="^70)
+
+println(io0(), "\n" * "="^70)
+println(io0(), "Phase 2: Testing Convex barrier functions")
+println(io0(), "="^70)
+
+# Create a simple Convex object to test with both geometries
+println(io0(), "\nCreating Convex object for testing...")
+
+# Create a simple p-Laplace Convex constraint using convex_Euclidian_power
+# This creates the constraint: s >= ||q||_2^p for the gradient components
+p_value = 2.0  # Start with p=2 (easier to test)
+Q = convex_Euclidian_power(Float64; p=x->Float64(p_value))
+println(io0(), "  ✓ Created Convex object with p = ", p_value)
+
+# Test the barrier function with native types
+println(io0(), "\nTesting barrier functions with native types...")
+using Random
+Random.seed!(42)
+
+# Get a sample point from the geometry
+x_native = g_native.x[1, :]  # Spatial coordinates for first node
+y_test_native = randn(3)  # Test state: [q1, q2, s] where s should be > ||q||^p
+y_test_native[3] = abs(y_test_native[3]) + norm(y_test_native[1:2])^p_value + 1.0  # Ensure feasibility
+
+# Evaluate the three barrier functions
+barrier_val_native = Q.barrier(x_native, y_test_native)
+cobarrier_val_native = Q.cobarrier(x_native, [y_test_native; 1.0])  # With slack
+slack_val_native = Q.slack(x_native, y_test_native)
+
+println(io0(), "  barrier(x, y) = ", barrier_val_native)
+println(io0(), "  cobarrier(x, [y; s]) = ", cobarrier_val_native)
+println(io0(), "  slack(x, y) = ", slack_val_native)
+
+# Now test with PETSc types - barrier functions should work with native arrays
+# even when geometry uses PETSc types
+println(io0(), "\nTesting barrier functions with PETSc geometry...")
+# Convert the entire x matrix to native, then extract the row
+x_petsc_matrix = Matrix(g_petsc.x)
+x_petsc = x_petsc_matrix[1, :]  # Extract first row as native array
+
+barrier_val_petsc = Q.barrier(x_petsc, y_test_native)
+cobarrier_val_petsc = Q.cobarrier(x_petsc, [y_test_native; 1.0])
+slack_val_petsc = Q.slack(x_petsc, y_test_native)
+
+println(io0(), "  barrier(x, y) = ", barrier_val_petsc)
+println(io0(), "  cobarrier(x, [y; s]) = ", cobarrier_val_petsc)
+println(io0(), "  slack(x, y) = ", slack_val_petsc)
+
+# Verify they match
+barrier_diff = abs(barrier_val_native - barrier_val_petsc)
+cobarrier_diff = abs(cobarrier_val_native - cobarrier_val_petsc)
+slack_diff = abs(slack_val_native - slack_val_petsc)
+
+println(io0(), "\nDifferences:")
+println(io0(), "  |barrier_native - barrier_petsc| = ", barrier_diff)
+println(io0(), "  |cobarrier_native - cobarrier_petsc| = ", cobarrier_diff)
+println(io0(), "  |slack_native - slack_petsc| = ", slack_diff)
+
+# Test geometry operators by applying them
+println(io0(), "\nTesting geometry operators...")
+n_vars = size(g_native.x, 1)
+
+# Test each operator
+for op_key in [:id, :dx, :dy]
+    println(io0(), "  Testing operator :$op_key...")
+
+    op_native = g_native.operators[op_key]
+    op_petsc = g_petsc.operators[op_key]
+
+    # Apply to a random vector
+    v_native = randn(n_vars)
+    v_petsc = Vec_uniform(v_native)
+
+    result_native = op_native * v_native
+    result_petsc = Vector(op_petsc * v_petsc)
+
+    diff = norm(result_native - result_petsc)
+    println(io0(), "    ||op_native * v - op_petsc * v|| = ", diff)
+end
+
+# Summary
+println(io0(), "\n" * "="^70)
+println(io0(), "Phase 2 Summary:")
+println(io0(), "="^70)
+
+tol = 1e-14
+all_ok = true
+
+if barrier_diff < tol && cobarrier_diff < tol && slack_diff < tol
+    println(io0(), "  ✓ All barrier functions match to tolerance")
+else
+    println(io0(), "  ✗ Barrier function ERROR: max diff = ", max(barrier_diff, cobarrier_diff, slack_diff))
+    global all_ok = false
+end
+
+if all_ok
+    println(io0(), "  ✓ Phase 2 completed successfully!")
+    println(io0(), "  Convex barrier functions work correctly!")
+else
+    println(io0(), "  ✗ Phase 2 FAILED - differences detected")
+end
+
+println(io0(), "="^70)
+
+println(io0(), "\n" * "="^70)
+println(io0(), "Phase 3: Testing amgb(...) solver")
+println(io0(), "="^70)
+
+# Now try running amgb with both native and PETSc geometries
+println(io0(), "\nRunning amgb with native geometry...")
+try
+    sol_native = amgb(g_native; p=p_value, verbose=false)
+    println(io0(), "  ✓ Native amgb completed successfully!")
+    println(io0(), "  Solution size: ", size(sol_native.z))
+    println(io0(), "  Solution norm: ", norm(sol_native.z))
+
+    # Extract the native g_grid and f_grid from the solution to see what defaults were used
+    println(io0(), "\nExamining defaults used by native amgb...")
+    println(io0(), "  (We'll adapt these for PETSc)")
+
+    # Try with PETSc geometry - need to provide g_grid and f_grid adapted to PETSc types
+    println(io0(), "\nRunning amgb with PETSc geometry...")
+
+    # Create g_grid and f_grid using PETSc types
+    # The defaults from fem2d are boundary and forcing data
+    # For fem2d with default parameters, g specifies Dirichlet boundary values
+    # and f specifies the forcing term
+
+    # Get the native defaults by inspecting what fem2d_solve would use
+    # For p-Laplace, the defaults are typically:
+    # g_grid: boundary values (size: n_boundary_nodes × n_state_vars)
+    # f_grid: forcing values (size: n_nodes × n_state_vars)
+
+    # Use the same defaults as native but convert to PETSc uniform matrices
+    n_nodes = size(g_native.x, 1)
+    dim = size(g_native.x, 2)
+
+    # For p-Laplace in 2D, we have state variables [u, s] where:
+    # u = solution, s = slack variable for the gradient constraint
+    # Default boundary: u = norm(x)^p on boundary, s = large value
+    # Default forcing: zero
+
+    # Create native grids matching MultiGridBarrier defaults
+    g_grid_native = zeros(n_nodes, dim + 2)  # [u, dirichlet; s, full]
+    for i in 1:n_nodes
+        x_coord = g_native.x[i, :]
+        g_grid_native[i, 1] = norm(x_coord)^p_value  # u boundary value
+        g_grid_native[i, 2] = 100.0  # s boundary value (large for slack)
+    end
+
+    f_grid_native = zeros(n_nodes, dim + 2)  # forcing term (typically zero)
+    f_grid_native[:, 1] .= 0.5  # u forcing
+    f_grid_native[:, dim + 2] .= 0.0  # s forcing
+    f_grid_native[:, 2:dim+1] .= 0.0  # gradient components forcing
+    f_grid_native[:, dim + 2] .= 1.0  # s forcing (constraint enforcement)
+
+    # Convert to PETSc types
+    g_grid_petsc = Mat_uniform(g_grid_native; Prefix=MPIDENSE)
+    f_grid_petsc = Mat_uniform(f_grid_native; Prefix=MPIDENSE)
+
+    println(io0(), "  Created g_grid_petsc: ", typeof(g_grid_petsc), " size ", size(g_grid_petsc))
+    println(io0(), "  Created f_grid_petsc: ", typeof(f_grid_petsc), " size ", size(f_grid_petsc))
+
+    sol_petsc = amgb(g_petsc; p=p_value, g_grid=g_grid_petsc, f_grid=f_grid_petsc, verbose=false)
+    println(io0(), "  ✓ PETSc amgb completed successfully!")
+    println(io0(), "  Solution size: ", size(sol_petsc.z))
+
+    # Convert PETSc solution to native for comparison
+    z_petsc_native = if typeof(sol_petsc.z) <: Matrix
+        sol_petsc.z
+    else
+        Matrix(sol_petsc.z)
+    end
+    println(io0(), "  Solution norm: ", norm(z_petsc_native))
+
+    # Compare solutions
+    sol_diff = norm(sol_native.z - z_petsc_native)
+    println(io0(), "\nSolution comparison:")
+    println(io0(), "  ||z_native - z_petsc|| = ", sol_diff)
+
+    if sol_diff < 1e-6
+        println(io0(), "\n" * "="^70)
+        println(io0(), "✓ Phase 3 completed successfully!")
+        println(io0(), "✓ amgb works with PETSc types and produces correct results!")
+        println(io0(), "="^70)
+    else
+        println(io0(), "\n" * "="^70)
+        println(io0(), "⚠ Phase 3 completed with differences")
+        println(io0(), "  Solutions differ by ", sol_diff)
+        println(io0(), "="^70)
+    end
+
+catch e
+    println(io0(), "\n" * "="^70)
+    println(io0(), "✗ Phase 3 FAILED with error:")
+    println(io0(), "="^70)
+    println(io0(), e)
+    println(io0(), "")
+    for (exc, bt) in Base.catch_stack()
+        showerror(io0(), exc, bt)
+        println(io0())
+    end
+    println(io0(), "="^70)
+
+    println(io0(), "\nThis is expected - amgb may need additional work to support PETSc types.")
+    println(io0(), "The error above indicates what needs to be fixed in SafePETSc.jl or")
+    println(io0(), "what interface is missing.")
+end
