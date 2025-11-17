@@ -42,7 +42,6 @@ jobs:
         uses: julia-actions/julia-runtest@v1
         with:
           coverage: true
-        continue-on-error: true
 
       - name: Setup tmate session for debugging
         uses: mxschmitt/action-tmate@v3
