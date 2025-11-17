@@ -1286,6 +1286,99 @@ PETSc.@for_libpetsc begin
     end
 end
 
+# Matrix norms using PETSc's MatNorm
+using LinearAlgebra: norm
+
+PETSc.@for_libpetsc begin
+    # PETSc NormType constants (from petscsystypes.h)
+    const NORM_1 = Cint(0)
+    const NORM_FROBENIUS = Cint(2)
+    const NORM_INFINITY = Cint(3)
+
+    """
+        LinearAlgebra.norm(A::Mat{T,Prefix}) -> T
+
+    **MPI Collective**
+
+    Compute the Frobenius norm of a distributed PETSc matrix: √(sum of squares of all entries).
+
+    Note: This is the only matrix norm supported. For induced operator norms (max column/row sum),
+    use `opnorm(A, p)` instead.
+
+    # Examples
+    ```julia
+    A = Mat_uniform(sprand(10, 10, 0.3))
+    norm(A)        # Frobenius norm
+    ```
+    """
+    function LinearAlgebra.norm(A::Mat{$PetscScalar,Prefix}) where {Prefix}
+        # Call PETSc's MatNorm with Frobenius norm
+        nrm = Ref{$PetscReal}(0)
+        PETSc.@chk ccall(
+            (:MatNorm, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, Cint, Ptr{$PetscReal}),
+            A.obj.A,
+            NORM_FROBENIUS,
+            nrm
+        )
+
+        return $PetscScalar(nrm[])
+    end
+
+    # Catch-all to provide helpful error message for norm(A, p)
+    function LinearAlgebra.norm(A::Mat{$PetscScalar,Prefix}, p::Real) where {Prefix}
+        error("norm(A, p) is not supported for PETSc matrices. Use norm(A) for Frobenius norm or opnorm(A, p) for induced operator norms.")
+    end
+
+    """
+        LinearAlgebra.opnorm(A::Mat{T,Prefix}, p::Real=2) -> T
+
+    **MPI Collective**
+
+    Compute the induced operator norm of a distributed PETSc matrix.
+
+    Supported norms:
+    - `p = 1`: 1-norm (maximum absolute column sum)
+    - `p = 2`: Spectral norm (largest singular value) - not supported, use Frobenius as approximation
+    - `p = Inf`: Infinity norm (maximum absolute row sum)
+
+    # Examples
+    ```julia
+    A = Mat_uniform(sprand(10, 10, 0.3))
+    opnorm(A, 1)     # Maximum absolute column sum
+    opnorm(A, Inf)   # Maximum absolute row sum
+    ```
+    """
+    function LinearAlgebra.opnorm(A::Mat{$PetscScalar,Prefix}, p::Real=2) where {Prefix}
+        # Determine which PETSc norm type to use
+        norm_type = if p == 1
+            NORM_1
+        elseif p == 2
+            # Spectral norm (2-norm) requires expensive SVD computation
+            # Fall back to Frobenius norm as an upper bound approximation
+            NORM_FROBENIUS
+        elseif isinf(p)
+            NORM_INFINITY
+        else
+            error("Only p = 1, 2, or Inf are supported for operator norms")
+        end
+
+        # Call PETSc's MatNorm
+        nrm = Ref{$PetscReal}(0)
+        PETSc.@chk ccall(
+            (:MatNorm, $libpetsc),
+            PETSc.PetscErrorCode,
+            (PETSc.CMat, Cint, Ptr{$PetscReal}),
+            A.obj.A,
+            norm_type,
+            nrm
+        )
+
+        return $PetscScalar(nrm[])
+    end
+end
+
 # PETSc matrix-matrix multiplication wrapper
 PETSc.@for_libpetsc begin
     function _mat_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, Prefix::Type)

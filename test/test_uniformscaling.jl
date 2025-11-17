@@ -4,6 +4,7 @@
 using MPI
 using SafePETSc
 using LinearAlgebra
+using LinearAlgebra: opnorm
 using SparseArrays
 using Test
 
@@ -141,4 +142,58 @@ SafePETSc.Init()
     # end
 end
 
-println(io0(), "UniformScaling tests passed!")
+@testset "Matrix norm operations" begin
+    # Create a deterministic sparse matrix
+    n = 10
+    A_sparse = spdiagm(
+        -1 => fill(-1.0, n-1),
+        0 => fill(4.0, n),
+        1 => fill(-1.0, n-1)
+    )
+    A_petsc = Mat_uniform(A_sparse; Prefix=SafePETSc.MPIAIJ)
+
+    # Test Frobenius norm (default, p=2)
+    @testset "Frobenius norm" begin
+        norm_petsc = norm(A_petsc)
+        norm_native = norm(Matrix(A_sparse))
+
+        @test abs(norm_petsc - norm_native) < 1e-10
+    end
+
+    # Test 1-norm (induced operator norm)
+    @testset "opnorm 1-norm" begin
+        norm_petsc = opnorm(A_petsc, 1)
+        norm_native = opnorm(Matrix(A_sparse), 1)
+
+        println(io0(), "opnorm 1: PETSc=$(norm_petsc), Native=$(norm_native), Diff=$(abs(norm_petsc - norm_native))")
+        @test abs(norm_petsc - norm_native) < 1e-10
+    end
+
+    # Test Inf-norm (induced operator norm)
+    @testset "opnorm Inf-norm" begin
+        norm_petsc = opnorm(A_petsc, Inf)
+        norm_native = opnorm(Matrix(A_sparse), Inf)
+
+        println(io0(), "opnorm Inf: PETSc=$(norm_petsc), Native=$(norm_native), Diff=$(abs(norm_petsc - norm_native))")
+        @test abs(norm_petsc - norm_native) < 1e-10
+    end
+
+    # Test with dense matrix
+    @testset "Dense matrix norm" begin
+        A_dense = Float64[i+j for i in 1:5, j in 1:5]
+        A_petsc_dense = Mat_uniform(A_dense; Prefix=SafePETSc.MPIDENSE)
+
+        norm_petsc = norm(A_petsc_dense)
+        norm_native = norm(A_dense)
+
+        @test abs(norm_petsc - norm_native) < 1e-10
+    end
+
+    # Test that unsupported norms fail
+    @testset "Unsupported norm error" begin
+        @test_throws ErrorException norm(A_petsc, 3)
+        @test_throws ErrorException norm(A_petsc, 0.5)
+    end
+end
+
+println(io0(), "All tests passed!")
