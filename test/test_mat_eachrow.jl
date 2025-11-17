@@ -2,6 +2,7 @@ using Test
 using MPI
 using SafePETSc
 SafePETSc.Init()
+using SafePETSc: DENSE, MPIAIJ
 using PETSc
 using SafePETSc.SafeMPI
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
@@ -19,7 +20,7 @@ SafePETSc.petsc_options_insert_string("-dense_mat_type mpidense")
 ts = @testset MPITestHarness.QuietTestSet "eachrow on mpidense" begin
     # Build a simple 4x4 matrix with known rows
     A_data = reshape(Float64.(1:16), 4, 4)
-    A = SafePETSc.Mat_uniform(A_data; prefix="dense_")
+    A = SafePETSc.Mat_uniform(A_data; Prefix=DENSE)
 
     # Determine local rows for this rank
     row_lo = A.obj.row_partition[rank+1]

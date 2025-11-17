@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 """
-    Mat_uniform(A::Matrix{T}; row_partition=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)), col_partition=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)), prefix="") -> DRef{Mat{T}}
+    Mat_uniform(A::Matrix{T}; row_partition=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)), col_partition=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)), Prefix::Type=MPIAIJ) -> DRef{Mat{T,Prefix}}
 
 **MPI Collective**
 
@@ -12,13 +12,13 @@ Create a distributed PETSc matrix from a Julia matrix, asserting uniform distrib
 - `A::Matrix{T}` must be identical on all ranks (`mpi_uniform`).
 - `row_partition` is a Vector{Int} of length nranks+1 where partition[i] is the start row (1-indexed) for rank i-1.
 - `col_partition` is a Vector{Int} of length nranks+1 where partition[i] is the start column (1-indexed) for rank i-1.
-- `prefix` is an optional string prefix for MatSetOptionsPrefix() to set matrix-specific command-line options.
+- `Prefix` is a type parameter for MatSetOptionsPrefix() to set matrix-specific command-line options (default: MPIAIJ).
 - Returns a DRef that will destroy the PETSc Mat collectively when all ranks release their reference.
 """
 function Mat_uniform(A::Matrix{T};
                      row_partition::Vector{Int}=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)),
                      col_partition::Vector{Int}=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)),
-                     prefix::String="") where T
+                     Prefix::Type=MPIAIJ) where T
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank   = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -45,7 +45,7 @@ function Mat_uniform(A::Matrix{T};
     nglobal_cols = size(A, 2)
 
     # Create distributed PETSc Mat (no finalizer; collective destroy via DRef)
-    petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, nglobal_rows, nglobal_cols, prefix)
+    petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, nglobal_rows, nglobal_cols, Prefix)
 
     # Set values from the local portion of A
     # For each row in the local row range, set all column values
@@ -60,12 +60,12 @@ function Mat_uniform(A::Matrix{T};
     PETSc.assemble(petsc_mat)
 
     # Wrap and DRef-manage with a manager bound to this communicator
-    obj = _Mat{T}(petsc_mat, row_partition, col_partition, prefix)
+    obj = _Mat{T,Prefix}(petsc_mat, row_partition, col_partition)
     return SafeMPI.DRef(obj)
 end
 
 """
-    Mat_sum(A::SparseMatrixCSC{T}; row_partition=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)), col_partition=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)), prefix="", own_rank_only=false) -> DRef{Mat{T}}
+    Mat_sum(A::SparseMatrixCSC{T}; row_partition=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)), col_partition=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)), Prefix::Type=MPIAIJ, own_rank_only=false) -> DRef{Mat{T,Prefix}}
 
 **MPI Collective**
 
@@ -74,7 +74,7 @@ Create a distributed PETSc matrix by summing sparse matrices across ranks (on MP
 - `A::SparseMatrixCSC{T}` can differ across ranks; nonzero entries are summed across all ranks.
 - `row_partition` is a Vector{Int} of length nranks+1 where partition[i] is the start row (1-indexed) for rank i-1.
 - `col_partition` is a Vector{Int} of length nranks+1 where partition[i] is the start column (1-indexed) for rank i-1.
-- `prefix` is an optional string prefix for MatSetOptionsPrefix() to set matrix-specific command-line options.
+- `Prefix` is a type parameter for MatSetOptionsPrefix() to set matrix-specific command-line options (default: MPIAIJ).
 - `own_rank_only::Bool` (default=false): if true, asserts that all nonzero entries fall within this rank's row partition.
 - Returns a DRef that will destroy the PETSc Mat collectively when all ranks release their reference.
 
@@ -83,7 +83,7 @@ Uses MatSetValues with ADD_VALUES mode to sum contributions from all ranks.
 function Mat_sum(A::SparseMatrixCSC{T};
                  row_partition::Vector{Int}=default_row_partition(size(A, 1), MPI.Comm_size(MPI.COMM_WORLD)),
                  col_partition::Vector{Int}=default_row_partition(size(A, 2), MPI.Comm_size(MPI.COMM_WORLD)),
-                 prefix::String="",
+                 Prefix::Type=MPIAIJ,
                  own_rank_only::Bool=false) where T
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank   = MPI.Comm_rank(MPI.COMM_WORLD)
@@ -130,7 +130,7 @@ function Mat_sum(A::SparseMatrixCSC{T};
     nglobal_cols = size(A, 2)
 
     # Create distributed PETSc Mat (no finalizer; collective destroy via DRef)
-    petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, nglobal_rows, nglobal_cols, prefix)
+    petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, nglobal_rows, nglobal_cols, Prefix)
 
     # Set values from sparse matrix using ADD_VALUES mode
     rows_csc = rowvals(A)
@@ -148,20 +148,20 @@ function Mat_sum(A::SparseMatrixCSC{T};
     PETSc.assemble(petsc_mat)
 
     # Wrap and DRef-manage with a manager bound to this communicator
-    obj = _Mat{T}(petsc_mat, row_partition, col_partition, prefix)
+    obj = _Mat{T,Prefix}(petsc_mat, row_partition, col_partition)
     return SafeMPI.DRef(obj)
 end
 
 # Create a distributed PETSc Mat for a given element type T by dispatching to the
 # underlying PETSc scalar variant via PETSc.@for_libpetsc
 function _mat_create_mpi_for_T(::Type{T}, nlocal_rows::Integer, nlocal_cols::Integer,
-                               nglobal_rows::Integer, nglobal_cols::Integer, prefix::String="") where {T}
-    return _mat_create_mpi_impl(T, nlocal_rows, nlocal_cols, nglobal_rows, nglobal_cols, prefix)
+                               nglobal_rows::Integer, nglobal_cols::Integer, Prefix::Type) where {T}
+    return _mat_create_mpi_impl(T, nlocal_rows, nlocal_cols, nglobal_rows, nglobal_cols, Prefix)
 end
 
 PETSc.@for_libpetsc begin
     function _mat_create_mpi_impl(::Type{$PetscScalar}, nlocal_rows::Integer, nlocal_cols::Integer,
-                                  nglobal_rows::Integer, nglobal_cols::Integer, prefix::String="")
+                                  nglobal_rows::Integer, nglobal_cols::Integer, Prefix::Type)
         mat = PETSc.Mat{$PetscScalar}(C_NULL)
         PETSc.@chk ccall((:MatCreate, $libpetsc), PETSc.PetscErrorCode,
                          (MPI.MPI_Comm, Ptr{CMat}), MPI.COMM_WORLD, mat)
@@ -169,9 +169,12 @@ PETSc.@for_libpetsc begin
                          (CMat, $PetscInt, $PetscInt, $PetscInt, $PetscInt),
                          mat, $PetscInt(nlocal_rows), $PetscInt(nlocal_cols),
                          $PetscInt(nglobal_rows), $PetscInt(nglobal_cols))
-        if !isempty(prefix)
+
+        # Set prefix and let PETSc options determine the type
+        prefix_str = SafePETSc.prefix(Prefix)
+        if !isempty(prefix_str)
             PETSc.@chk ccall((:MatSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
-                             (CMat, Cstring), mat, prefix)
+                             (CMat, Cstring), mat, prefix_str)
         end
         PETSc.@chk ccall((:MatSetFromOptions, $libpetsc), PETSc.PetscErrorCode,
                          (CMat,), mat)
@@ -226,7 +229,7 @@ Base.size(r::SafeMPI.DRef{<:_Mat}, d::Integer) = Base.size(r.obj, d)
 Base.adjoint(A::Mat{T}) where {T} = LinearAlgebra.Adjoint(A)
 
 """
-    Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) -> Mat{T}
+    Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -234,17 +237,17 @@ Materialize an adjoint matrix into a new transposed Mat.
 
 Creates a new matrix B = A^T using PETSc's transpose operations.
 """
-function Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) where {T}
-    A = parent(adj)::Mat{T}
+function Mat(adj::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) where {T,Prefix}
+    A = parent(adj)::Mat{T,Prefix}
     # Create B = A^T via PETSc (MAT_INITIAL_MATRIX) and preserve prefix
-    B_petsc = _mat_transpose(A.obj.A, A.obj.prefix)
+    B_petsc = _mat_transpose(A.obj.A, Prefix)
     # Swap row/col partitions for the transpose
-    obj = _Mat{T}(B_petsc, A.obj.col_partition, A.obj.row_partition, A.obj.prefix)
+    obj = _Mat{T,Prefix}(B_petsc, A.obj.col_partition, A.obj.row_partition)
     return SafeMPI.DRef(obj)
 end
 
 """
-    LinearAlgebra.transpose!(B::Mat{T}, A::Mat{T}) -> Mat{T}
+    LinearAlgebra.transpose!(B::Mat{T,Prefix}, A::Mat{T,Prefix}) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -252,7 +255,7 @@ In-place transpose: B = A^T.
 
 Reuses the pre-allocated matrix B. Dimensions and partitions must match appropriately.
 """
-function LinearAlgebra.transpose!(B::Mat{T}, A::Mat{T}) where {T}
+function LinearAlgebra.transpose!(B::Mat{T,Prefix}, A::Mat{T,Prefix}) where {T,Prefix}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     @mpiassert (size(A, 1) == size(B, 2) && size(A, 2) == size(B, 1) &&
                 A.obj.row_partition == B.obj.col_partition &&
@@ -275,7 +278,7 @@ Matrix-vector multiplication: y = A * x.
 
 Returns a new distributed vector with the result.
 """
-function Base.:*(A::Mat{T}, x::Vec{T}) where {T}
+function Base.:*(A::Mat{T,PrefixA}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(x)[1]
@@ -289,7 +292,7 @@ function Base.:*(A::Mat{T}, x::Vec{T}) where {T}
     row_hi = A.obj.row_partition[rank+2] - 1
     nlocal = row_hi - row_lo + 1
 
-    y_petsc = _vec_create_mpi_for_T(T, nlocal, m, x.obj.prefix, A.obj.row_partition)
+    y_petsc = _vec_create_mpi_for_T(T, nlocal, m, PrefixX, A.obj.row_partition)
 
     # Perform matrix-vector multiplication using PETSc
     _mat_mult_vec!(y_petsc, A.obj.A, x.obj.v)
@@ -297,7 +300,7 @@ function Base.:*(A::Mat{T}, x::Vec{T}) where {T}
     PETSc.assemble(y_petsc)
 
     # Wrap in DRef
-    obj = _Vec{T}(y_petsc, A.obj.row_partition, x.obj.prefix)
+    obj = _Vec{T,PrefixX}(y_petsc, A.obj.row_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -310,7 +313,7 @@ In-place matrix-vector multiplication: y = A * x.
 
 Reuses the pre-allocated vector y. Dimensions and partitions must match appropriately.
 """
-function LinearAlgebra.mul!(y::Vec{T}, A::Mat{T}, x::Vec{T}) where {T}
+function LinearAlgebra.mul!(y::Vec{T,Prefix}, A::Mat{T,Prefix}, x::Vec{T,Prefix}) where {T,Prefix}
     # Check dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(A)
     y_length = size(y)[1]
@@ -361,7 +364,7 @@ end
 Add two distributed PETSc matrices. Requires identical sizes, partitions, and prefix.
 Note: Does not use pooling due to PETSc MatAXPY internal state management issues.
 """
-function Base.:+(A::Mat{T}, B::Mat{T}) where {T}
+function Base.:+(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
     @mpiassert (size(A, 1) == size(B, 1) && size(A, 2) == size(B, 2) &&
                 A.obj.row_partition == B.obj.row_partition &&
                 A.obj.col_partition == B.obj.col_partition) "Matrix addition requires identical sizes and identical partitions"
@@ -371,7 +374,7 @@ function Base.:+(A::Mat{T}, B::Mat{T}) where {T}
     nlocal_rows = A.obj.row_partition[nr+2] - A.obj.row_partition[nr+1]
     nlocal_cols = A.obj.col_partition[nr+2] - A.obj.col_partition[nr+1]
     Cmat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols,
-                                 size(A,1), size(A,2), A.obj.prefix)
+                                 size(A,1), size(A,2), Prefix)
     PETSc.assemble(Cmat)  # Must assemble before MatAXPY
 
     # Accumulate C = A + B using MatAXPY
@@ -379,7 +382,7 @@ function Base.:+(A::Mat{T}, B::Mat{T}) where {T}
     _mat_axpy!(Cmat, one(T), B.obj.A, DIFFERENT_NONZERO_PATTERN)
     PETSc.assemble(Cmat)
 
-    obj = _Mat{T}(Cmat, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
+    obj = _Mat{T,Prefix}(Cmat, A.obj.row_partition, A.obj.col_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -391,7 +394,7 @@ end
 Subtract two distributed PETSc matrices. Requires identical sizes, partitions, and prefix.
 Note: Does not use pooling due to PETSc MatAXPY internal state management issues.
 """
-function Base.:-(A::Mat{T}, B::Mat{T}) where {T}
+function Base.:-(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
     @mpiassert (size(A, 1) == size(B, 1) && size(A, 2) == size(B, 2) &&
                 A.obj.row_partition == B.obj.row_partition &&
                 A.obj.col_partition == B.obj.col_partition) "Matrix subtraction requires identical sizes and identical partitions"
@@ -401,7 +404,7 @@ function Base.:-(A::Mat{T}, B::Mat{T}) where {T}
     nlocal_rows = A.obj.row_partition[nr+2] - A.obj.row_partition[nr+1]
     nlocal_cols = A.obj.col_partition[nr+2] - A.obj.col_partition[nr+1]
     Cmat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols,
-                                 size(A,1), size(A,2), A.obj.prefix)
+                                 size(A,1), size(A,2), Prefix)
     PETSc.assemble(Cmat)  # Must assemble before MatAXPY
 
     # Accumulate C = A - B using MatAXPY
@@ -409,12 +412,12 @@ function Base.:-(A::Mat{T}, B::Mat{T}) where {T}
     _mat_axpy!(Cmat, -one(T), B.obj.A, DIFFERENT_NONZERO_PATTERN)
     PETSc.assemble(Cmat)
 
-    obj = _Mat{T}(Cmat, A.obj.row_partition, A.obj.col_partition, A.obj.prefix)
+    obj = _Mat{T,Prefix}(Cmat, A.obj.row_partition, A.obj.col_partition)
     return SafeMPI.DRef(obj)
 end
 
 # Helper function to extract owned rows from a PETSc Mat to Julia SparseMatrixCSC
-function _mat_to_local_sparse(A::Mat{T}) where {T}
+function _mat_to_local_sparse(A::Mat{T,Prefix}) where {T,Prefix}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -481,7 +484,7 @@ C = cat(A, B; dims=1)  # Vertical concatenation (vcat)
 D = cat(A, B; dims=2)  # Horizontal concatenation (hcat)
 ```
 """
-function Base.cat(As::Mat{T}...; dims) where {T}
+function Base.cat(As::Mat{T,Prefix}...; dims) where {T,Prefix}
     n = length(As)
     if n == 0
         throw(ArgumentError("cat requires at least one matrix"))
@@ -489,9 +492,6 @@ function Base.cat(As::Mat{T}...; dims) where {T}
 
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
-
-    # Get prefix from first matrix (will be used for result)
-    first_prefix = As[1].obj.prefix
 
     # Validate partition compatibility based on dims - collect conditions first
     if dims == 1  # Vertical concatenation
@@ -547,7 +547,7 @@ function Base.cat(As::Mat{T}...; dims) where {T}
     return Mat_sum(local_result;
                    row_partition=result_row_partition,
                    col_partition=result_col_partition,
-                   prefix=first_prefix,
+                   Prefix=Prefix,
                    own_rank_only=false)
 end
 
@@ -561,7 +561,7 @@ Vertically concatenate distributed PETSc matrices.
 Equivalent to `cat(As...; dims=1)`. All matrices must have the same number of columns
 and the same column partition.
 """
-Base.vcat(As::Mat{T}...) where {T} = cat(As...; dims=1)
+Base.vcat(As::Mat{T,Prefix}...) where {T,Prefix} = cat(As...; dims=1)
 
 """
     Base.hcat(As::Mat{T}...) -> Mat{T}
@@ -573,7 +573,7 @@ Horizontally concatenate distributed PETSc matrices.
 Equivalent to `cat(As...; dims=2)`. All matrices must have the same number of rows
 and the same row partition.
 """
-Base.hcat(As::Mat{T}...) where {T} = cat(As...; dims=2)
+Base.hcat(As::Mat{T,Prefix}...) where {T,Prefix} = cat(As...; dims=2)
 
 # Import blockdiag from SparseArrays
 import SparseArrays: blockdiag
@@ -594,7 +594,7 @@ All matrices must have the same prefix and element type.
 C = blockdiag(A, B)
 ```
 """
-function blockdiag(As::Mat{T}...) where {T}
+function blockdiag(As::Mat{T,Prefix}...) where {T,Prefix}
     n = length(As)
     if n == 0
         throw(ArgumentError("blockdiag requires at least one matrix"))
@@ -602,9 +602,6 @@ function blockdiag(As::Mat{T}...) where {T}
 
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
-
-    # Get prefix from first matrix (will be used for result)
-    first_prefix = As[1].obj.prefix
 
     # Extract local sparse matrices (owned rows only)
     local_sparse = [_mat_to_local_sparse(A) for A in As]
@@ -635,7 +632,7 @@ function blockdiag(As::Mat{T}...) where {T}
     return Mat_sum(local_result;
                    row_partition=result_row_partition,
                    col_partition=result_col_partition,
-                   prefix=first_prefix,
+                   Prefix=Prefix,
                    own_rank_only=false)
 end
 
@@ -654,7 +651,7 @@ The number of columns in A must match the number of rows in B.
 C = A * B  # Matrix multiplication
 ```
 """
-function Base.:*(A::Mat{T}, B::Mat{T}) where {T}
+function Base.:*(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -669,10 +666,10 @@ function Base.:*(A::Mat{T}, B::Mat{T}) where {T}
     result_col_partition = B.obj.col_partition
 
     # Use PETSc's MatMatMult
-    C_mat = _mat_mat_mult(A.obj.A, B.obj.A, A.obj.prefix)
+    C_mat = _mat_mat_mult(A.obj.A, B.obj.A, Prefix)
 
     # Wrap in our _Mat type and return as DRef
-    obj = _Mat{T}(C_mat, result_row_partition, result_col_partition, A.obj.prefix)
+    obj = _Mat{T,Prefix}(C_mat, result_row_partition, result_col_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -685,8 +682,8 @@ Transpose-matrix multiplication using PETSc's MatTransposeMatMult.
 
 Computes C = A' * B where A' is the transpose (adjoint for real matrices) of A.
 """
-function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, B::Mat{T}) where {T}
-    A = parent(At)::Mat{T}
+function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, B::Mat{T,Prefix}) where {T,Prefix}
+    A = parent(At)::Mat{T,Prefix}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -700,10 +697,10 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, B::Mat{T}) where {T}
     result_col_partition = B.obj.col_partition
 
     # Use PETSc's MatTransposeMatMult
-    C_mat = _mat_transpose_mat_mult(A.obj.A, B.obj.A, A.obj.prefix)
+    C_mat = _mat_transpose_mat_mult(A.obj.A, B.obj.A, Prefix)
 
     # Wrap in our _Mat type and return as DRef
-    obj = _Mat{T}(C_mat, result_row_partition, result_col_partition, A.obj.prefix)
+    obj = _Mat{T,Prefix}(C_mat, result_row_partition, result_col_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -716,8 +713,8 @@ Matrix-transpose multiplication using PETSc's MatMatTransposeMult.
 
 Computes C = A * B' where B' is the transpose (adjoint for real matrices) of B.
 """
-function Base.:*(A::Mat{T}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) where {T}
-    B = parent(Bt)::Mat{T}
+function Base.:*(A::Mat{T,Prefix}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) where {T,Prefix}
+    B = parent(Bt)::Mat{T,Prefix}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -731,10 +728,10 @@ function Base.:*(A::Mat{T}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) where {T}
     result_col_partition = B.obj.row_partition
 
     # Use PETSc's MatMatTransposeMult
-    C_mat = _mat_mat_transpose_mult(A.obj.A, B.obj.A, A.obj.prefix)
+    C_mat = _mat_mat_transpose_mult(A.obj.A, B.obj.A, Prefix)
 
     # Wrap in our _Mat type and return as DRef
-    obj = _Mat{T}(C_mat, result_row_partition, result_col_partition, A.obj.prefix)
+    obj = _Mat{T,Prefix}(C_mat, result_row_partition, result_col_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -748,9 +745,9 @@ Transpose-transpose multiplication: C = A' * B'.
 Since PETSc does not have a direct AtBt product type, this is computed as
 C = (B * A)' by materializing the transpose of the result.
 """
-function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}) where {T}
-    A = parent(At)::Mat{T}
-    B = parent(Bt)::Mat{T}
+function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}) where {T,Prefix}
+    A = parent(At)::Mat{T,Prefix}
+    B = parent(Bt)::Mat{T,Prefix}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -760,18 +757,18 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T}}, Bt::LinearAlgebra.Ad
 
     # Compute as (B * A)' since PETSc doesn't have AtBt product type
     # First compute BA
-    BA_mat = _mat_mat_mult(B.obj.A, A.obj.A, A.obj.prefix)
+    BA_mat = _mat_mat_mult(B.obj.A, A.obj.A, Prefix)
 
     # Then transpose it to get (BA)' = A'B'
     # BA has partitions (B.row_partition, A.col_partition), so transpose has swapped
     result_row_partition = A.obj.col_partition
     result_col_partition = B.obj.row_partition
-    C_mat = _mat_transpose(BA_mat, A.obj.prefix)
+    C_mat = _mat_transpose(BA_mat, Prefix)
 
     # Result partitions: rows from A's columns, columns from B's rows
 
     # Wrap in our _Mat type
-    obj = _Mat{T}(C_mat, result_row_partition, result_col_partition, A.obj.prefix)
+    obj = _Mat{T,Prefix}(C_mat, result_row_partition, result_col_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -784,7 +781,7 @@ In-place matrix-matrix multiplication: C = A * B.
 
 Reuses the pre-allocated matrix C. Dimensions and partitions must match appropriately.
 """
-function LinearAlgebra.mul!(C::Mat{T}, A::Mat{T}, B::Mat{T}) where {T}
+function LinearAlgebra.mul!(C::Mat{T,Prefix}, A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     @mpiassert (size(A, 2) == size(B, 1) &&
                 size(A, 1) == size(C, 1) && size(B, 2) == size(C, 2) &&
@@ -809,7 +806,7 @@ PETSc.@for_libpetsc begin
 
     Creates a new matrix with all entries scaled by α.
     """
-    function Base.:*(α::Number, A::Mat{$PetscScalar})
+    function Base.:*(α::Number, A::Mat{$PetscScalar,Prefix}) where {Prefix}
         # Duplicate the matrix
         result_mat_ref = Ref{PETSc.CMat}(C_NULL)
         PETSc.@chk ccall(
@@ -832,7 +829,7 @@ PETSc.@for_libpetsc begin
         )
 
         # Wrap in our _Mat type
-        obj = _Mat{$PetscScalar}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition), A.obj.prefix)
+        obj = _Mat{$PetscScalar,Prefix}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition))
         return SafeMPI.DRef(obj)
     end
 
@@ -845,7 +842,7 @@ PETSc.@for_libpetsc begin
 
     Creates a new matrix with all entries scaled by α.
     """
-    Base.:*(A::Mat{$PetscScalar}, α::Number) = α * A
+    Base.:*(A::Mat{$PetscScalar,Prefix}, α::Number) where {Prefix} = α * A
 
     """
         Base.:+(α::Number, A::Mat{T}) -> Mat{T}
@@ -857,7 +854,7 @@ PETSc.@for_libpetsc begin
     Adds scalar α to the diagonal of matrix A (equivalent to A + α*I).
     Requires A to be square.
     """
-    function Base.:+(α::Number, A::Mat{$PetscScalar})
+    function Base.:+(α::Number, A::Mat{$PetscScalar,Prefix}) where {Prefix}
         # For a square matrix, A + α*I means shift all diagonal elements by α
         # For non-square matrices, this operation is not well-defined mathematically
         # We'll implement it by creating a copy and using MatShift
@@ -885,7 +882,7 @@ PETSc.@for_libpetsc begin
         )
 
         # Wrap in our _Mat type
-        obj = _Mat{$PetscScalar}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition), A.obj.prefix)
+        obj = _Mat{$PetscScalar,Prefix}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition))
         return SafeMPI.DRef(obj)
     end
 
@@ -899,21 +896,22 @@ PETSc.@for_libpetsc begin
     Adds scalar α to the diagonal of matrix A (equivalent to A + α*I).
     Requires A to be square.
     """
-    Base.:+(A::Mat{$PetscScalar}, α::Number) = α + A
+    Base.:+(A::Mat{$PetscScalar,Prefix}, α::Number) where {Prefix} = α + A
 end
 
 # PETSc matrix-matrix multiplication wrapper
 PETSc.@for_libpetsc begin
-    function _mat_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, prefix::String="")
+    function _mat_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, Prefix::Type)
         C = Ref{PETSc.CMat}(C_NULL)
         PETSC_DEFAULT_REAL = $PetscReal(-2.0)
         PETSc.@chk ccall((:MatMatMult, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CMat, PETSc.CMat, Cint, $PetscReal, Ptr{PETSc.CMat}),
                          A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT_REAL, C)
         Cmat = PETSc.Mat{$PetscScalar}(C[])
-        if !isempty(prefix)
+        prefix_str = SafePETSc.prefix(Prefix)
+        if !isempty(prefix_str)
             PETSc.@chk ccall((:MatSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
-                             (PETSc.CMat, Cstring), Cmat, prefix)
+                             (PETSc.CMat, Cstring), Cmat, prefix_str)
         end
         return Cmat
     end
@@ -929,31 +927,33 @@ PETSc.@for_libpetsc begin
     end
 
     # Transpose-matrix multiplication: C = A' * B
-    function _mat_transpose_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, prefix::String="")
+    function _mat_transpose_mat_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, Prefix::Type)
         C = Ref{PETSc.CMat}(C_NULL)
         PETSC_DEFAULT_REAL = $PetscReal(-2.0)
         PETSc.@chk ccall((:MatTransposeMatMult, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CMat, PETSc.CMat, Cint, $PetscReal, Ptr{PETSc.CMat}),
                          A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT_REAL, C)
         Cmat = PETSc.Mat{$PetscScalar}(C[])
-        if !isempty(prefix)
+        prefix_str = SafePETSc.prefix(Prefix)
+        if !isempty(prefix_str)
             PETSc.@chk ccall((:MatSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
-                             (PETSc.CMat, Cstring), Cmat, prefix)
+                             (PETSc.CMat, Cstring), Cmat, prefix_str)
         end
         return Cmat
     end
 
     # Matrix-transpose multiplication: C = A * B'
-    function _mat_mat_transpose_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, prefix::String="")
+    function _mat_mat_transpose_mult(A::PETSc.Mat{$PetscScalar}, B::PETSc.Mat{$PetscScalar}, Prefix::Type)
         C = Ref{PETSc.CMat}(C_NULL)
         PETSC_DEFAULT_REAL = $PetscReal(-2.0)
         PETSc.@chk ccall((:MatMatTransposeMult, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CMat, PETSc.CMat, Cint, $PetscReal, Ptr{PETSc.CMat}),
                          A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT_REAL, C)
         Cmat = PETSc.Mat{$PetscScalar}(C[])
-        if !isempty(prefix)
+        prefix_str = SafePETSc.prefix(Prefix)
+        if !isempty(prefix_str)
             PETSc.@chk ccall((:MatSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
-                             (PETSc.CMat, Cstring), Cmat, prefix)
+                             (PETSc.CMat, Cstring), Cmat, prefix_str)
         end
         return Cmat
     end
@@ -991,16 +991,13 @@ A = spdiagm(-1 => lower, 0 => diag, 1 => upper)
 B = spdiagm(100, 100, 0 => v1, 1 => v2)
 ```
 """
-function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; kwargs...) where {T}
+function spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...; kwargs...) where {T,Prefix}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
 
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
-
-    # Get prefix from first vector (will be used for result)
-    first_prefix = kv[1].second.obj.prefix
 
     # Infer matrix dimensions from diagonals without querying PETSc values
     # Avoid generic length(v) in case it triggers unintended array conversions
@@ -1019,9 +1016,9 @@ function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; kwargs...) where {T}
     return spdiagm(m, n, kv...; kwargs...)
 end
 
-function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
+function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...;
                  row_partition::Vector{Int}=default_row_partition(m, MPI.Comm_size(MPI.COMM_WORLD)),
-                 col_partition::Vector{Int}=default_row_partition(n, MPI.Comm_size(MPI.COMM_WORLD))) where {T}
+                 col_partition::Vector{Int}=default_row_partition(n, MPI.Comm_size(MPI.COMM_WORLD))) where {T,Prefix}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
@@ -1041,9 +1038,6 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
                           col_partition[1] == 1 &&
                           col_partition[end] == n + 1 &&
                           all(c -> col_partition[c] <= col_partition[c+1], 1:nranks)
-
-    # Get prefix from first vector (will be used for result)
-    first_prefix = kv[1].second.obj.prefix
 
     # Validate vector lengths and partitions
     all_correct_lengths = all(begin
@@ -1142,7 +1136,7 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
     return Mat_sum(local_result;
                    row_partition=row_partition,
                    col_partition=col_partition,
-                   prefix=first_prefix,
+                   Prefix=Prefix,
                    own_rank_only=false)
 end
 
@@ -1167,8 +1161,8 @@ end
 # - Performs exactly one MatDenseGetArrayRead per iterator and restores on finish
 # -----------------------------------------------------------------------------
 
-mutable struct _EachRowDense{T}
-    aref::SafeMPI.DRef{_Mat{T}}           # keep the matrix alive
+mutable struct _EachRowDense{T,Prefix}
+    aref::SafeMPI.DRef{_Mat{T,Prefix}}           # keep the matrix alive
     petscA::PETSc.Mat{T}                  # underlying PETSc Mat
     row_lo::Int                           # global start row (1-based)
     nloc::Int                             # number of local rows
@@ -1217,7 +1211,7 @@ PETSc.@for_libpetsc begin
     end
 end
 
-function _eachrow_dense(A::Mat{T}) where {T}
+function _eachrow_dense(A::Mat{T,Prefix}) where {T,Prefix}
     # Determine local row range from stored partition
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
     row_lo = A.obj.row_partition[rank+1]
@@ -1229,7 +1223,7 @@ function _eachrow_dense(A::Mat{T}) where {T}
     p = _matdense_get_array_read(A.obj.A)
     data = unsafe_wrap(Array, p, (nloc, ncols); own=false)
 
-    it = _EachRowDense{T}(A, A.obj.A, row_lo, nloc, ncols, data, p)
+    it = _EachRowDense{T,Prefix}(A, A.obj.A, row_lo, nloc, ncols, data, p)
     # Ensure restore on GC if user exits early
     finalizer(it) do x
         if x.ptr != C_NULL
@@ -1241,18 +1235,18 @@ function _eachrow_dense(A::Mat{T}) where {T}
     return it
 end
 
-Base.IteratorEltype(::Type{_EachRowDense{T}}) where {T} = Base.HasEltype()
-Base.eltype(::Type{_EachRowDense{T}}) where {T} = SubArray{T,1,Matrix{T},Tuple{Int,Base.Slice{Base.OneTo{Int}}},true}
-Base.IteratorSize(::Type{_EachRowDense{T}}) where {T} = Base.HasLength()
+Base.IteratorEltype(::Type{_EachRowDense{T,Prefix}}) where {T,Prefix} = Base.HasEltype()
+Base.eltype(::Type{_EachRowDense{T,Prefix}}) where {T,Prefix} = SubArray{T,1,Matrix{T},Tuple{Int,Base.Slice{Base.OneTo{Int}}},true}
+Base.IteratorSize(::Type{_EachRowDense{T,Prefix}}) where {T,Prefix} = Base.HasLength()
 Base.length(it::_EachRowDense) = it.nloc
 
-function Base.iterate(it::_EachRowDense{T}) where {T}
+function Base.iterate(it::_EachRowDense{T,Prefix}) where {T,Prefix}
     it.nloc == 0 && return nothing
     row = @view it.data[1, :]
     return (row, 1)
 end
 
-function Base.iterate(it::_EachRowDense{T}, st::Int) where {T}
+function Base.iterate(it::_EachRowDense{T,Prefix}, st::Int) where {T,Prefix}
     i = st + 1
     if i > it.nloc
         # Restore PETSc array now that iteration is complete
@@ -1276,7 +1270,7 @@ Iterate over the rows of a distributed matrix.
 
 Only iterates over rows owned by the current rank. Each row is returned as a view.
 """
-function Base.eachrow(A::Mat{T}) where {T}
+function Base.eachrow(A::Mat{T,Prefix}) where {T,Prefix}
     return _eachrow_dense(A)
 end
 
@@ -1301,7 +1295,7 @@ A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0])
 v = A[:, 2]  # Extract second column: [2.0, 5.0]
 ```
 """
-function Base.getindex(A::DRef{_Mat{T}}, ::Colon, k::Int) where {T}
+function Base.getindex(A::DRef{_Mat{T,Prefix}}, ::Colon, k::Int) where {T,Prefix}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -1323,7 +1317,7 @@ function Base.getindex(A::DRef{_Mat{T}}, ::Colon, k::Int) where {T}
     end
 
     # Create distributed PETSc Vec
-    petsc_vec = _vec_create_mpi_for_T(T, nlocal_rows, m, A.obj.prefix, A.obj.row_partition)
+    petsc_vec = _vec_create_mpi_for_T(T, nlocal_rows, m, Prefix, A.obj.row_partition)
 
     # Fill local portion
     local_view = PETSc.unsafe_localarray(petsc_vec; read=true, write=true)
@@ -1335,7 +1329,7 @@ function Base.getindex(A::DRef{_Mat{T}}, ::Colon, k::Int) where {T}
     PETSc.assemble(petsc_vec)
 
     # Wrap and return
-    obj = _Vec{T}(petsc_vec, A.obj.row_partition, A.obj.prefix)
+    obj = _Vec{T,Prefix}(petsc_vec, A.obj.row_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -1352,7 +1346,7 @@ A = Mat_uniform([1.0 2.0; 3.0 4.0; 5.0 6.0; 7.0 8.0])
 range = own_row(A)  # e.g., 1:2 on rank 0
 ```
 """
-own_row(A::DRef{_Mat{T}}) where {T} = A.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+1]:(A.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+2]-1)
+own_row(A::DRef{_Mat{T,Prefix}}) where {T,Prefix} = A.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+1]:(A.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+2]-1)
 
 """
     Base.getindex(A::Mat{T}, i::Int, j::Int) -> T
@@ -1373,7 +1367,7 @@ A = Mat_uniform([1.0 2.0; 3.0 4.0])
 val = A[1, 2]  # Returns 2.0
 ```
 """
-function Base.getindex(A::DRef{_Mat{T}}, i::Int, j::Int) where {T}
+function Base.getindex(A::DRef{_Mat{T,Prefix}}, i::Int, j::Int) where {T,Prefix}
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
     m, n = size(A)
 
@@ -1441,7 +1435,7 @@ A = Mat_uniform([1.0 2.0; 3.0 4.0; 5.0 6.0])
 vals = A[1:2, 2]  # Returns [2.0, 4.0]
 ```
 """
-function Base.getindex(A::DRef{_Mat{T}}, range_i::UnitRange{Int}, j::Int) where {T}
+function Base.getindex(A::DRef{_Mat{T,Prefix}}, range_i::UnitRange{Int}, j::Int) where {T,Prefix}
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
     m, n = size(A)
 
@@ -1519,7 +1513,7 @@ A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0])
 vals = A[1, 2:3]  # Returns [2.0, 3.0]
 ```
 """
-function Base.getindex(A::DRef{_Mat{T}}, i::Int, range_j::UnitRange{Int}) where {T}
+function Base.getindex(A::DRef{_Mat{T,Prefix}}, i::Int, range_j::UnitRange{Int}) where {T,Prefix}
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
     m, n = size(A)
 
@@ -1599,7 +1593,7 @@ A = Mat_uniform([1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0])
 submat = A[1:2, 2:3]  # Returns [2.0 3.0; 5.0 6.0]
 ```
 """
-function Base.getindex(A::DRef{_Mat{T}}, range_i::UnitRange{Int}, range_j::UnitRange{Int}) where {T}
+function Base.getindex(A::DRef{_Mat{T,Prefix}}, range_i::UnitRange{Int}, range_j::UnitRange{Int}) where {T,Prefix}
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
     m, n = size(A)
 
@@ -1690,7 +1684,7 @@ This checks the PETSc matrix type string and returns true if it contains "dense"
 (case-insensitive). This handles various dense types like "seqdense", "mpidense",
 and vendor-specific dense matrix types.
 """
-function is_dense(x::Mat{T}) where T
+function is_dense(x::Mat{T,Prefix}) where {T,Prefix}
     mat_type = _mat_type_string(x.obj.A)
     return occursin("dense", lowercase(mat_type))
 end
@@ -1709,7 +1703,7 @@ it uses MatGetRow to extract each row.
 This is primarily used for display purposes or small matrices. For large matrices, this
 operation can be expensive as it gathers all data to all ranks.
 """
-function Base.Matrix(x::Mat{T}) where T
+function Base.Matrix(x::Mat{T,Prefix}) where {T,Prefix}
     comm = MPI.COMM_WORLD
     nranks = MPI.Comm_size(comm)
     rank = MPI.Comm_rank(comm)
@@ -1790,7 +1784,7 @@ Uses MatGetRow to extract the sparse structure efficiently, preserving sparsity.
 This is primarily used for display purposes or small matrices. For large matrices, this
 operation can be expensive as it gathers all data to all ranks.
 """
-function SparseArrays.sparse(x::Mat{T}) where T
+function SparseArrays.sparse(x::Mat{T,Prefix}) where {T,Prefix}
     comm = MPI.COMM_WORLD
     nranks = MPI.Comm_size(comm)
     rank = MPI.Comm_rank(comm)
@@ -1863,7 +1857,7 @@ Dense matrices are converted to Matrix, other matrices are converted to SparseMa
 This is a collective operation - all ranks must call it and will display the same matrix.
 To print only on rank 0, use: `println(io0(), A)`
 """
-Base.show(io::IO, x::Mat{T}) where T = show(io, is_dense(x) ? Matrix(x) : sparse(x))
+Base.show(io::IO, x::Mat{T,Prefix}) where {T,Prefix} = show(io, is_dense(x) ? Matrix(x) : sparse(x))
 
 """
     Base.show(io::IO, mime::MIME, x::Mat{T})
@@ -1876,5 +1870,5 @@ Dense matrices are converted to Matrix, other matrices are converted to SparseMa
 This is a collective operation - all ranks must call it and will display the same matrix.
 To print only on rank 0, use: `show(io0(), mime, A)`
 """
-Base.show(io::IO, mime::MIME, x::Mat{T}) where T = show(io, mime, is_dense(x) ? Matrix(x) : sparse(x))
+Base.show(io::IO, mime::MIME, x::Mat{T,Prefix}) where {T,Prefix} = show(io, mime, is_dense(x) ? Matrix(x) : sparse(x))
 

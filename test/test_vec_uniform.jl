@@ -70,7 +70,7 @@ MPI.Barrier(comm)
 
 # Test 5: Helper constructors
 x0 = ones(16)
-drx = SafePETSc.Vec_uniform(x0; prefix="x_")
+drx = SafePETSc.Vec_uniform(x0)
 
 drz = SafePETSc.zeros_like(drx)
 z_local = PETSc.unsafe_localarray(drz.obj.v; read=true, write=false)
@@ -80,14 +80,13 @@ finally
     Base.finalize(z_local)
 end
 
-dro = SafePETSc.ones_like(drx; prefix="o_")
+dro = SafePETSc.ones_like(drx)
 o_local = PETSc.unsafe_localarray(dro.obj.v; read=true, write=false)
 try
     @test all(o_local[:] .== 1)
 finally
     Base.finalize(o_local)
 end
-@test dro.obj.prefix == "o_"
 
 drf = SafePETSc.fill_like(drx, 7.0)
 f_local = PETSc.unsafe_localarray(drf.obj.v; read=true, write=false)
@@ -146,8 +145,8 @@ MPI.Barrier(comm)
 # Test 7: In-place broadcasting
 x0 = ones(16)
 y0 = zeros(16)
-drx = SafePETSc.Vec_uniform(x0; prefix="x_")
-dry = SafePETSc.Vec_uniform(y0; prefix="y_")
+drx = SafePETSc.Vec_uniform(x0)
+dry = SafePETSc.Vec_uniform(y0)
 
 # y .= 2 .* x .+ 3 (DRef-aware broadcast)
 dry .= 2 .* drx .+ 3

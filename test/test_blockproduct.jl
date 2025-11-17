@@ -373,7 +373,7 @@ bp = BlockProduct([A_block, B_block])
 result = calculate!(bp)
 
 @test size(result) == (1, 1)
-@test result[1,1] isa SafePETSc.Mat{Float64}
+@test result[1,1] isa SafePETSc.Mat
 
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
@@ -394,7 +394,7 @@ bp = BlockProduct([A_block, B_block])
 result = calculate!(bp)
 
 @test size(result) == (1, 1)
-@test result[1,1] isa SafePETSc.Mat{Float64}
+@test result[1,1] isa SafePETSc.Mat
 
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
@@ -415,7 +415,7 @@ bp = BlockProduct([A_block, B_block])
 result = calculate!(bp)
 
 @test size(result) == (1, 1)
-@test result[1,1] isa SafePETSc.Mat{Float64}
+@test result[1,1] isa SafePETSc.Mat
 
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
@@ -440,10 +440,10 @@ result = calculate!(bp)
 
 @test size(result) == (2, 2)
 # Verify all results are Mat objects (not scalars)
-@test result[1,1] isa SafePETSc.Mat{Float64}
-@test result[1,2] isa SafePETSc.Mat{Float64}
-@test result[2,1] isa SafePETSc.Mat{Float64}
-@test result[2,2] isa SafePETSc.Mat{Float64}
+@test result[1,1] isa SafePETSc.Mat
+@test result[1,2] isa SafePETSc.Mat
+@test result[2,1] isa SafePETSc.Mat
+@test result[2,2] isa SafePETSc.Mat
 
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)

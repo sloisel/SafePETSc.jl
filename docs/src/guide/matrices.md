@@ -17,8 +17,8 @@ row_part = [1, 2, 3]  # 2 ranks
 col_part = [1, 2, 3]
 A = Mat_uniform(data; row_partition=row_part, col_partition=col_part)
 
-# With PETSc options prefix
-A = Mat_uniform(data; prefix="my_mat_")
+# With custom prefix type (advanced)
+A = Mat_uniform(data; Prefix=MPIDENSE)
 ```
 
 ### Sum Distribution
@@ -127,7 +127,6 @@ n = size(A, 2)
 # Partition information
 row_part = A.obj.row_partition
 col_part = A.obj.col_partition
-prefix = A.obj.prefix
 ```
 
 ## Row Ownership and Indexing
@@ -330,15 +329,17 @@ This uses a single `MatDenseGetArrayRead` call for the entire iteration.
 
 ### PETSc Options
 
-Configure matrix behavior via options:
+Configure matrix behavior via options. SafePETSc provides two built-in prefix types: `MPIDENSE` and `MPIAIJ`:
 
 ```julia
-# Set global options
-petsc_options_insert_string("-dense_mat_type mpidense")
+# Set options for a specific prefix type
+petsc_options_insert_string("-MPIDENSE_mat_type mpidense")
 
-# Use prefix for specific matrices
-A = Mat_uniform(data; prefix="my_mat_")
+# Create matrix with that prefix type
+A = Mat_uniform(data; Prefix=MPIDENSE)
 ```
+
+The default prefix is `MPIAIJ`.
 
 ## Examples
 

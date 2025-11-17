@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 """
-    map_rows(f::Function, A::Union{Vec{T},Mat{T}}...; prefix="", col_partition=nothing) -> Union{Vec{T},Mat{T}}
+    map_rows(f::Function, A::Union{Vec{T,Prefix},Mat{T,Prefix}}...; col_partition=nothing) -> Union{Vec{T,Prefix},Mat{T,Prefix}}
 
 **MPI Collective**
 
@@ -15,14 +15,13 @@ results are concatenated into a new distributed vector or matrix.
 
 # Arguments
 - `f::Function`: Function to apply to each row. Should accept as many arguments as there are inputs.
-- `A...::Union{Vec{T},Mat{T}}`: One or more distributed vectors or matrices. All inputs must have the same number of rows and compatible row partitions.
-- `prefix::String`: PETSc options prefix for the result (default: uses prefix from first input)
+- `A...::Union{Vec{T,Prefix},Mat{T,Prefix}}`: One or more distributed vectors or matrices. All inputs must have the same number of rows and compatible row partitions. The prefix from the first input is used for the result.
 - `col_partition::Union{Vector{Int},Nothing}`: Column partition for result matrix (default: use default_row_partition). Only used when `f` returns an adjoint vector (creating a matrix).
 
 # Return value
 The return type depends on what `f` returns:
-- If `f` returns a scalar or Julia Vector → returns a `Vec{T}`
-- If `f` returns an adjoint Julia Vector (row vector) → returns a `Mat{T}`
+- If `f` returns a scalar or Julia Vector → returns a `Vec{T,Prefix}`
+- If `f` returns an adjoint Julia Vector (row vector) → returns a `Mat{T,Prefix}`
 
 # Size behavior
 If inputs have `m` rows and `f` returns:
@@ -49,23 +48,25 @@ combined = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C)  # Returns 5×3 Ma
 - For vectors, `f` receives a scalar value per row
 - For matrices, `f` receives a view of the row (similar to eachrow)
 """
-function map_rows(f::Function, A::Union{Vec{T},Mat{T}}...;
-                  prefix::String="",
-                  col_partition::Union{Vector{Int},Nothing}=nothing) where T
+function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
+                  col_partition::Union{Vector{Int},Nothing}=nothing,
+                  Prefix::Union{Type,Nothing}=nothing) where {T}
 
     # Validate inputs
     isempty(A) && throw(ArgumentError("map_rows requires at least one input"))
 
+    # Extract Prefix from first input if not explicitly provided
+    if Prefix === nothing
+        # Get the Prefix type parameter from the first input
+        first_obj_type = typeof(A[1].obj)
+        Prefix = first_obj_type.parameters[2]  # Second parameter is Prefix
+    end
+
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
-    # Use prefix from first argument if not provided
-    if isempty(prefix)
-        prefix = first(A).obj.prefix
-    end
-
     # Get row partitions and check consistency
-    row_partitions = [isa(a, Vec{T}) ? a.obj.row_partition : a.obj.row_partition for a in A]
+    row_partitions = [a.obj.row_partition for a in A]
     @mpiassert all(rp -> rp == row_partitions[1], row_partitions) "All inputs to map_rows must have the same row partition"
 
     input_row_partition = row_partitions[1]
@@ -85,11 +86,11 @@ function map_rows(f::Function, A::Union{Vec{T},Mat{T}}...;
         # Get iterators/arrays for each input
         local_data = []
         for a in A
-            if isa(a, Vec{T})
+            if isa(a.obj, _Vec{T})
                 # For vectors, get local array
                 arr = PETSc.unsafe_localarray(a.obj.v; read=true)
                 push!(local_data, (arr, :vec))
-            else  # Mat{T}
+            else  # _Mat{T}
                 # For matrices, use eachrow
                 push!(local_data, (eachrow(a), :mat))
             end
@@ -199,7 +200,7 @@ function map_rows(f::Function, A::Union{Vec{T},Mat{T}}...;
         end
 
         # Create result vector
-        result_petsc = _vec_create_mpi_for_T(T, local_output_size, output_rows, prefix, output_row_partition)
+        result_petsc = _vec_create_mpi_for_T(T, local_output_size, output_rows, Prefix, output_row_partition)
         result_local = PETSc.unsafe_localarray(result_petsc; read=true, write=true)
 
     else  # :mat
@@ -216,7 +217,7 @@ function map_rows(f::Function, A::Union{Vec{T},Mat{T}}...;
         local_output_cols = col_hi - col_lo + 1
 
         result_petsc = _mat_create_mpi_for_T(T, local_output_rows, local_output_cols,
-                                              output_rows, output_cols, prefix)
+                                              output_rows, output_cols, Prefix)
     end
 
     # Now iterate and fill the result
@@ -225,11 +226,11 @@ function map_rows(f::Function, A::Union{Vec{T},Mat{T}}...;
         local_data = []
         finalizers = []
         for a in A
-            if isa(a, Vec{T})
+            if isa(a.obj, _Vec{T})
                 arr = PETSc.unsafe_localarray(a.obj.v; read=true)
                 push!(local_data, (arr, :vec, nothing))
                 push!(finalizers, arr)
-            else  # Mat{T}
+            else  # _Mat{T}
                 iter = eachrow(a)
                 push!(local_data, (iter, :mat, iterate(iter)))
             end
@@ -300,11 +301,11 @@ function map_rows(f::Function, A::Union{Vec{T},Mat{T}}...;
     if output_type == :vec_scalar || output_type == :vec_vector
         Base.finalize(result_local)
         PETSc.assemble(result_petsc)
-        obj = _Vec{T}(result_petsc, output_row_partition, prefix)
+        obj = _Vec{T,Prefix}(result_petsc, output_row_partition)
         return SafeMPI.DRef(obj)
     else  # :mat
         PETSc.assemble(result_petsc)
-        obj = _Mat{T}(result_petsc, output_row_partition, col_partition, prefix)
+        obj = _Mat{T,Prefix}(result_petsc, output_row_partition, col_partition)
         return SafeMPI.DRef(obj)
     end
 end

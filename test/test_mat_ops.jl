@@ -7,6 +7,7 @@ SafePETSc.Init()
 
 # Now load PETSc explicitly for helpers used in tests
 using SafePETSc
+using SafePETSc: DENSE, MPIAIJ
 using PETSc
 using SafePETSc.SafeMPI
 using LinearAlgebra
@@ -118,7 +119,7 @@ end
 A_data = Matrix{Float64}(I, 4, 4) * 2.0
 B_data = reshape(Float64.(1:8), 4, 2)
 drA = SafePETSc.Mat_uniform(A_data)
-drB = SafePETSc.Mat_uniform(B_data; prefix="dense_")  # Create as dense via prefix option
+drB = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)  # Create as dense via type parameter
 
 drX = drA \ drB
 @test drX isa SafeMPI.DRef
@@ -154,7 +155,7 @@ end
 A_data = Matrix{Float64}(I, 4, 4) * 2.0
 B_data = reshape(Float64.(1:8), 4, 2)
 drA = SafePETSc.Mat_uniform(A_data)
-drB = SafePETSc.Mat_uniform(B_data; prefix="dense_")  # Create as dense via prefix option
+drB = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)  # Create as dense via type parameter
 
 drX = drA' \ drB
 @test drX isa SafeMPI.DRef
@@ -188,7 +189,7 @@ end
 
 B_data = reshape(Float64.(1:8), 2, 4)
 A_data = Matrix{Float64}(I, 4, 4) * 2.0
-drB = SafePETSc.Mat_uniform(B_data; prefix="dense_")  # Create as dense via prefix option
+drB = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)  # Create as dense via type parameter
 drA = SafePETSc.Mat_uniform(A_data)
 
 drX = drB / drA
@@ -206,7 +207,7 @@ end
 
 B_data = reshape(Float64.(1:8), 2, 4)
 A_data = Matrix{Float64}(I, 4, 4) * 2.0
-drB = SafePETSc.Mat_uniform(B_data; prefix="dense_")  # Create as dense via prefix option
+drB = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)  # Create as dense via type parameter
 drA = SafePETSc.Mat_uniform(A_data)
 
 drX = drB / drA'
@@ -225,7 +226,7 @@ end
 A_data = Matrix{Float64}(I, 4, 4) * 2.0
 drA = SafePETSc.Mat_uniform(A_data)
 
-ksp = SafePETSc.KSP(drA; prefix="test_")
+ksp = SafePETSc.KSP(drA)
 @test ksp isa SafeMPI.DRef
 
 SafeMPI.check_and_destroy!()
@@ -356,10 +357,10 @@ end
 A_data = Matrix{Float64}(I, 4, 4) * 2.0
 B_data = reshape(Float64.(1:8), 4, 2)
 drA = SafePETSc.Mat_uniform(A_data)
-drB = SafePETSc.Mat_uniform(B_data; prefix="dense_")  # Must be dense
+drB = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)  # Must be dense
 
 # Pre-allocate output matrix (must be dense)
-drX_preallocated = SafePETSc.Mat_uniform(zeros(4, 2); prefix="dense_")
+drX_preallocated = SafePETSc.Mat_uniform(zeros(4, 2); Prefix=DENSE)
 
 # Call in-place version
 result = ldiv!(drX_preallocated, drA, drB)
@@ -381,14 +382,14 @@ A_data = Matrix{Float64}(I, 4, 4) * 2.0
 B1_data = reshape(Float64.(1:8), 4, 2)
 B2_data = reshape(Float64.(9:16), 4, 2)
 drA = SafePETSc.Mat_uniform(A_data)
-drB1 = SafePETSc.Mat_uniform(B1_data; prefix="dense_")
-drB2 = SafePETSc.Mat_uniform(B2_data; prefix="dense_")
+drB1 = SafePETSc.Mat_uniform(B1_data; Prefix=DENSE)
+drB2 = SafePETSc.Mat_uniform(B2_data; Prefix=DENSE)
 
 # Create solver (can be reused)
 ksp = SafePETSc.KSP(drA)
 
 # Pre-allocate output matrix (must be dense)
-drX = SafePETSc.Mat_uniform(zeros(4, 2); prefix="dense_")
+drX = SafePETSc.Mat_uniform(zeros(4, 2); Prefix=DENSE)
 
 # First solve
 result1 = ldiv!(ksp, drX, drB1)
@@ -410,12 +411,12 @@ if rank == 0
     flush(stdout)
 end
 
-# Use dense prefix to ensure MPIDENSE structure which is compatible with MAT_REUSE_MATRIX
+# Use DENSE type parameter to ensure MPIDENSE structure which is compatible with MAT_REUSE_MATRIX
 # Using non-square matrices: 4×5 * 5×3 = 4×3 to expose row/col bugs
 A_data = reshape(Float64.(1:20), 4, 5)  # 4×5 matrix
 B_data = reshape(Float64.(1:15), 5, 3)  # 5×3 matrix
-drA = SafePETSc.Mat_uniform(A_data; prefix="dense_")
-drB = SafePETSc.Mat_uniform(B_data; prefix="dense_")
+drA = SafePETSc.Mat_uniform(A_data; Prefix=DENSE)
+drB = SafePETSc.Mat_uniform(B_data; Prefix=DENSE)
 
 # First compute out-of-place C0 = A*B (MAT_INITIAL_MATRIX inside)
 drC0 = drA * drB
@@ -446,10 +447,10 @@ if rank == 0
     flush(stdout)
 end
 
-# Use dense prefix to ensure MPIDENSE structure which is compatible with MAT_REUSE_MATRIX
+# Use DENSE type parameter to ensure MPIDENSE structure which is compatible with MAT_REUSE_MATRIX
 M, N = 4, 6  # rectangular to exercise dimension swap
 A_data = reshape(Float64.(1:(M*N)), M, N)
-drA = SafePETSc.Mat_uniform(A_data; prefix="dense_")
+drA = SafePETSc.Mat_uniform(A_data; Prefix=DENSE)
 
 mat_type = SafePETSc._mat_type_string(drA.obj.A)
 if mat_type == "mpidense"

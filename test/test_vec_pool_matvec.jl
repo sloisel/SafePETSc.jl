@@ -17,11 +17,11 @@ SafePETSc.clear_vec_pool!()
 # Create a simple matrix
 N = 10
 A_data = Matrix{Float64}(I, N, N)
-A = SafePETSc.Mat_uniform(A_data; prefix="A_")
+A = SafePETSc.Mat_uniform(A_data)
 
 # Create a vector
 x_data = ones(N)
-x = SafePETSc.Vec_uniform(x_data; prefix="A_")
+x = SafePETSc.Vec_uniform(x_data)
 
 if rank == 0
     println("First matvec (should CREATE):")

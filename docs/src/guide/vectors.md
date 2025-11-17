@@ -16,8 +16,8 @@ v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
 partition = [1, 3, 5]  # rank 0: rows 1-2, rank 1: rows 3-4
 v = Vec_uniform([1.0, 2.0, 3.0, 4.0]; row_partition=partition)
 
-# With PETSc options prefix
-v = Vec_uniform([1.0, 2.0]; prefix="my_vec_")
+# With custom prefix type (advanced, see PETSc Options below)
+v = Vec_uniform([1.0, 2.0]; Prefix=MPIDENSE)
 ```
 
 ### Sum Distribution
@@ -147,7 +147,6 @@ n = size(v, 1)
 
 # Partition information
 partition = v.obj.row_partition
-prefix = v.obj.prefix
 ```
 
 ## Row Ownership and Indexing
@@ -274,17 +273,19 @@ combined = map_rows((x, y) -> [x[1] + y[1], x[1] * y[1]]', v1, v2)
 
 ## PETSc Options
 
-Use prefixes to configure PETSc behavior:
+SafePETSc provides two built-in prefix types: `MPIDENSE` and `MPIAIJ`. You can configure PETSc behavior using these prefixes:
 
 ```julia
-# Set options globally
-petsc_options_insert_string("-my_vec_type cuda")
+# Set options for a specific prefix type
+petsc_options_insert_string("-MPIDENSE_vec_type cuda")
 
-# Create vector with prefix
-v = Vec_uniform(data; prefix="my_vec_")
+# Create vector with that prefix type
+v = Vec_uniform(data; Prefix=MPIDENSE)
 
 # Now PETSc will use the "cuda" type for this vector
 ```
+
+The default prefix is `MPIAIJ`. Advanced users can define custom prefix types (not documented here).
 
 ## Examples
 

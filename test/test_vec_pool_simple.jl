@@ -18,7 +18,7 @@ SafePETSc.clear_vec_pool!()
 
 # Test 1: Create a vector
 v = ones(16)
-dr1 = SafePETSc.Vec_uniform(v; prefix="test_")
+dr1 = SafePETSc.Vec_uniform(v)
 
 if rank == 0
     println("Created first vector")
@@ -37,7 +37,7 @@ if rank == 0
 end
 
 # Create another vector with same size and prefix
-dr2 = SafePETSc.Vec_uniform(v; prefix="test_")
+dr2 = SafePETSc.Vec_uniform(v)
 
 if rank == 0
     println("Created second vector (should be from pool)")

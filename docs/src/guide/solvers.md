@@ -102,8 +102,12 @@ petsc_options_insert_string("-ksp_rtol 1e-8")
 petsc_options_insert_string("-pc_type bjacobi")
 
 # With prefix for specific solvers
+# First define a custom prefix type (advanced)
+struct MyPrefix end
+SafePETSc.prefix(::Type{MyPrefix}) = "my_"
+
 petsc_options_insert_string("-my_ksp_type cg")
-A = Mat_uniform(data; prefix="my_")
+A = Mat_uniform(data; Prefix=MyPrefix)
 ksp = KSP(A)  # Will use CG
 ```
 

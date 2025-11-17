@@ -45,19 +45,18 @@ The `SafeMPI` module implements reference counting across MPI ranks:
 Wraps PETSc objects with `DRef`:
 
 ```julia
-struct _Vec{T}
+struct _Vec{T,Prefix}
     v::PETSc.Vec{T}
     row_partition::Vector{Int}
-    prefix::String
 end
 
-const Vec{T} = DRef{_Vec{T}}
+const Vec{T,Prefix} = DRef{_Vec{T,Prefix}}
 
 # Opt-in to distributed management
-SafeMPI.destroy_trait(::Type{_Vec{T}}) = SafeMPI.CanDestroy()
+SafeMPI.destroy_trait(::Type{_Vec{T,Prefix}}) where {T,Prefix} = SafeMPI.CanDestroy()
 
 # Define cleanup
-function SafeMPI.destroy_obj!(x::_Vec{T})
+function SafeMPI.destroy_obj!(x::_Vec{T,Prefix}) where {T,Prefix}
     _destroy_petsc_vec!(x.v)
 end
 ```

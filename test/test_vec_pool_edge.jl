@@ -35,27 +35,27 @@ stats = SafePETSc.get_vec_pool_stats()
 
 # Add a vector to pool
 v = ones(16)
-dr1 = SafePETSc.Vec_uniform(v; prefix="test_")
+dr1 = SafePETSc.Vec_uniform(v)
 dr1 = nothing
 GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Pool should have one entry
+# Pool should have one entry (default Prefix is MPIAIJ)
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "test_", Float64))
-    @test stats[(16, "test_", Float64)] == 1
+    @test haskey(stats, (16, "MPIAIJ_", Float64))
+    @test stats[(16, "MPIAIJ_", Float64)] == 1
 end
 
 # Create another vector - should reuse from pool
-dr2 = SafePETSc.Vec_uniform(v; prefix="test_")
+dr2 = SafePETSc.Vec_uniform(v)
 @test dr2 isa SafeMPI.DRef
 
 # Pool should now be empty
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test !haskey(stats, (16, "test_", Float64)) || stats[(16, "test_", Float64)] == 0
+    @test !haskey(stats, (16, "MPIAIJ_", Float64)) || stats[(16, "MPIAIJ_", Float64)] == 0
 end
 
 SafeMPI.check_and_destroy!()
@@ -69,23 +69,25 @@ end
 
 SafePETSc.clear_vec_pool!()
 
-dr_a = SafePETSc.Vec_uniform(v; prefix="prefix1_")
+# Create vector with MPIAIJ prefix
+dr_a = SafePETSc.Vec_uniform(v; Prefix=SafePETSc.MPIAIJ)
 dr_a = nothing
 GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-dr_b = SafePETSc.Vec_uniform(v; prefix="prefix2_")
+# Create vector with DENSE prefix
+dr_b = SafePETSc.Vec_uniform(v; Prefix=SafePETSc.DENSE)
 dr_b = nothing
 GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Both should be in pool
+# Both should be in pool with different prefixes
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "prefix1_", Float64))
-    @test haskey(stats, (16, "prefix2_", Float64))
+    @test haskey(stats, (16, "MPIAIJ_", Float64))
+    @test haskey(stats, (16, "DENSE_", Float64))
 end
 
 SafeMPI.check_and_destroy!()
@@ -104,9 +106,9 @@ v16 = ones(16)
 v32 = ones(32)
 
 # Add vectors of different sizes to pool
-dr8 = SafePETSc.Vec_uniform(v8; prefix="size_")
-dr16 = SafePETSc.Vec_uniform(v16; prefix="size_")
-dr32 = SafePETSc.Vec_uniform(v32; prefix="size_")
+dr8 = SafePETSc.Vec_uniform(v8)
+dr16 = SafePETSc.Vec_uniform(v16)
+dr32 = SafePETSc.Vec_uniform(v32)
 
 dr8 = nothing
 dr16 = nothing
@@ -118,21 +120,21 @@ MPI.Barrier(comm)
 # Check all three sizes are in pool
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (8, "size_", Float64))
-    @test haskey(stats, (16, "size_", Float64))
-    @test haskey(stats, (32, "size_", Float64))
+    @test haskey(stats, (8, "MPIAIJ_", Float64))
+    @test haskey(stats, (16, "MPIAIJ_", Float64))
+    @test haskey(stats, (32, "MPIAIJ_", Float64))
 end
 
 # Create size 16 - should only consume the 16-sized vector
-dr16_new = SafePETSc.Vec_uniform(v16; prefix="size_")
+dr16_new = SafePETSc.Vec_uniform(v16)
 @test dr16_new isa SafeMPI.DRef
 
 # Other sizes should still be in pool
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (8, "size_", Float64))
-    @test haskey(stats, (32, "size_", Float64))
-    @test !haskey(stats, (16, "size_", Float64)) || stats[(16, "size_", Float64)] == 0
+    @test haskey(stats, (8, "MPIAIJ_", Float64))
+    @test haskey(stats, (32, "MPIAIJ_", Float64))
+    @test !haskey(stats, (16, "MPIAIJ_", Float64)) || stats[(16, "MPIAIJ_", Float64)] == 0
 end
 
 SafeMPI.check_and_destroy!()
@@ -148,7 +150,7 @@ SafePETSc.clear_vec_pool!()
 SafePETSc.ENABLE_VEC_POOL[] = true
 
 # Create with pooling enabled
-dr1 = SafePETSc.Vec_uniform(v; prefix="toggle_")
+dr1 = SafePETSc.Vec_uniform(v)
 dr1 = nothing
 GC.gc()
 SafeMPI.check_and_destroy!()
@@ -157,14 +159,14 @@ MPI.Barrier(comm)
 # Should be in pool
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "toggle_", Float64))
+    @test haskey(stats, (16, "MPIAIJ_", Float64))
 end
 
 # Disable pooling
 SafePETSc.ENABLE_VEC_POOL[] = false
 
 # Create new vector - should NOT consume from pool when pooling is disabled
-dr2 = SafePETSc.Vec_uniform(v; prefix="toggle_")
+dr2 = SafePETSc.Vec_uniform(v)
 @test dr2 isa SafeMPI.DRef
 
 dr2 = nothing
@@ -175,21 +177,21 @@ MPI.Barrier(comm)
 # Pool should still have the first vector
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "toggle_", Float64))
-    @test stats[(16, "toggle_", Float64)] == 1
+    @test haskey(stats, (16, "MPIAIJ_", Float64))
+    @test stats[(16, "MPIAIJ_", Float64)] == 1
 end
 
 # Re-enable pooling
 SafePETSc.ENABLE_VEC_POOL[] = true
 
 # Now should consume from pool again
-dr3 = SafePETSc.Vec_uniform(v; prefix="toggle_")
+dr3 = SafePETSc.Vec_uniform(v)
 @test dr3 isa SafeMPI.DRef
 
 # Pool should be empty
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test !haskey(stats, (16, "toggle_", Float64)) || stats[(16, "toggle_", Float64)] == 0
+    @test !haskey(stats, (16, "MPIAIJ_", Float64)) || stats[(16, "MPIAIJ_", Float64)] == 0
 end
 
 SafeMPI.check_and_destroy!()
@@ -207,9 +209,9 @@ SafePETSc.clear_vec_pool!()
 v1 = ones(8)
 v2 = ones(16)
 
-dr_a = SafePETSc.Vec_uniform(v1; prefix="a_")
-dr_b = SafePETSc.Vec_uniform(v2; prefix="b_")
-dr_c = SafePETSc.Vec_uniform(v1; prefix="c_")
+dr_a = SafePETSc.Vec_uniform(v1)
+dr_b = SafePETSc.Vec_uniform(v2)
+dr_c = SafePETSc.Vec_uniform(v1)
 
 dr_a = nothing
 dr_b = nothing
@@ -245,7 +247,7 @@ SafePETSc.clear_vec_pool!()
 
 # Create vector with specific values
 v_init = collect(1.0:16.0)
-dr_init = SafePETSc.Vec_uniform(v_init; prefix="zero_")
+dr_init = SafePETSc.Vec_uniform(v_init)
 
 # Verify initial values are correct
 nr = MPI.Comm_rank(MPI.COMM_WORLD)
@@ -269,7 +271,7 @@ MPI.Barrier(comm)
 
 # Create new vector (should reuse and be zeroed)
 v_zeros = zeros(16)
-dr_reused = SafePETSc.Vec_uniform(v_zeros; prefix="zero_")
+dr_reused = SafePETSc.Vec_uniform(v_zeros)
 
 # Should be all zeros
 local_view2 = PETSc.unsafe_localarray(dr_reused.obj.v; read=true, write=false)
@@ -294,7 +296,7 @@ SafePETSc.ENABLE_VEC_POOL[] = false
 
 # Create vector - should be destroyed directly when released, not pooled
 v_direct = ones(16)
-dr_direct = SafePETSc.Vec_uniform(v_direct; prefix="direct_")
+dr_direct = SafePETSc.Vec_uniform(v_direct)
 
 # Release the vector (should destroy directly via _destroy_petsc_vec!)
 dr_direct = nothing
@@ -319,7 +321,7 @@ if rank == 0
 end
 
 v_test = ones(16)
-dr_test = SafePETSc.Vec_uniform(v_test; prefix="err_")
+dr_test = SafePETSc.Vec_uniform(v_test)
 
 # Try to broadcast with a Matrix (unsupported type) - should error
 unsupported_array = [1.0 2.0; 3.0 4.0]

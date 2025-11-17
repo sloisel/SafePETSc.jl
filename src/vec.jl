@@ -19,10 +19,10 @@ Global flag to enable/disable vector pooling. Set to `false` to disable pooling.
 """
 const ENABLE_VEC_POOL = Ref{Bool}(true)
 
-# Vector pool: Dict{(nglobal, prefix) => Vector{PooledVec{T}}}
+# Vector pool: Dict{(nglobal, PrefixType) => Vector{PooledVec{T}}}
 # Separate pool per PetscScalar type, initialized below
 PETSc.@for_libpetsc begin
-    const $(Symbol(:VEC_POOL_, PetscScalar)) = Dict{Tuple{Int,String}, Vector{PooledVec{$PetscScalar}}}()
+    const $(Symbol(:VEC_POOL_, PetscScalar)) = Dict{Tuple{Int,Type}, Vector{PooledVec{$PetscScalar}}}()
 end
 
 # -----------------------------------------------------------------------------
@@ -30,7 +30,7 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    Vec_uniform(v::Vector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), prefix="") -> Vec{T}
+    Vec_uniform(v::Vector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), Prefix::Type=MPIAIJ) -> Vec{T,Prefix}
 
 **MPI Collective**
 
@@ -38,12 +38,12 @@ Create a distributed PETSc vector from a Julia vector, asserting uniform distrib
 
 - `v::Vector{T}` must be identical on all ranks (`mpi_uniform`).
 - `row_partition` is a Vector{Int} of length `nranks+1` with 1-based inclusive starts.
-- `prefix` sets `VecSetOptionsPrefix` for PETSc options.
-- Returns a `Vec{T}` (aka `DRef{_Vec{T}}`) managed collectively; by default vectors are returned to a reuse pool when released, not immediately destroyed. Use `ENABLE_VEC_POOL[] = false` or `clear_vec_pool!()` to force destruction.
+- `Prefix` is a type parameter for `VecSetOptionsPrefix` for PETSc options (default: MPIAIJ).
+- Returns a `Vec{T,Prefix}` (aka `DRef{_Vec{T,Prefix}}`) managed collectively; by default vectors are returned to a reuse pool when released, not immediately destroyed. Use `ENABLE_VEC_POOL[] = false` or `clear_vec_pool!()` to force destruction.
 """
 function Vec_uniform(v::Vector{T};
                                row_partition::Vector{Int}=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)),
-                               prefix::String="") where T
+                               Prefix::Type=MPIAIJ) where T
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank   = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -61,7 +61,7 @@ function Vec_uniform(v::Vector{T};
     nglobal = length(v)
 
     # Create distributed PETSc Vec (no finalizer; collective destroy via DRef)
-    petsc_vec = _vec_create_mpi_for_T(T, nlocal, nglobal, prefix, row_partition)
+    petsc_vec = _vec_create_mpi_for_T(T, nlocal, nglobal, Prefix, row_partition)
 
     # Fill local portion from v
     local_view = PETSc.unsafe_localarray(petsc_vec; read=true, write=true)
@@ -73,12 +73,12 @@ function Vec_uniform(v::Vector{T};
     PETSc.assemble(petsc_vec)
 
     # Wrap and DRef-manage with a manager bound to this communicator
-    obj = _Vec{T}(petsc_vec, row_partition, prefix)
+    obj = _Vec{T,Prefix}(petsc_vec, row_partition)
     return SafeMPI.DRef(obj)
 end
 
 """
-    Vec_sum(v::SparseVector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), prefix="", own_rank_only=false) -> Vec{T}
+    Vec_sum(v::SparseVector{T}; row_partition=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)), Prefix::Type=MPIAIJ, own_rank_only=false) -> Vec{T,Prefix}
 
 **MPI Collective**
 
@@ -86,15 +86,15 @@ Create a distributed PETSc vector by summing sparse vectors across ranks (on MPI
 
 - `v::SparseVector{T}` can differ across ranks; nonzeros are summed across all ranks.
 - `row_partition` is a Vector{Int} of length `nranks+1` with 1-based inclusive starts.
-- `prefix` sets `VecSetOptionsPrefix` for PETSc options.
+- `Prefix` is a type parameter for `VecSetOptionsPrefix` for PETSc options (default: MPIAIJ).
 - `own_rank_only::Bool` (default=false): if true, asserts that all nonzero indices fall within this rank's row partition.
-- Returns a `Vec{T}` managed collectively; by default vectors are returned to a reuse pool when released, not immediately destroyed. Use `ENABLE_VEC_POOL[] = false` or `clear_vec_pool!()` to force destruction.
+- Returns a `Vec{T,Prefix}` managed collectively; by default vectors are returned to a reuse pool when released, not immediately destroyed. Use `ENABLE_VEC_POOL[] = false` or `clear_vec_pool!()` to force destruction.
 
 Uses `VecSetValues` with `ADD_VALUES` to sum contributions across ranks.
 """
 function Vec_sum(v::SparseVector{T};
                  row_partition::Vector{Int}=default_row_partition(length(v), MPI.Comm_size(MPI.COMM_WORLD)),
-                 prefix::String="",
+                 Prefix::Type=MPIAIJ,
                  own_rank_only::Bool=false) where T
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank   = MPI.Comm_rank(MPI.COMM_WORLD)
@@ -128,7 +128,7 @@ function Vec_sum(v::SparseVector{T};
     nglobal = length(v)
 
     # Create distributed PETSc Vec (no finalizer; collective destroy via DRef)
-    petsc_vec = _vec_create_mpi_for_T(T, nlocal, nglobal, prefix, row_partition)
+    petsc_vec = _vec_create_mpi_for_T(T, nlocal, nglobal, Prefix, row_partition)
 
     # Extract nonzero indices and values from sparse vector
     nz_indices, nz_values = findnz(v)
@@ -142,28 +142,28 @@ function Vec_sum(v::SparseVector{T};
     PETSc.assemble(petsc_vec)
 
     # Wrap and DRef-manage with a manager bound to this communicator
-    obj = _Vec{T}(petsc_vec, row_partition, prefix)
+    obj = _Vec{T,Prefix}(petsc_vec, row_partition)
     return SafeMPI.DRef(obj)
 end
 
 # Create a distributed PETSc Vec for a given element type T by dispatching to the
 # underlying PETSc scalar variant via PETSc.@for_libpetsc
 # This function checks the pool first before creating a new vector
-function _vec_create_mpi_for_T(::Type{T}, nlocal::Integer, nglobal::Integer, prefix::String="", row_partition::Vector{Int}=Int[]) where {T}
-    return _vec_create_mpi_impl(T, nlocal, nglobal, prefix, row_partition)
+function _vec_create_mpi_for_T(::Type{T}, nlocal::Integer, nglobal::Integer, Prefix::Type, row_partition::Vector{Int}=Int[]) where {T}
+    return _vec_create_mpi_impl(T, nlocal, nglobal, Prefix, row_partition)
 end
 
 # Return a vector to the pool for reuse
-function _return_vec_to_pool!(v::PETSc.Vec{T}, row_partition::Vector{Int}, prefix::String) where {T}
-    return _return_vec_to_pool_impl!(v, row_partition, prefix)
+function _return_vec_to_pool!(v::PETSc.Vec{T}, row_partition::Vector{Int}, Prefix::Type) where {T}
+    return _return_vec_to_pool_impl!(v, row_partition, Prefix)
 end
 
 PETSc.@for_libpetsc begin
-    function _vec_create_mpi_impl(::Type{$PetscScalar}, nlocal::Integer, nglobal::Integer, prefix::String="", row_partition::Vector{Int}=Int[])
+    function _vec_create_mpi_impl(::Type{$PetscScalar}, nlocal::Integer, nglobal::Integer, Prefix::Type, row_partition::Vector{Int}=Int[])
         # Try to get from pool first (only if row_partition is provided for matching)
         if ENABLE_VEC_POOL[] && !isempty(row_partition)
             pool = $(Symbol(:VEC_POOL_, PetscScalar))
-            pool_key = (Int(nglobal), prefix)
+            pool_key = (Int(nglobal), Prefix)
             if haskey(pool, pool_key)
                 pool_list = pool[pool_key]
                 # Scan for matching row_partition
@@ -186,9 +186,12 @@ PETSc.@for_libpetsc begin
                          (MPI.MPI_Comm, Ptr{CVec}), MPI.COMM_WORLD, vec)
         PETSc.@chk ccall((:VecSetSizes, $libpetsc), PETSc.PetscErrorCode,
                          (CVec, $PetscInt, $PetscInt), vec, $PetscInt(nlocal), $PetscInt(nglobal))
-        if !isempty(prefix)
+
+        # Set prefix and let PETSc options determine the type
+        prefix_str = SafePETSc.prefix(Prefix)
+        if !isempty(prefix_str)
             PETSc.@chk ccall((:VecSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
-                             (CVec, Cstring), vec, prefix)
+                             (CVec, Cstring), vec, prefix_str)
         end
         PETSc.@chk ccall((:VecSetFromOptions, $libpetsc), PETSc.PetscErrorCode,
                          (CVec,), vec)
@@ -204,7 +207,7 @@ PETSc.@for_libpetsc begin
         return nothing
     end
 
-    function _return_vec_to_pool_impl!(v::PETSc.Vec{$PetscScalar}, row_partition::Vector{Int}, prefix::String)
+    function _return_vec_to_pool_impl!(v::PETSc.Vec{$PetscScalar}, row_partition::Vector{Int}, Prefix::Type)
         # Don't pool if PETSc is finalizing
         if PETSc.finalized($petsclib)
             return nothing
@@ -221,7 +224,7 @@ PETSc.@for_libpetsc begin
 
         # Add to pool
         pool = $(Symbol(:VEC_POOL_, PetscScalar))
-        pool_key = (Int(nglobal[]), prefix)
+        pool_key = (Int(nglobal[]), Prefix)
         if !haskey(pool, pool_key)
             pool[pool_key] = PooledVec{$PetscScalar}[]
         end
@@ -408,7 +411,7 @@ Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, α::Number) where {T} = (α * pa
 Base.:+(vt1::LinearAlgebra.Adjoint{T, <:Vec{T}}, vt2::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = (parent(vt1) + parent(vt2))'
 
 # Outer product: v * w' (returns Mat)
-function Base.:*(v::Vec{T}, wt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T}
+function Base.:*(v::Vec{T,Prefix}, wt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix}
     w = parent(wt)
 
     # Check dimensions and partitioning
@@ -436,7 +439,7 @@ function Base.:*(v::Vec{T}, wt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T}
     nlocal_cols = col_hi - col_lo + 1
 
     # Create distributed PETSc matrix
-    petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, m, n, v.obj.prefix)
+    petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, m, n, Prefix)
 
     # Get local portions of v and w
     v_local = PETSc.unsafe_localarray(v.obj.v; read=true)
@@ -462,7 +465,7 @@ function Base.:*(v::Vec{T}, wt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T}
     PETSc.assemble(petsc_mat)
 
     # Wrap in DRef
-    obj = _Mat{T}(petsc_mat, row_partition, col_partition, v.obj.prefix)
+    obj = _Mat{T,Prefix}(petsc_mat, row_partition, col_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -477,8 +480,11 @@ function Base.copy(bc::Base.Broadcast.Broadcasted{VecBroadcastStyle})
     # Determine result eltype
     Tres = Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
+    # Extract Prefix type parameter from vrep
+    Prefix = typeof(vrep).parameters[2]
+
     # Allocate distributed Vec with same partition/prefix
-    dr = Vec_uniform(zeros(Tres, N); row_partition=rowp, prefix=vrep.prefix)
+    dr = Vec_uniform(zeros(Tres, N); row_partition=rowp, Prefix=Prefix)
     y = dr.obj
     Base.materialize!(y, bc)
     return dr
@@ -503,7 +509,7 @@ _first__vec(::Any) = nothing
 # -----------------------------------------------------------------------------
 
 """
-    zeros_like(x::Vec{T}; T2::Type{S}=T, prefix::String=x.obj.prefix) -> Vec{S}
+    zeros_like(x::Vec{T,Prefix}; T2::Type{S}=T, Prefix2::Type=Prefix) -> Vec{S,Prefix2}
 
 **MPI Collective**
 
@@ -512,18 +518,18 @@ Create a new distributed vector with the same size and partition as `x`, filled 
 # Arguments
 - `x`: Template vector to match size and partition
 - `T2`: Element type of the result (defaults to same type as `x`)
-- `prefix`: PETSc options prefix (defaults to same prefix as `x`)
+- `Prefix2`: Prefix type (defaults to same prefix as `x`)
 
 See also: [`ones_like`](@ref), [`fill_like`](@ref), [`Vec_uniform`](@ref)
 """
-function zeros_like(x::Vec{T}; T2::Type{S}=T, prefix::String=x.obj.prefix) where {T,S}
+function zeros_like(x::Vec{T,Prefix}; T2::Type{S}=T, Prefix2::Type=Prefix) where {T,Prefix,S}
     rowp = x.obj.row_partition
     N = rowp[end] - 1
-    return Vec_uniform(zeros(S, N); row_partition=rowp, prefix=prefix)
+    return Vec_uniform(zeros(S, N); row_partition=rowp, Prefix=Prefix2)
 end
 
 """
-    ones_like(x::Vec{T}; T2::Type{S}=T, prefix::String=x.obj.prefix) -> Vec{S}
+    ones_like(x::Vec{T,Prefix}; T2::Type{S}=T, Prefix2::Type=Prefix) -> Vec{S,Prefix2}
 
 **MPI Collective**
 
@@ -532,18 +538,18 @@ Create a new distributed vector with the same size and partition as `x`, filled 
 # Arguments
 - `x`: Template vector to match size and partition
 - `T2`: Element type of the result (defaults to same type as `x`)
-- `prefix`: PETSc options prefix (defaults to same prefix as `x`)
+- `Prefix2`: Prefix type (defaults to same prefix as `x`)
 
 See also: [`zeros_like`](@ref), [`fill_like`](@ref), [`Vec_uniform`](@ref)
 """
-function ones_like(x::Vec{T}; T2::Type{S}=T, prefix::String=x.obj.prefix) where {T,S}
+function ones_like(x::Vec{T,Prefix}; T2::Type{S}=T, Prefix2::Type=Prefix) where {T,Prefix,S}
     rowp = x.obj.row_partition
     N = rowp[end] - 1
-    return Vec_uniform(ones(S, N); row_partition=rowp, prefix=prefix)
+    return Vec_uniform(ones(S, N); row_partition=rowp, Prefix=Prefix2)
 end
 
 """
-    fill_like(x::Vec{T}, val; T2::Type{S}=typeof(val), prefix::String=x.obj.prefix) -> Vec{S}
+    fill_like(x::Vec{T,Prefix}, val; T2::Type{S}=typeof(val), Prefix2::Type=Prefix) -> Vec{S,Prefix2}
 
 **MPI Collective**
 
@@ -553,7 +559,7 @@ Create a new distributed vector with the same size and partition as `x`, filled 
 - `x`: Template vector to match size and partition
 - `val`: Value to fill the vector with
 - `T2`: Element type of the result (defaults to type of `val`)
-- `prefix`: PETSc options prefix (defaults to same prefix as `x`)
+- `Prefix2`: Prefix type (defaults to same prefix as `x`)
 
 # Example
 ```julia
@@ -562,11 +568,11 @@ y = fill_like(x, 3.14)  # Create a vector like x, filled with 3.14
 
 See also: [`zeros_like`](@ref), [`ones_like`](@ref), [`Vec_uniform`](@ref)
 """
-function fill_like(x::Vec{T}, val; T2::Type{S}=typeof(val), prefix::String=x.obj.prefix) where {T,S}
+function fill_like(x::Vec{T,Prefix}, val; T2::Type{S}=typeof(val), Prefix2::Type=Prefix) where {T,Prefix,S}
     rowp = x.obj.row_partition
     N = rowp[end] - 1
     v = fill(S(val), N)
-    return Vec_uniform(v; row_partition=rowp, prefix=prefix)
+    return Vec_uniform(v; row_partition=rowp, Prefix=Prefix2)
 end
 
 # -----------------------------------------------------------------------------
@@ -587,7 +593,7 @@ Base.:-(x::Number, y::Vec) = x .- y
 Base.adjoint(v::Vec{T}) where {T} = LinearAlgebra.Adjoint(v)
 
 # Adjoint-vector times matrix: w' = v' * A
-function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
+function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}) where {T,Prefix}
     v = parent(vt)
 
     # Check dimensions and partitioning - coalesced into single MPI synchronization
@@ -603,7 +609,7 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     col_hi = A.obj.col_partition[rank+2] - 1
     nlocal = col_hi - col_lo + 1
 
-    w_petsc = _vec_create_mpi_for_T(T, nlocal, n, v.obj.prefix, A.obj.col_partition)
+    w_petsc = _vec_create_mpi_for_T(T, nlocal, n, Prefix, A.obj.col_partition)
 
     # Perform w = A^T * v using PETSc
     _mat_mult_transpose_vec!(w_petsc, A.obj.A, v.obj.v)
@@ -611,7 +617,7 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T}) where {T}
     PETSc.assemble(w_petsc)
 
     # Wrap in DRef and return as adjoint
-    obj = _Vec{T}(w_petsc, A.obj.col_partition, v.obj.prefix)
+    obj = _Vec{T,Prefix}(w_petsc, A.obj.col_partition)
     w = SafeMPI.DRef(obj)
     return LinearAlgebra.Adjoint(w)
 end
@@ -727,7 +733,8 @@ function get_vec_pool_stats()
         if isdefined(@__MODULE__, pool_name)
             pool = getfield(@__MODULE__, pool_name)
             for (key, vec_list) in pool
-                stats[(key[1], key[2], petsc_scalar)] = length(vec_list)
+                prefix_str = prefix(key[2])  # Convert Prefix type to string
+                stats[(key[1], prefix_str, petsc_scalar)] = length(vec_list)
             end
         end
     end
@@ -796,7 +803,7 @@ v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
 range = own_row(v)  # e.g., 1:2 on rank 0
 ```
 """
-own_row(v::DRef{_Vec{T}}) where {T} = v.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+1]:(v.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+2]-1)
+own_row(v::DRef{_Vec{T,Prefix}}) where {T,Prefix} = v.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+1]:(v.obj.row_partition[MPI.Comm_rank(MPI.COMM_WORLD)+2]-1)
 
 """
     Base.getindex(v::Vec{T}, i::Int) -> T
@@ -815,7 +822,7 @@ v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
 val = v[2]  # Returns 2.0
 ```
 """
-function Base.getindex(v::DRef{_Vec{T}}, i::Int) where {T}
+function Base.getindex(v::DRef{_Vec{T,Prefix}}, i::Int) where {T,Prefix}
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
     # Get local range
@@ -855,7 +862,7 @@ v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
 vals = v[2:3]  # Returns [2.0, 3.0]
 ```
 """
-function Base.getindex(v::DRef{_Vec{T}}, range::UnitRange{Int}) where {T}
+function Base.getindex(v::DRef{_Vec{T,Prefix}}, range::UnitRange{Int}) where {T,Prefix}
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
     # Get local range
