@@ -257,7 +257,7 @@ The return type depends on what your function returns:
 
 - **Scalar** → Returns a `Vec` with same number of rows
 - **Vector** → Returns a `Vec` with expanded rows (m*n rows if each returns n-element vector)
-- **Adjoint Vector** (row vector) → Returns a `Mat` with m rows
+- **Adjoint Vector** (row vector) → Returns a `Mat{T,MPIDENSE}` with m rows (always dense)
 
 ```julia
 v = Vec_uniform([1.0, 2.0, 3.0, 4.0])

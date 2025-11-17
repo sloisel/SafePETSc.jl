@@ -15,13 +15,13 @@ results are concatenated into a new distributed vector or matrix.
 
 # Arguments
 - `f::Function`: Function to apply to each row. Should accept as many arguments as there are inputs.
-- `A...::Union{Vec{T,Prefix},Mat{T,Prefix}}`: One or more distributed vectors or matrices. All inputs must have the same number of rows and compatible row partitions. The prefix from the first input is used for the result.
+- `A...::Union{Vec{T,Prefix},Mat{T,Prefix}}`: One or more distributed vectors or matrices. All inputs must have the same number of rows and compatible row partitions.
 - `col_partition::Union{Vector{Int},Nothing}`: Column partition for result matrix (default: use default_row_partition). Only used when `f` returns an adjoint vector (creating a matrix).
 
 # Return value
 The return type depends on what `f` returns:
-- If `f` returns a scalar or Julia Vector → returns a `Vec{T,Prefix}`
-- If `f` returns an adjoint Julia Vector (row vector) → returns a `Mat{T,Prefix}`
+- If `f` returns a scalar or Julia Vector → returns a `Vec{T,Prefix}` (Prefix from first input)
+- If `f` returns an adjoint Julia Vector (row vector) → returns a `Mat{T,MPIDENSE}` (always dense)
 
 # Size behavior
 If inputs have `m` rows and `f` returns:
@@ -174,6 +174,11 @@ function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
     output_type = output_type_ref[] == 1 ? :vec_scalar : (output_type_ref[] == 2 ? :vec_vector : :mat)
     output_rows = output_rows_ref[]
     output_cols = output_cols_ref[]
+
+    # Use MPIDENSE for matrix results (they are always dense)
+    if output_type == :mat
+        Prefix = MPIDENSE
+    end
 
     # Create output based on type
     if output_type == :vec_scalar || output_type == :vec_vector
