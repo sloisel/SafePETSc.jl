@@ -334,23 +334,33 @@ end
 - The function is applied only to locally owned rows on each rank
 - Results are automatically assembled into a new distributed object
 - More efficient than extracting rows individually and processing
-- Works with both dense and sparse matrices (though sparse iteration may be less efficient)
+- Works efficiently with both dense and sparse matrices
 
 ## Advanced Features
 
-### Iterating Over Dense Matrix Rows
+### Iterating Over Matrix Rows
 
-For `MATMPIDENSE` matrices:
+For dense (`MPIDENSE`) matrices, `eachrow` returns views:
 
 ```julia
 # Iterate over local rows efficiently
 for row in eachrow(A)
-    # row is a view of the matrix row
+    # row is a view of the matrix row (SubArray)
     process(row)
 end
 ```
 
-This uses a single `MatDenseGetArrayRead` call for the entire iteration.
+For sparse (`MPIAIJ`) matrices, `eachrow` returns sparse vectors:
+
+```julia
+# Iterate over local rows of a sparse matrix
+for row in eachrow(A_sparse)
+    # row is a SparseVector efficiently preserving sparsity
+    process(row)
+end
+```
+
+Both implementations are efficient: dense iteration uses a single `MatDenseGetArrayRead` call, while sparse iteration uses `MatGetRow` for each row without wasteful dense conversions.
 
 ### PETSc Options and the Prefix Type Parameter
 

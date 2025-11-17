@@ -114,7 +114,7 @@ n = size(A, 2)                         # Columns
 # Iterate over rows (works for both dense and sparse matrices)
 for row in eachrow(A)
     # For dense (MPIDENSE): row is a view of the matrix row
-    # For sparse (MPIAIJ): row is a dense Vector representation
+    # For sparse (MPIAIJ): row is a SparseVector efficiently preserving sparsity
     process(row)
 end
 ```

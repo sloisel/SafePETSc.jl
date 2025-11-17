@@ -1648,7 +1648,7 @@ end
 # -----------------------------------------------------------------------------
 # eachrow for distributed matrices (both MPIDENSE and MPIAIJ)
 # - For dense matrices: uses MatDenseGetArrayRead and yields SubArray views
-# - For sparse matrices: uses MatGetRow and yields sparse vector representations
+# - For sparse matrices: uses MatGetRow and yields SparseVector efficiently preserving sparsity
 # - Performs exactly one MatDenseGetArrayRead per iterator (dense) and restores on finish
 # -----------------------------------------------------------------------------
 
@@ -1777,7 +1777,7 @@ function _eachrow_sparse(A::Mat{T,Prefix}) where {T,Prefix}
 end
 
 Base.IteratorEltype(::Type{_EachRowSparse{T,Prefix}}) where {T,Prefix} = Base.HasEltype()
-Base.eltype(::Type{_EachRowSparse{T,Prefix}}) where {T,Prefix} = Vector{T}
+Base.eltype(::Type{_EachRowSparse{T,Prefix}}) where {T,Prefix} = SparseVector{T,Int}
 Base.IteratorSize(::Type{_EachRowSparse{T,Prefix}}) where {T,Prefix} = Base.HasLength()
 Base.length(it::_EachRowSparse) = it.nloc
 
@@ -1799,22 +1799,28 @@ function _iterate_sparse_row(it::_EachRowSparse{T,Prefix}, st::Int) where {T,Pre
     # Get the sparse row from PETSc
     ncols_row, cols_ptr, vals_ptr = _mat_get_row(it.petscA, global_row)
 
-    # Create a dense vector representation of the row
-    row_vec = zeros(T, it.ncols)
-
-    # Copy sparse data into dense vector
+    # Create a sparse vector directly from the non-zero entries
     if ncols_row > 0
+        # Wrap the PETSc arrays (we must copy since we'll restore them)
         cols = unsafe_wrap(Array, cols_ptr, ncols_row; own=false)
         vals = unsafe_wrap(Array, vals_ptr, ncols_row; own=false)
 
-        for j in 1:ncols_row
-            col_idx = cols[j] + 1  # Convert from 0-based to 1-based
-            row_vec[col_idx] = vals[j]
-        end
-    end
+        # Copy to Julia arrays and convert to 1-based indexing
+        nzind = [Int(cols[j] + 1) for j in 1:ncols_row]
+        nzval = copy(vals)
 
-    # Restore the row data to PETSc
-    _mat_restore_row(it.petscA, global_row, ncols_row, cols_ptr, vals_ptr)
+        # Restore the row data to PETSc before constructing SparseVector
+        _mat_restore_row(it.petscA, global_row, ncols_row, cols_ptr, vals_ptr)
+
+        # Construct sparse vector
+        row_vec = SparseVector(it.ncols, nzind, nzval)
+    else
+        # Restore the row data to PETSc
+        _mat_restore_row(it.petscA, global_row, ncols_row, cols_ptr, vals_ptr)
+
+        # Empty row - create empty sparse vector
+        row_vec = spzeros(T, it.ncols)
+    end
 
     return (row_vec, i)
 end
@@ -1827,10 +1833,10 @@ end
 Iterate over the rows of a distributed matrix.
 
 Only iterates over rows owned by the current rank. Each row is returned as a view (for dense)
-or a dense Vector (for sparse matrices converted from sparse representation).
+or a SparseVector (for sparse matrices).
 
 For MPIDENSE matrices: returns views of the underlying dense storage
-For MPIAIJ matrices: returns dense Vector{T} representations of each sparse row
+For MPIAIJ matrices: returns SparseVector{T,Int} efficiently preserving sparsity
 """
 function Base.eachrow(A::Mat{T,MPIDENSE}) where {T}
     return _eachrow_dense(A)
