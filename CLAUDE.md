@@ -54,7 +54,11 @@ This pattern allows `Pkg.test()` to work correctly by having `runtests.jl` call 
 
 ## User-Facing Features
 
-SafePETSc implements a Julia-native interface for PETSc, allowing natural mathematical expressions.
+SafePETSc implements a Julia-native interface for PETSc, allowing natural mathematical expressions. Users will
+use Vec{T,Prefix}, Mat{T,Prefix} and KSP{T,Prefix} objects to interface with PETSc. These are aliases to DRef{T}
+objects in the SafeMPI sub-module, which enables collective garbage collection across the MPI cluster. The Prefix
+type parameter will typically be either MPIAIJ or MPIDENSE. It is possible for the user to define more Prefixes,
+but at this time we are not encouraging it.
 
 ### Vector Operations
 
@@ -134,7 +138,7 @@ y = fill_like(x, val)    # Fill with value
 ### IO
 
 Use io0() to print or otherwise perform io from a single rank. It can be used as follows: `println(io0(),"Hello from rank 0!").
-The Vec{T} and Mat{T} implement `show(...)` methods, but these are collective. Therefore, you can do `println(io0(),A)` and it will
+The Vec{T,Prefix} and Mat{T,Prefix} implement `show(...)` methods, but these are collective. Therefore, you can do `println(io0(),A)` and it will
 print the Vec or Mat once on rank 0.
 
 ### Key Differences from Native Julia
@@ -143,39 +147,6 @@ print the Vec or Mat once on rank 0.
 - **Explicit partitioning**: Use `Vec_uniform` vs `Vec_sum` to control data distribution
 - **KSP reuse**: Create `KSP(A)` objects for repeated solves with same matrix
 - **Memory pooling**: Control temporary vector allocation with vector pools
-
-## Architecture (Implementation Details)
-
-*This section describes the internal implementation. Users don't need to understand these details to use SafePETSc effectively.*
-
-### Core Components
-
-**SafeMPI Module** (`src/SafeMPI.jl`):
-The heart of the package, implementing a reference-counting garbage collection system for MPI-distributed objects.
-
-- **DistributedRefManager**: Manages reference counting across MPI ranks
-  - All ranks allocate IDs deterministically and recycle them via a shared `free_ids` vector; counters remain mirrored on all ranks
-  - Finalizers enqueue local releases without MPI
-  - At safe points (`check_and_destroy!`), ranks Allgather counts and then Allgatherv release IDs, update mirrored counters identically, and destroy ready objects collectively
-  - Uses `free_ids` for ID recycling to prevent unbounded growth (mirrored on all ranks)
-
-- **DRef{T}**: A wrapper around objects that need coordinated destruction
-  - Only works with types that opt-in via the trait system
-  - Local releases are gathered collectively at safe points
-
-### Trait-Based Destruction System
-
-The package uses a trait-based approach to control which types can be managed:
-
-1. **Opt-in Model**: Types must explicitly declare support for distributed management
-   - Default: `destroy_trait(::Type) = CannotDestroy()`
-   - To enable: Define `destroy_trait(::Type{YourType}) = CanDestroy()`
-
-2. **Destruction Hook**: Types must implement their cleanup logic
-   - Define: `destroy_obj!(obj::YourType) = ...`
-   - This is called when all ranks have released the object
-
-3. **Error Safety**: Attempting to create a DRef for an unsupported type produces a clear error message
 
 ### MPI Communication Flow
 
@@ -201,13 +172,5 @@ The main module (`src/SafePETSc.jl`) wraps PETSc functionality with safe distrib
 - Indicates that a new matrix should be created (not reusing existing storage)
 - **Critical**: Must be `Cint(0)`, not `-1` or other values (causes segfaults)
 - Centralized to ensure consistency across all PETSc matrix operations
-
-### GPU-Friendly Matrix Operations
-
-The package prioritizes GPU-compatible matrix operations by using PETSc's native functions:
-
-- **MatConvert**: Converts matrix types (e.g., sparse to dense) while preserving GPU storage
-- **MatTranspose**: Transposes matrices efficiently on GPU
-- **MatMatMult**: Matrix-matrix multiplication with GPU support
 
 **Avoid** element-by-element extraction patterns (e.g., nested loops with `MatGetValues`) as they cause excessive GPU→CPU transfers. Use PETSc's bulk operations instead.

@@ -68,17 +68,32 @@ transpose!(B, A)
 ### Concatenation
 
 ```julia
-# Vertical concatenation
+# Vertical concatenation (stacking)
 C = vcat(A, B)
 C = cat(A, B; dims=1)
 
-# Horizontal concatenation
+# Horizontal concatenation (side-by-side)
 D = hcat(A, B)
 D = cat(A, B; dims=2)
 
 # Block diagonal
 E = blockdiag(A, B, C)
+
+# Concatenating vectors to form matrices
+x = Vec_uniform([1.0, 2.0, 3.0])
+y = Vec_uniform([4.0, 5.0, 6.0])
+M = hcat(x, y)  # Creates 3×2 Mat{Float64,MPIDENSE}
 ```
+
+!!! note "Automatic Prefix Selection"
+    The concatenation functions automatically determine the output `Prefix` type:
+    - **Upgrades to `MPIDENSE`** when concatenating vectors horizontally (e.g., `hcat(x, y)`)
+    - **Upgrades to `MPIDENSE`** if any input matrix has `Prefix=MPIDENSE`
+    - Otherwise, preserves the first input's `Prefix`
+
+    This ensures correctness since vectors are inherently dense, and horizontal concatenation
+    of vectors produces a dense matrix. Vertical concatenation of vectors (`vcat`) preserves
+    the sparse format since the result is still a single column.
 
 ### Sparse Diagonal Matrices
 

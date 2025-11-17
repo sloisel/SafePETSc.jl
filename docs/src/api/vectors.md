@@ -23,6 +23,17 @@ SafePETSc.ones_like
 SafePETSc.fill_like
 ```
 
+## Concatenation
+
+Vectors can be concatenated using the same functions as matrices:
+
+```@docs
+Base.vcat
+Base.hcat
+```
+
+Note: Concatenating vectors returns `Mat{T,Prefix}` objects. See the [Matrices API](matrices.md#Concatenation) for details.
+
 ## Partitioning
 
 ```@docs

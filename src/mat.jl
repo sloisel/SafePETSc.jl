@@ -450,6 +450,36 @@ function _mat_to_local_sparse(A::Mat{T,Prefix}) where {T,Prefix}
     return sparse(I, J, V, m, n)
 end
 
+# Convert Vec to local sparse matrix (treated as m×1 column vector)
+function _mat_to_local_sparse(v::Vec{T,Prefix}) where {T,Prefix}
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    m = length(v)
+    row_lo = v.obj.row_partition[rank+1]
+    row_hi = v.obj.row_partition[rank+2] - 1
+    nlocal = row_hi - row_lo + 1
+
+    # Get local values from the vector
+    local_vals = Vector{T}(undef, nlocal)
+    _vec_getvalues_local!(local_vals, v.obj.v, row_lo, row_hi)
+
+    # Build sparse matrix representation (m×1)
+    I = Int[]
+    J = Int[]
+    V = T[]
+    for i in 1:nlocal
+        global_row = row_lo + i - 1
+        if abs(local_vals[i]) > 0
+            push!(I, global_row)
+            push!(J, 1)  # Column 1 (it's a column vector)
+            push!(V, local_vals[i])
+        end
+    end
+
+    return sparse(I, J, V, m, 1)
+end
+
 # Helper to get a single matrix value
 PETSc.@for_libpetsc begin
     function _mat_getvalue(mat::PETSc.Mat{$PetscScalar}, row::Int, col::Int)
@@ -463,53 +493,117 @@ PETSc.@for_libpetsc begin
     end
 end
 
+# Helper to extract Prefix type parameter from Vec or Mat
+_get_prefix(::Union{Vec{T,P}, Mat{T,P}}) where {T,P} = P
+
+# Helper to get row partition (works for both Vec and Mat)
+_get_row_partition(v::Vec) = v.obj.row_partition
+_get_row_partition(m::Mat) = m.obj.row_partition
+
+# Helper to get column partition (Mat has it, Vec represents 1 column)
+function _get_col_partition(m::Mat)
+    return m.obj.col_partition
+end
+function _get_col_partition(v::Vec)
+    # Vec represents a single column - return default partition for 1 column
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    return default_row_partition(1, nranks)  # Partition 1 column across ranks
+end
+
+# Helper to compute output width (number of columns) after concatenation
+function _compute_output_width(As, dims)
+    if dims == 1  # vcat: width stays same
+        return size(As[1], 2)
+    elseif dims == 2  # hcat: width is sum of all widths
+        return sum(size(A, 2) for A in As)
+    else
+        throw(ArgumentError("dims must be 1 or 2 for matrix concatenation"))
+    end
+end
+
 """
-    Base.cat(As::Mat{T}...; dims) -> Mat{T}
+    Base.cat(As::Union{Vec{T},Mat{T}}...; dims) -> Mat{T,Prefix}
 
-Concatenate distributed PETSc matrices along dimension `dims`.
+**MPI Collective**
 
-All input matrices must:
+Concatenate distributed PETSc vectors and/or matrices along dimension `dims`.
+
+# Arguments
+- `As::Union{Vec{T},Mat{T}}...`: One or more vectors or matrices with the same element type `T`
+- `dims`: Concatenation dimension (1 for vertical/vcat, 2 for horizontal/hcat)
+
+# Requirements
+All inputs must:
 - Have the same element type `T`
-- Have the same prefix
 - Have compatible sizes and partitions for the concatenation dimension
+  - For `dims=1` (vcat): same number of columns and column partition
+  - For `dims=2` (hcat): same number of rows and row partition
 
+# Automatic Prefix Selection
+The output `Prefix` type is automatically determined to ensure correctness:
+- **MPIDENSE** if any input has `Prefix=MPIDENSE` (dense format required)
+- **MPIDENSE** if concatenating vectors horizontally with width > 1 (e.g., `hcat(x, y)`)
+- Otherwise, preserves the first input's `Prefix`
+
+This ensures that operations like `hcat(vec1, vec2)` produce dense matrices as expected,
+since vectors are inherently dense and horizontal concatenation creates a dense result.
+
+# Implementation
 The concatenation is performed by:
-1. Each rank extracts its owned rows from each input matrix as a Julia sparse matrix
+1. Each rank extracts its owned rows from each input as a Julia sparse matrix
 2. Standard Julia `cat` is applied locally on each rank
-3. The results are summed across ranks using `Mat_sum`
+3. The results are combined across ranks using `Mat_sum` with appropriate partitioning
 
 # Examples
 ```julia
-C = cat(A, B; dims=1)  # Vertical concatenation (vcat)
-D = cat(A, B; dims=2)  # Horizontal concatenation (hcat)
+# Vertical concatenation (stacking)
+C = cat(A, B; dims=1)  # or vcat(A, B)
+
+# Horizontal concatenation (side-by-side)
+D = cat(A, B; dims=2)  # or hcat(A, B)
+
+# Convert two vectors to a dense matrix
+x = Vec_uniform([1.0, 2.0, 3.0])
+y = Vec_uniform([4.0, 5.0, 6.0])
+M = hcat(x, y)  # Creates 3×2 Mat{Float64,MPIDENSE}
+
+# Vertical stacking of vectors keeps sparse format
+v = vcat(x, y)  # Creates 6×1 Mat{Float64,MPIAIJ}
 ```
+
+See also: [`vcat`](@ref), [`hcat`](@ref), [`Mat_sum`](@ref)
 """
-function Base.cat(As::Mat{T,Prefix}...; dims) where {T,Prefix}
+function Base.cat(As::Union{Vec{T},Mat{T}}...; dims) where {T}
     n = length(As)
     if n == 0
-        throw(ArgumentError("cat requires at least one matrix"))
+        throw(ArgumentError("cat requires at least one matrix or vector"))
     end
+
+    # Determine output Prefix: upgrade to MPIDENSE if needed
+    prefixes = [_get_prefix(a) for a in As]
+    width = _compute_output_width(As, dims)
+    Prefix = (MPIDENSE in prefixes || (As[1] isa Vec && width > 1)) ? MPIDENSE : prefixes[1]
 
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
     # Validate partition compatibility based on dims - collect conditions first
     if dims == 1  # Vertical concatenation
-        # All matrices must have same column partition and number of columns
-        first_col_partition = As[1].obj.col_partition
+        # All matrices/vectors must have same column partition and number of columns
+        first_col_partition = _get_col_partition(As[1])
         first_ncols = size(As[1], 2)
-        all_same_col_partition = all(As[k].obj.col_partition == first_col_partition for k in 2:n)
+        all_same_col_partition = all(_get_col_partition(As[k]) == first_col_partition for k in 2:n)
         all_same_ncols = all(size(As[k], 2) == first_ncols for k in 2:n)
         # Single @mpiassert for efficiency (pulled out of loops)
-        @mpiassert (all_same_col_partition && all_same_ncols) "For dims=1: all matrices must have the same column partition and number of columns"
+        @mpiassert (all_same_col_partition && all_same_ncols) "For dims=1: all inputs must have the same column partition and number of columns"
     elseif dims == 2  # Horizontal concatenation
-        # All matrices must have same row partition and number of rows
-        first_row_partition = As[1].obj.row_partition
+        # All matrices/vectors must have same row partition and number of rows
+        first_row_partition = _get_row_partition(As[1])
         first_nrows = size(As[1], 1)
-        all_same_row_partition = all(As[k].obj.row_partition == first_row_partition for k in 2:n)
+        all_same_row_partition = all(_get_row_partition(As[k]) == first_row_partition for k in 2:n)
         all_same_nrows = all(size(As[k], 1) == first_nrows for k in 2:n)
         # Single @mpiassert for efficiency (pulled out of loops)
-        @mpiassert (all_same_row_partition && all_same_nrows) "For dims=2: all matrices must have the same row partition and number of rows"
+        @mpiassert (all_same_row_partition && all_same_nrows) "For dims=2: all inputs must have the same row partition and number of rows"
     else
         throw(ArgumentError("dims must be 1 or 2 for matrix concatenation"))
     end
@@ -527,20 +621,17 @@ function Base.cat(As::Mat{T,Prefix}...; dims) where {T,Prefix}
         result_row_partition = zeros(Int, nranks + 1)
         result_row_partition[1] = 1
         for r in 1:nranks
-            rows_in_rank = sum(As[k].obj.row_partition[r+1] - As[k].obj.row_partition[r] for k in 1:n)
+            row_parts = [_get_row_partition(As[k]) for k in 1:n]
+            rows_in_rank = sum(row_parts[k][r+1] - row_parts[k][r] for k in 1:n)
             result_row_partition[r+1] = result_row_partition[r] + rows_in_rank
         end
-        result_col_partition = As[1].obj.col_partition
+        result_col_partition = _get_col_partition(As[1])
     else  # dims == 2, Horizontal: cols increase, rows stay same
-        # New column partition: concatenate the individual column counts
+        # New column partition: use default partitioning for total columns
+        # This is simpler and works for both Mat and Vec inputs
         total_cols = sum(size(A, 2) for A in As)
-        result_col_partition = zeros(Int, nranks + 1)
-        result_col_partition[1] = 1
-        for r in 1:nranks
-            cols_in_rank = sum(As[k].obj.col_partition[r+1] - As[k].obj.col_partition[r] for k in 1:n)
-            result_col_partition[r+1] = result_col_partition[r] + cols_in_rank
-        end
-        result_row_partition = As[1].obj.row_partition
+        result_col_partition = default_row_partition(total_cols, nranks)
+        result_row_partition = _get_row_partition(As[1])
     end
 
     # Use Mat_sum to combine results across ranks
@@ -552,28 +643,72 @@ function Base.cat(As::Mat{T,Prefix}...; dims) where {T,Prefix}
 end
 
 """
-    Base.vcat(As::Mat{T}...) -> Mat{T}
+    Base.vcat(As::Union{Vec{T},Mat{T}}...) -> Mat{T,Prefix}
 
 **MPI Collective**
 
-Vertically concatenate distributed PETSc matrices.
+Vertically concatenate (stack) distributed PETSc vectors and/or matrices.
 
-Equivalent to `cat(As...; dims=1)`. All matrices must have the same number of columns
-and the same column partition.
+Equivalent to `cat(As...; dims=1)`. Stacks inputs vertically, increasing the number of rows
+while keeping the number of columns constant.
+
+# Requirements
+All inputs must have the same number of columns and the same column partition.
+
+# Prefix Selection
+- Typically preserves the input `Prefix` (e.g., `MPIAIJ` for vectors)
+- Upgrades to `MPIDENSE` if any input is `MPIDENSE`
+
+# Examples
+```julia
+x = Vec_uniform([1.0, 2.0])
+y = Vec_uniform([3.0, 4.0])
+v = vcat(x, y)  # 4×1 Mat{Float64,MPIAIJ}
+
+A = Mat_uniform(sparse([1 2; 3 4]))
+B = Mat_uniform(sparse([5 6; 7 8]))
+C = vcat(A, B)  # 4×2 matrix
+```
+
+See also: [`cat`](@ref), [`hcat`](@ref)
 """
-Base.vcat(As::Mat{T,Prefix}...) where {T,Prefix} = cat(As...; dims=1)
+Base.vcat(As::Union{Vec{T},Mat{T}}...) where {T} = cat(As...; dims=1)
 
 """
-    Base.hcat(As::Mat{T}...) -> Mat{T}
+    Base.hcat(As::Union{Vec{T},Mat{T}}...) -> Mat{T,Prefix}
 
 **MPI Collective**
 
-Horizontally concatenate distributed PETSc matrices.
+Horizontally concatenate (place side-by-side) distributed PETSc vectors and/or matrices.
 
-Equivalent to `cat(As...; dims=2)`. All matrices must have the same number of rows
-and the same row partition.
+Equivalent to `cat(As...; dims=2)`. Concatenates inputs horizontally, increasing the number
+of columns while keeping the number of rows constant.
+
+# Requirements
+All inputs must have the same number of rows and the same row partition.
+
+# Prefix Selection
+- **Automatically upgrades to `MPIDENSE`** when concatenating vectors (width > 1)
+- Upgrades to `MPIDENSE` if any input is `MPIDENSE`
+- Otherwise preserves the input `Prefix`
+
+The automatic upgrade for vectors is important because vectors are inherently dense,
+and horizontal concatenation of vectors produces a dense matrix.
+
+# Examples
+```julia
+x = Vec_uniform([1.0, 2.0, 3.0])
+y = Vec_uniform([4.0, 5.0, 6.0])
+M = hcat(x, y)  # 3×2 Mat{Float64,MPIDENSE} - auto-upgraded!
+
+A = Mat_uniform(sparse([1; 2; 3]))
+B = Mat_uniform(sparse([4; 5; 6]))
+C = hcat(A, B)  # 3×2 matrix with MPIDENSE
+```
+
+See also: [`cat`](@ref), [`vcat`](@ref)
 """
-Base.hcat(As::Mat{T,Prefix}...) where {T,Prefix} = cat(As...; dims=2)
+Base.hcat(As::Union{Vec{T},Mat{T}}...) where {T} = cat(As...; dims=2)
 
 # Import blockdiag from SparseArrays
 import SparseArrays: blockdiag
