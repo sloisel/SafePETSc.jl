@@ -80,6 +80,22 @@ ts = @testset MPITestHarness.QuietTestSet "Advanced vector operations" begin
     @test count == local_len  # Iterations should match local length
     println(io0(), "[DEBUG] Test 6 passed")
 
+    # Test 7: Base.sum function
+    println(io0(), "[DEBUG] Test 7: Base.sum function")
+    s = Vec_uniform([1.0, 2.0, 3.0, 4.0, 5.0])
+    sum_result = sum(s)
+    @test sum_result ≈ 15.0  # 1+2+3+4+5 = 15
+    # Test with negative values
+    t = Vec_uniform([-1.0, 2.0, -3.0, 4.0])
+    @test sum(t) ≈ 2.0  # -1+2-3+4 = 2
+    # Test with zeros
+    u = Vec_uniform([0.0, 0.0, 0.0])
+    @test sum(u) ≈ 0.0
+    # Test with single element
+    w = Vec_uniform([42.0])
+    @test sum(w) ≈ 42.0
+    println(io0(), "[DEBUG] Test 7 passed")
+
     println(io0(), "[DEBUG] All advanced vector operations tests completed")
 end
 

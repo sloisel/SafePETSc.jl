@@ -639,6 +639,26 @@ end
 # Implements LinearAlgebra.dot to support standard Julia syntax
 LinearAlgebra.dot(v::Vec{T}, w::Vec{T}) where {T} = v' * w
 
+# Sum of all elements in a vector: sum(v) (returns scalar)
+# Implements Base.sum to support standard Julia syntax
+"""
+    Base.sum(v::Vec{T}) -> T
+
+**MPI Collective**
+
+Compute the sum of all elements in a distributed PETSc vector.
+
+This is a collective operation - all ranks must call it and will receive the same result.
+Uses PETSc's VecSum function internally.
+
+# Example
+```julia
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+s = sum(v)  # Returns 10.0 on all ranks
+```
+"""
+Base.sum(v::Vec{T}) where {T} = _vec_sum(v.obj.v)
+
 # Iterator for eachrow on Vec - treats vector as column, yields scalars
 struct VecRowIterator{T,Prefix}
     vec::Vec{T,Prefix}
@@ -693,6 +713,14 @@ PETSc.@for_libpetsc begin
         PETSc.@chk ccall((:VecDot, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CVec, PETSc.CVec, Ptr{$PetscScalar}),
                          v, w, result)
+        return result[]
+    end
+
+    function _vec_sum(v::PETSc.Vec{$PetscScalar})
+        result = Ref{$PetscScalar}()
+        PETSc.@chk ccall((:VecSum, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CVec, Ptr{$PetscScalar}),
+                         v, result)
         return result[]
     end
 end
