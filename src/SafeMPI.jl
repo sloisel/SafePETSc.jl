@@ -455,10 +455,6 @@ end
 function mpi_uniform(A::SparseArrays.SparseMatrixCSC)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
-    if rank == 0
-        println("[DEBUG] Using specialized mpi_uniform for SparseMatrixCSC, size=$(size(A)), nnz=$(nnz(A))")
-    end
-
     # Check dimensions
     dims = [size(A, 1), size(A, 2)]
     ref_dims = MPI.bcast(rank == 0 ? dims : Int[], 0, MPI.COMM_WORLD)
@@ -485,12 +481,6 @@ function mpi_uniform(A::SparseArrays.SparseMatrixCSC)
     local_equal = colptr_match && rowval_match && nzval_match
 
     result = MPI.Allreduce(local_equal, MPI.LAND, MPI.COMM_WORLD)
-
-    # Debug output from all ranks if there's a mismatch
-    if !result
-        println("[rank $rank] DEBUG mpi_uniform SparseMatrixCSC: size=$(size(A)), colptr=$colptr_match, rowval=$rowval_match, nzval=$nzval_match, local_equal=$local_equal")
-    end
-
     return result
 end
 

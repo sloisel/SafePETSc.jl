@@ -95,9 +95,6 @@ function Mat_uniform(A::SparseMatrixCSC{T};
                           col_partition[1] == 1 &&
                           col_partition[end] == size(A, 2) + 1 &&
                           all(r -> col_partition[r] <= col_partition[r+1], 1:nranks)
-
-    # Debug output for troubleshooting
-
     @mpiassert SafeMPI.mpi_uniform(A) && row_partition_valid && col_partition_valid "Mat_uniform requires A to be mpi_uniform across all ranks; row_partition and col_partition must each have length nranks+1, start at 1, end at M+1/N+1 respectively, and be strictly increasing"
 
     # Local sizes
@@ -1661,13 +1658,6 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...
 
         # Read only the local values using VecGetValues on local indices
         local_vals = zeros(T, nlocal)
-        # Debug print ownership window per rank once per diagonal
-        # (kept concise to reduce noise in normal runs)
-        r = MPI.Comm_rank(MPI.COMM_WORLD)
-        @static if false
-            println("[DEBUG] rank=$(r) k=$(k) lo=$(di_lo) hi=$(di_hi) nlocal=$(nlocal)")
-            flush(stdout)
-        end
         _vec_getvalues_local!(local_vals, v.obj.v, di_lo, di_hi)
         @inbounds for t in 1:nlocal
             di = di_lo + t - 1
