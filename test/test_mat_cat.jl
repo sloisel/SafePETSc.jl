@@ -192,6 +192,101 @@ end
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
+# Test 7: vcat with Vec objects (returns another Vec, not a Mat)
+if rank == 0
+    println("[DEBUG] Test 7: vcat with Vec objects")
+    flush(stdout)
+end
+
+# Create vectors
+v1_data = Float64[1, 2, 3, 4]
+v2_data = Float64[5, 6, 7, 8]
+v3_data = Float64[9, 10, 11, 12]
+drV1 = SafePETSc.Vec_uniform(v1_data)
+drV2 = SafePETSc.Vec_uniform(v2_data)
+drV3 = SafePETSc.Vec_uniform(v3_data)
+
+# Test vcat of vectors (should produce another Vec)
+drV_vcat = vcat(drV1, drV2, drV3)
+@test drV_vcat isa SafePETSc.Vec
+@test length(drV_vcat) == 12
+
+# Verify result by getting local array
+V_local = PETSc.unsafe_localarray(drV_vcat.obj.v; read=true)
+V_julia = vcat(v1_data, v2_data, v3_data)
+# Each rank has part of the vector, so we need to gather
+V_gathered = zeros(12)
+local_range = drV_vcat.obj.row_partition[rank+1]:(drV_vcat.obj.row_partition[rank+2]-1)
+V_local_portion = zeros(12)
+V_local_portion[local_range] = V_local
+MPI.Reduce!(V_local_portion, V_gathered, +, 0, comm)
+if rank == 0
+    @test all(isapprox.(V_gathered, V_julia, rtol=1e-10))
+end
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 8: hcat with Vec objects (tests _mat_to_local_sparse for Vec)
+if rank == 0
+    println("[DEBUG] Test 8: hcat with Vec objects")
+    flush(stdout)
+end
+
+# Create vectors
+v1_data = Float64[1, 2, 3]
+v2_data = Float64[4, 5, 6]
+v3_data = Float64[7, 8, 9]
+drV1 = SafePETSc.Vec_uniform(v1_data)
+drV2 = SafePETSc.Vec_uniform(v2_data)
+drV3 = SafePETSc.Vec_uniform(v3_data)
+
+# Test hcat of vectors (should produce a matrix with multiple columns)
+drV_hcat = hcat(drV1, drV2, drV3)
+@test drV_hcat isa SafePETSc.Mat  # hcat of vectors produces a Mat
+@test size(drV_hcat) == (3, 3)
+
+# Verify result
+V_local = SafePETSc._mat_to_local_sparse(drV_hcat)
+V_julia = hcat(v1_data, v2_data, v3_data)
+V_sum = zeros(3, 3)
+MPI.Reduce!(Matrix(V_local), V_sum, +, 0, comm)
+if rank == 0
+    @test all(isapprox.(V_sum, V_julia, rtol=1e-10))
+end
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 9: Mixed Vec and Mat concatenation
+if rank == 0
+    println("[DEBUG] Test 9: Mixed Vec and Mat concatenation")
+    flush(stdout)
+end
+
+# Create a vector and a matrix
+v_data = Float64[1, 2, 3]
+A_data = Float64[4 7; 5 8; 6 9]
+drV = SafePETSc.Vec_uniform(v_data)
+drA = SafePETSc.Mat_uniform(A_data)
+
+# Test hcat of vector and matrix
+drMixed = hcat(drV, drA)
+@test drMixed isa SafePETSc.Mat  # Mixed hcat produces a Mat
+@test size(drMixed) == (3, 3)
+
+# Verify result
+Mixed_local = SafePETSc._mat_to_local_sparse(drMixed)
+Mixed_julia = hcat(v_data, A_data)
+Mixed_sum = zeros(3, 3)
+MPI.Reduce!(Matrix(Mixed_local), Mixed_sum, +, 0, comm)
+if rank == 0
+    @test all(isapprox.(Mixed_sum, Mixed_julia, rtol=1e-10))
+end
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
 if rank == 0
     println("[DEBUG] All concatenation tests completed")
     flush(stdout)

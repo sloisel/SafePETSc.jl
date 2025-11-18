@@ -604,6 +604,42 @@ function _mat_to_local_sparse(A::Mat{T,Prefix}) where {T,Prefix}
     return sparse(I, J, V, m, n)
 end
 
+# Helper function to extract owned elements from a PETSc Vec to Julia SparseMatrixCSC (as column vector)
+# Treats the Vec as a single-column matrix for concatenation operations
+function _mat_to_local_sparse(v::Vec{T,Prefix}) where {T,Prefix}
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    m = length(v)
+    row_lo = v.obj.row_partition[rank+1]
+    row_hi = v.obj.row_partition[rank+2] - 1
+    nlocal_rows = row_hi - row_lo + 1
+
+    # Get local vector data using unsafe_localarray
+    local_view = PETSc.unsafe_localarray(v.obj.v; read=true)
+
+    try
+        # Build sparse matrix arrays (single column)
+        I = Int[]
+        J = Int[]
+        V = T[]
+
+        for local_row in 1:nlocal_rows
+            global_row = row_lo + local_row - 1
+            val = local_view[local_row]
+            if val != 0  # Only store nonzeros
+                push!(I, global_row)
+                push!(J, 1)  # Single column
+                push!(V, val)
+            end
+        end
+
+        return sparse(I, J, V, m, 1)
+    finally
+        Base.finalize(local_view)
+    end
+end
+
 # Helper to extract Prefix type parameter from Vec or Mat
 _get_prefix(::Union{Vec{T,P}, Mat{T,P}}) where {T,P} = P
 

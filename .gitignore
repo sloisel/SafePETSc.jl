@@ -39,6 +39,7 @@ final*.log
 verify*.log
 test_*_debug.jl
 test_debug*.jl
+lcov.info
 
 # Compiled binaries and debug symbols
 *.o
