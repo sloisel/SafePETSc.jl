@@ -310,6 +310,10 @@ Base.eltype(r::SafeMPI.DRef{<:_Mat}) = Base.eltype(r.obj)
 Base.size(r::SafeMPI.DRef{<:_Mat}) = Base.size(r.obj)
 Base.size(r::SafeMPI.DRef{<:_Mat}, d::Integer) = Base.size(r.obj, d)
 
+# Broadcast support - Mat objects are already array-like and can be broadcast over
+Base.Broadcast.broadcastable(m::Mat) = m
+Base.Broadcast.BroadcastStyle(::Type{<:Mat}) = Base.Broadcast.DefaultArrayStyle{2}()
+
 # Adjoint support for Mat
 Base.adjoint(A::Mat{T}) where {T} = LinearAlgebra.Adjoint(A)
 

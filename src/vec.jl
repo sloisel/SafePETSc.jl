@@ -388,6 +388,10 @@ Base.size(r::SafeMPI.DRef{<:_Vec}, d::Integer) = Base.size(r.obj, d)
 Base.axes(r::SafeMPI.DRef{<:_Vec}) = Base.axes(r.obj)
 Base.length(r::SafeMPI.DRef{<:_Vec}) = Base.length(r.obj)
 
+# Broadcast support - Vec objects are already array-like and can be broadcast over
+Base.Broadcast.broadcastable(v::Vec) = v
+Base.Broadcast.BroadcastStyle(::Type{<:Vec}) = Base.Broadcast.DefaultArrayStyle{1}()
+
 # Adjoint of Vec behaves as a row vector (1 × n matrix)
 Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix} = (1, length(parent(vt)))
 Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, d::Integer) where {T,Prefix} = d == 1 ? 1 : (d == 2 ? length(parent(vt)) : 1)
