@@ -55,6 +55,10 @@ end
         run_mpi_test(joinpath(@__DIR__, "test_vec_sum.jl"); nprocs=4, expect_success=true)
     end
 
+    @testset "Vec norm Tests" begin
+        run_mpi_test(joinpath(@__DIR__, "test_vec_norm.jl"); nprocs=4, expect_success=true)
+    end
+
     @testset "Mat_uniform Tests" begin
         run_mpi_test(joinpath(@__DIR__, "test_mat_uniform.jl"); nprocs=4, expect_success=true)
     end

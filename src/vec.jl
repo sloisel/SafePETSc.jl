@@ -659,6 +659,43 @@ s = sum(v)  # Returns 10.0 on all ranks
 """
 Base.sum(v::Vec{T}) where {T} = _vec_sum(v.obj.v)
 
+# Norm of a vector: norm(v, p) (returns scalar)
+# Implements LinearAlgebra.norm to support standard Julia syntax
+"""
+    LinearAlgebra.norm(v::Vec{T}, p::Real=2) -> Real
+
+**MPI Collective**
+
+Compute the p-norm of a distributed PETSc vector.
+
+This is a collective operation - all ranks must call it and will receive the same result.
+Uses PETSc's VecNorm function internally.
+
+Supported norms:
+- p = 1: 1-norm (sum of absolute values)
+- p = 2: 2-norm (Euclidean norm, default)
+- p = Inf: infinity norm (maximum absolute value)
+
+# Examples
+```julia
+v = Vec_uniform([3.0, 4.0])
+n2 = norm(v)      # Returns 5.0 (2-norm)
+n1 = norm(v, 1)   # Returns 7.0 (1-norm)
+ninf = norm(v, Inf) # Returns 4.0 (inf-norm)
+```
+"""
+function LinearAlgebra.norm(v::Vec{T}, p::Real=2) where {T}
+    if p == 2
+        return _vec_norm(v.obj.v, Val(2))
+    elseif p == 1
+        return _vec_norm(v.obj.v, Val(1))
+    elseif isinf(p)
+        return _vec_norm(v.obj.v, Val(Inf))
+    else
+        error("Unsupported norm type: p = $p. Supported values are 1, 2, and Inf.")
+    end
+end
+
 # Iterator for eachrow on Vec - treats vector as column, yields scalars
 struct VecRowIterator{T,Prefix}
     vec::Vec{T,Prefix}
@@ -721,6 +758,30 @@ PETSc.@for_libpetsc begin
         PETSc.@chk ccall((:VecSum, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CVec, Ptr{$PetscScalar}),
                          v, result)
+        return result[]
+    end
+
+    function _vec_norm(v::PETSc.Vec{$PetscScalar}, ::Val{1})
+        result = Ref{$PetscReal}()
+        PETSc.@chk ccall((:VecNorm, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CVec, PETSc.NormType, Ptr{$PetscReal}),
+                         v, PETSc.NORM_1, result)
+        return result[]
+    end
+
+    function _vec_norm(v::PETSc.Vec{$PetscScalar}, ::Val{2})
+        result = Ref{$PetscReal}()
+        PETSc.@chk ccall((:VecNorm, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CVec, PETSc.NormType, Ptr{$PetscReal}),
+                         v, PETSc.NORM_2, result)
+        return result[]
+    end
+
+    function _vec_norm(v::PETSc.Vec{$PetscScalar}, ::Val{Inf})
+        result = Ref{$PetscReal}()
+        PETSc.@chk ccall((:VecNorm, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CVec, PETSc.NormType, Ptr{$PetscReal}),
+                         v, PETSc.NORM_INFINITY, result)
         return result[]
     end
 end
