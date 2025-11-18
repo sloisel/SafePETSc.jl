@@ -590,55 +590,11 @@ try
     println(io0(), "  Solution size: ", size(sol_native.z))
     println(io0(), "  Solution norm: ", norm(sol_native.z))
 
-    # Extract the native g_grid and f_grid from the solution to see what defaults were used
-    println(io0(), "\nExamining defaults used by native amgb...")
-    println(io0(), "  (We'll adapt these for PETSc)")
-
-    # Try with PETSc geometry - need to provide g_grid and f_grid adapted to PETSc types
+    # Try with PETSc geometry - let amgb build the default g_grid and f_grid
     println(io0(), "\nRunning amgb with PETSc geometry...")
+    println(io0(), "  (letting amgb build default g_grid and f_grid)")
 
-    # Create g_grid and f_grid using PETSc types
-    # The defaults from fem2d are boundary and forcing data
-    # For fem2d with default parameters, g specifies Dirichlet boundary values
-    # and f specifies the forcing term
-
-    # Get the native defaults by inspecting what fem2d_solve would use
-    # For p-Laplace, the defaults are typically:
-    # g_grid: boundary values (size: n_boundary_nodes × n_state_vars)
-    # f_grid: forcing values (size: n_nodes × n_state_vars)
-
-    # Use the same defaults as native but convert to PETSc uniform matrices
-    n_nodes = size(g_native.x, 1)
-    dim = size(g_native.x, 2)
-
-    # For p-Laplace in 2D, we have state variables [u, s] where:
-    # u = solution, s = slack variable for the gradient constraint
-    # Default boundary: u = norm(x)^p on boundary, s = large value
-    # Default forcing: zero
-
-    # Create native grids matching MultiGridBarrier defaults
-    # state_variables = [:u :dirichlet ; :s :full] means 2 state variables (u and s)
-    # So g_grid and f_grid should have size (n_nodes, 2), not (n_nodes, 4)
-    n_state_vars = 2  # u and s
-    g_grid_native = zeros(n_nodes, n_state_vars)
-    for i in 1:n_nodes
-        x_coord = g_native.x[i, :]
-        g_grid_native[i, 1] = norm(x_coord)^p_value  # u boundary value
-        g_grid_native[i, 2] = 100.0  # s boundary value (large for slack)
-    end
-
-    f_grid_native = zeros(n_nodes, n_state_vars)  # forcing term (typically zero)
-    f_grid_native[:, 1] .= 0.5  # u forcing
-    f_grid_native[:, 2] .= 1.0  # s forcing (constraint enforcement)
-
-    # Convert to PETSc types
-    g_grid_petsc = Mat_uniform(g_grid_native; Prefix=MPIDENSE)
-    f_grid_petsc = Mat_uniform(f_grid_native; Prefix=MPIDENSE)
-
-    println(io0(), "  Created g_grid_petsc: ", typeof(g_grid_petsc), " size ", size(g_grid_petsc))
-    println(io0(), "  Created f_grid_petsc: ", typeof(f_grid_petsc), " size ", size(f_grid_petsc))
-
-    sol_petsc = amgb(g_petsc; p=p_value, g_grid=g_grid_petsc, f_grid=f_grid_petsc, verbose=false)
+    sol_petsc = amgb(g_petsc; p=p_value, verbose=false)
     println(io0(), "  ✓ PETSc amgb completed successfully!")
     println(io0(), "  Solution size: ", size(sol_petsc.z))
 
@@ -657,19 +613,19 @@ try
 
     if sol_diff < 1e-6
         println(io0(), "\n" * "="^70)
-        println(io0(), "✓ Phase 3 completed successfully!")
+        println(io0(), "✓ Phase 5 completed successfully!")
         println(io0(), "✓ amgb works with PETSc types and produces correct results!")
         println(io0(), "="^70)
     else
         println(io0(), "\n" * "="^70)
-        println(io0(), "⚠ Phase 3 completed with differences")
+        println(io0(), "⚠ Phase 5 completed with differences")
         println(io0(), "  Solutions differ by ", sol_diff)
         println(io0(), "="^70)
     end
 
 catch e
     println(io0(), "\n" * "="^70)
-    println(io0(), "✗ Phase 3 FAILED with error:")
+    println(io0(), "✗ Phase 5 FAILED with error:")
     println(io0(), "="^70)
     println(io0(), "Error type: ", typeof(e))
     if e isa MethodError
