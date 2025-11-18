@@ -315,7 +315,8 @@ function Base.materialize!(dest::_Vec{T}, bc::Base.Broadcast.Broadcasted{VecBroa
 
     # Check partitions match destination - single @mpiassert (pulled out of loop)
     all_partitions_match = all(v.row_partition == dest.row_partition for v in vec_args)
-    @mpiassert all_partitions_match "broadcast: all Vec operands must share the same row_partition as destination"
+    vec_partitions = [v.row_partition for v in vec_args]
+    @mpiassert all_partitions_match "broadcast: all Vec operands must share the same row_partition as destination. Got dest.row_partition=$(dest.row_partition), operand partitions=$(vec_partitions)"
 
     # Prepare destination local view
     dest_arr = PETSc.unsafe_localarray(dest.v; read=true, write=true)

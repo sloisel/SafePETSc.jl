@@ -361,7 +361,7 @@ function Base.:*(A::Mat{T,PrefixA}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(x)[1]
-    @mpiassert n == vec_length && A.obj.col_partition == x.obj.row_partition "Matrix columns must match vector length (A: $(m)×$(n), x: $(vec_length)) and column partition of A must match row partition of x"
+    @mpiassert n == vec_length && A.obj.col_partition == x.obj.row_partition "Matrix columns must match vector length (A: $(m)×$(n), x: $(vec_length)) and A.col_partition=$(A.obj.col_partition) must match x.row_partition=$(x.obj.row_partition)"
 
     # Create result vector with A's row partition
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -427,7 +427,7 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,Pre
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(x)[1]
-    @mpiassert m == vec_length && A.obj.row_partition == x.obj.row_partition "Matrix rows must match vector length (A: $(m)×$(n), x: $(vec_length)) and row partition of A must match row partition of x"
+    @mpiassert m == vec_length && A.obj.row_partition == x.obj.row_partition "Matrix rows must match vector length (A: $(m)×$(n), x: $(vec_length)) and A.row_partition=$(A.obj.row_partition) must match x.row_partition=$(x.obj.row_partition)"
 
     # Create result vector with A's column partition (since A' has dimensions n×m)
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
@@ -723,7 +723,7 @@ C = vcat(A, B)  # Returns Mat{Float64,MPIAIJ} of size 4×2
 
 See also: [`vcat`](@ref), [`hcat`](@ref), [`Vec_sum`](@ref), [`Mat_sum`](@ref)
 """
-function Base.cat(As::Union{Vec{T},Mat{T}}...; dims) where {T}
+function Base.cat(As::Union{Vec{T},Mat{T}}...; dims, row_partition=nothing, col_partition=nothing) where {T}
     n = length(As)
     if n == 0
         throw(ArgumentError("cat requires at least one matrix or vector"))
@@ -745,7 +745,8 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims) where {T}
         all_same_col_partition = all(_get_col_partition(As[k]) == first_col_partition for k in 2:n)
         all_same_ncols = all(size(As[k], 2) == first_ncols for k in 2:n)
         # Single @mpiassert for efficiency (pulled out of loops)
-        @mpiassert (all_same_col_partition && all_same_ncols) "For dims=1: all inputs must have the same column partition and number of columns"
+        col_partitions = [_get_col_partition(As[k]) for k in 1:n]
+        @mpiassert (all_same_col_partition && all_same_ncols) "For dims=1 (vcat): all inputs must have the same column partition and number of columns. Got col_partitions=$(col_partitions), ncols=$([size(As[k], 2) for k in 1:n])"
     elseif dims == 2  # Horizontal concatenation
         # All matrices/vectors must have same row partition and number of rows
         first_row_partition = _get_row_partition(As[1])
@@ -753,7 +754,8 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims) where {T}
         all_same_row_partition = all(_get_row_partition(As[k]) == first_row_partition for k in 2:n)
         all_same_nrows = all(size(As[k], 1) == first_nrows for k in 2:n)
         # Single @mpiassert for efficiency (pulled out of loops)
-        @mpiassert (all_same_row_partition && all_same_nrows) "For dims=2: all inputs must have the same row partition and number of rows"
+        row_partitions = [_get_row_partition(As[k]) for k in 1:n]
+        @mpiassert (all_same_row_partition && all_same_nrows) "For dims=2 (hcat): all inputs must have the same row partition and number of rows. Got row_partitions=$(row_partitions), nrows=$([size(As[k], 1) for k in 1:n])"
     else
         throw(ArgumentError("dims must be 1 or 2 for matrix concatenation"))
     end
@@ -766,22 +768,15 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims) where {T}
 
     # Determine result partitions
     if dims == 1  # Vertical: rows increase, cols stay same
-        # New row partition: concatenate the individual row counts
+        # New row partition: use provided or default partitioning for total rows
         total_rows = sum(size(A, 1) for A in As)
-        result_row_partition = zeros(Int, nranks + 1)
-        result_row_partition[1] = 1
-        for r in 1:nranks
-            row_parts = [_get_row_partition(As[k]) for k in 1:n]
-            rows_in_rank = sum(row_parts[k][r+1] - row_parts[k][r] for k in 1:n)
-            result_row_partition[r+1] = result_row_partition[r] + rows_in_rank
-        end
-        result_col_partition = _get_col_partition(As[1])
+        result_row_partition = row_partition === nothing ? default_row_partition(total_rows, nranks) : row_partition
+        result_col_partition = col_partition === nothing ? _get_col_partition(As[1]) : col_partition
     else  # dims == 2, Horizontal: cols increase, rows stay same
-        # New column partition: use default partitioning for total columns
-        # This is simpler and works for both Mat and Vec inputs
+        # New column partition: use provided or default partitioning for total columns
         total_cols = sum(size(A, 2) for A in As)
-        result_col_partition = default_row_partition(total_cols, nranks)
-        result_row_partition = _get_row_partition(As[1])
+        result_col_partition = col_partition === nothing ? default_row_partition(total_cols, nranks) : col_partition
+        result_row_partition = row_partition === nothing ? _get_row_partition(As[1]) : row_partition
     end
 
     # Return Vec for single-column vertical concatenation, Mat otherwise
@@ -910,24 +905,11 @@ function blockdiag(As::Mat{T,Prefix}...) where {T,Prefix}
     # Perform local blockdiag operation
     local_result = blockdiag(local_sparse...)
 
-    # Compute result partitions
-    # Row partition: sum of all row partitions
+    # Compute result partitions using default partitioning
     total_rows = sum(size(A, 1) for A in As)
-    result_row_partition = zeros(Int, nranks + 1)
-    result_row_partition[1] = 1
-    for r in 1:nranks
-        rows_in_rank = sum(As[k].obj.row_partition[r+1] - As[k].obj.row_partition[r] for k in 1:n)
-        result_row_partition[r+1] = result_row_partition[r] + rows_in_rank
-    end
-
-    # Column partition: sum of all column partitions
     total_cols = sum(size(A, 2) for A in As)
-    result_col_partition = zeros(Int, nranks + 1)
-    result_col_partition[1] = 1
-    for r in 1:nranks
-        cols_in_rank = sum(As[k].obj.col_partition[r+1] - As[k].obj.col_partition[r] for k in 1:n)
-        result_col_partition[r+1] = result_col_partition[r] + cols_in_rank
-    end
+    result_row_partition = default_row_partition(total_rows, nranks)
+    result_col_partition = default_row_partition(total_cols, nranks)
 
     # Use Mat_sum to combine results across ranks
     return Mat_sum(local_result;

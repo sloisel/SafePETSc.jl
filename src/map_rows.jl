@@ -63,7 +63,7 @@ function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
 
     # Get row partitions and check consistency
     row_partitions = [a.obj.row_partition for a in A]
-    @mpiassert all(rp -> rp == row_partitions[1], row_partitions) "All inputs to map_rows must have the same row partition"
+    @mpiassert all(rp -> rp == row_partitions[1], row_partitions) "All inputs to map_rows must have the same row partition. Got row_partitions=$(row_partitions)"
 
     input_row_partition = row_partitions[1]
     m = input_row_partition[end] - 1  # Total number of rows

@@ -54,16 +54,8 @@ MultiGridBarrier.amgb_zeros(::LinearAlgebra.Adjoint{T, <:Mat{T, MPIDENSE}}, m, n
 MultiGridBarrier.amgb_all_isfinite(z::Vec{T}) where {T} = all(isfinite.(Vector(z)))
 
 # amgb_hcat: Horizontal concatenation
-MultiGridBarrier.amgb_hcat(A::Mat...) = begin
-    result = hcat(A...)
-    # If result is already MPIAIJ, return it; otherwise convert
-    if typeof(result.obj) == SafePETSc._Mat{eltype(result), MPIAIJ}
-        return result
-    else
-        # Convert to sparse
-        return Mat_uniform(sparse(Matrix(result)); Prefix=MPIAIJ)
-    end
-end
+# Just use the built-in hcat - it handles partitions correctly
+MultiGridBarrier.amgb_hcat(A::Mat...) = hcat(A...)
 
 # amgb_diag: Create diagonal matrix from vector
 MultiGridBarrier.amgb_diag(::Mat{T, MPIAIJ}, z::Vec{T}, m=length(z), n=length(z)) where {T} =
@@ -117,6 +109,7 @@ function geometry_native_to_petsc(g_native)
     w_petsc = Vec_uniform(g_native.w; Prefix=MPIDENSE)
 
     # Convert all operators to MPIAIJ Mat
+    # Mat_uniform distributes the uniform matrix across ranks as MPIAIJ (sparse, partitioned)
     # Sort keys to ensure deterministic order across all ranks
     operators_petsc = Dict{Symbol, Any}()
     for key in sort(collect(keys(g_native.operators)))
