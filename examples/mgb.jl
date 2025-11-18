@@ -72,8 +72,8 @@ MultiGridBarrier.amgb_blockdiag(args::Mat{T, MPIAIJ}...) where {T} = blockdiag(a
 MultiGridBarrier.amgb_blockdiag(args::Mat{T, MPIDENSE}...) where {T} = blockdiag(args...)
 
 # map_rows: Apply function to each row
-# Handles both Mat and Adjoint{T, Mat} by materializing transposes as needed
-function MultiGridBarrier.map_rows(f, A::Union{Mat{T}, LinearAlgebra.Adjoint{T, <:Mat{T}}}...) where {T}
+# Handles Vec, Mat, and Adjoint{T, Mat} by materializing transposes as needed
+function MultiGridBarrier.map_rows(f, A::Union{Vec{T}, Mat{T}, LinearAlgebra.Adjoint{T, <:Mat{T}}}...) where {T}
     # Materialize any adjoint matrices using Mat(A') constructor
     materialized = [a isa LinearAlgebra.Adjoint ? Mat(a) : a for a in A]
     return SafePETSc.map_rows(f, materialized...)

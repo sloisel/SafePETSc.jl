@@ -639,6 +639,40 @@ end
 # Implements LinearAlgebra.dot to support standard Julia syntax
 LinearAlgebra.dot(v::Vec{T}, w::Vec{T}) where {T} = v' * w
 
+# Iterator for eachrow on Vec - treats vector as column, yields scalars
+struct VecRowIterator{T,Prefix}
+    vec::Vec{T,Prefix}
+    local_array::Vector{T}
+end
+
+function Base.eachrow(v::Vec{T,Prefix}) where {T,Prefix}
+    # Get local portion of the vector
+    local_arr = PETSc.unsafe_localarray(v.obj.v; read=true)
+    # Copy to avoid issues with finalizers
+    local_copy = copy(local_arr)
+    Base.finalize(local_arr)
+    return VecRowIterator{T,Prefix}(v, local_copy)
+end
+
+Base.length(iter::VecRowIterator) = length(iter.local_array)
+Base.eltype(::Type{VecRowIterator{T,Prefix}}) where {T,Prefix} = SubArray{T, 1, Vector{T}, Tuple{UnitRange{Int64}}, true}
+Base.IteratorSize(::Type{<:VecRowIterator}) = Base.HasLength()
+Base.ndims(::Type{<:VecRowIterator}) = 1
+Base.ndims(::VecRowIterator) = 1
+Base.axes(iter::VecRowIterator) = (Base.OneTo(length(iter)),)
+Base.getindex(iter::VecRowIterator, i::Int) = view(iter.local_array, i:i)
+Base.Broadcast.broadcastable(iter::VecRowIterator) = iter
+Base.Broadcast.BroadcastStyle(::Type{<:VecRowIterator}) = Base.Broadcast.Style{Tuple}()
+
+function Base.iterate(iter::VecRowIterator, state=1)
+    if state > length(iter.local_array)
+        return nothing
+    end
+    # Return scalar wrapped in 1-element view for consistency with Mat eachrow
+    # This matches the behavior in map_rows where Vec elements are wrapped
+    return (view(iter.local_array, state:state), state + 1)
+end
+
 # Row vector times transposed matrix: v' * A' (returns row vector)
 function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, At::LinearAlgebra.Adjoint{T, <:Mat{T}}) where {T}
     # v' * A' = (A * v)'
