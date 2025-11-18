@@ -300,6 +300,8 @@ Base.BroadcastStyle(::VecBroadcastStyle, ::Base.Broadcast.DefaultArrayStyle{0}) 
 Base.BroadcastStyle(::Base.Broadcast.DefaultArrayStyle{0}, ::VecBroadcastStyle) = VecBroadcastStyle()
 Base.BroadcastStyle(::VecBroadcastStyle, ::Base.Broadcast.DefaultArrayStyle{1}) = nothing
 Base.BroadcastStyle(::Base.Broadcast.DefaultArrayStyle{1}, ::VecBroadcastStyle) = nothing
+Base.BroadcastStyle(::VecBroadcastStyle, ::Base.Broadcast.DefaultArrayStyle{2}) = Base.Broadcast.DefaultArrayStyle{2}()
+Base.BroadcastStyle(::Base.Broadcast.DefaultArrayStyle{2}, ::VecBroadcastStyle) = Base.Broadcast.DefaultArrayStyle{2}()
 
 # Broadcastable participants
 Base.broadcastable(r::SafeMPI.DRef{<:_Vec}) = r
@@ -388,9 +390,8 @@ Base.size(r::SafeMPI.DRef{<:_Vec}, d::Integer) = Base.size(r.obj, d)
 Base.axes(r::SafeMPI.DRef{<:_Vec}) = Base.axes(r.obj)
 Base.length(r::SafeMPI.DRef{<:_Vec}) = Base.length(r.obj)
 
-# Broadcast support - Vec objects are already array-like and can be broadcast over
-Base.Broadcast.broadcastable(v::Vec) = v
-Base.Broadcast.BroadcastStyle(::Type{<:Vec}) = Base.Broadcast.DefaultArrayStyle{1}()
+# Broadcast support - Vec objects use the custom VecBroadcastStyle defined earlier
+# (broadcastable is already defined at line 305)
 
 # Adjoint of Vec behaves as a row vector (1 × n matrix)
 Base.size(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}) where {T,Prefix} = (1, length(parent(vt)))
