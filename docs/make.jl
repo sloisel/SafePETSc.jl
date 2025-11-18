@@ -24,6 +24,7 @@ makedocs(;
             "Matrices" => "guide/matrices.md",
             "Linear Solvers" => "guide/solvers.md",
             "Input/Output and Display" => "guide/io.md",
+            "MPI Programming" => "guide/mpi_programming.md",
             "Distributed Reference Management" => "guide/distributed_refs.md",
         ],
         "API Reference" => [

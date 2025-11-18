@@ -31,6 +31,7 @@ SafePETSc.SafeMPI.destroy_trait
 
 ```@docs
 SafePETSc.SafeMPI.mpi_any
+SafePETSc.SafeMPI.mpi_uniform
 SafePETSc.SafeMPI.mpierror
 SafePETSc.SafeMPI.@mpiassert
 ```

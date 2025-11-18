@@ -6,7 +6,7 @@ using Serialization
 using SparseArrays
 
 export DistributedRefManager, DRef, check_and_destroy!, destroy_obj!, default_manager, enable_assert, set_assert
-export DestroySupport, CanDestroy, CannotDestroy, destroy_trait, mpi_any, mpierror, @mpiassert
+export DestroySupport, CanDestroy, CannotDestroy, destroy_trait, mpi_any, mpi_uniform, mpierror, @mpiassert
 export default_check
 
 """
@@ -451,39 +451,32 @@ macro mpiassert(cond, msg="")
     end
 end
 
-# Specialized method for SparseMatrixCSC to avoid serialization non-determinism
-function mpi_uniform(A::SparseArrays.SparseMatrixCSC)
-    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+"""
+    mpi_uniform(A) -> Bool
 
-    # Check dimensions
-    dims = [size(A, 1), size(A, 2)]
-    ref_dims = MPI.bcast(rank == 0 ? dims : Int[], 0, MPI.COMM_WORLD)
-    if dims != ref_dims
-        return false
-    end
+**MPI Collective**
 
-    # Check colptr (column pointers)
-    local_hash_colptr = sha1(reinterpret(UInt8, A.colptr))
-    ref_hash_colptr = MPI.bcast(rank == 0 ? local_hash_colptr : Vector{UInt8}(), 0, MPI.COMM_WORLD)
-    colptr_match = (local_hash_colptr == ref_hash_colptr)
+Checks whether the value `A` is identical across all MPI ranks.
 
-    # Check rowval (row indices)
-    local_hash_rowval = sha1(reinterpret(UInt8, A.rowval))
-    ref_hash_rowval = MPI.bcast(rank == 0 ? local_hash_rowval : Vector{UInt8}(), 0, MPI.COMM_WORLD)
-    rowval_match = (local_hash_rowval == ref_hash_rowval)
+Returns `true` on all ranks if all ranks have the same value for `A`, otherwise returns
+`false` on all ranks. This is useful for verifying that distributed data structures are
+properly synchronized or that configuration values are consistent across all ranks.
 
-    # Check nzval (non-zero values)
-    local_hash_nzval = sha1(reinterpret(UInt8, A.nzval))
-    ref_hash_nzval = MPI.bcast(rank == 0 ? local_hash_nzval : Vector{UInt8}(), 0, MPI.COMM_WORLD)
-    nzval_match = (local_hash_nzval == ref_hash_nzval)
+The comparison is done by computing a SHA-1 hash of the serialized object on each rank
+and broadcasting rank 0's hash to all other ranks for comparison.
 
-    # All components must match
-    local_equal = colptr_match && rowval_match && nzval_match
+# Example
+```julia
+# Verify that a configuration matrix is the same on all ranks
+config = [1.0 2.0; 3.0 4.0]
+SafeMPI.@mpiassert mpi_uniform(config) "Configuration must be uniform across ranks"
 
-    result = MPI.Allreduce(local_equal, MPI.LAND, MPI.COMM_WORLD)
-    return result
-end
+# Safe to use as a uniform object
+config_petsc = Mat_uniform(config)
+```
 
+See also: [`@mpiassert`](@ref), [`mpi_any`](@ref)
+"""
 function mpi_uniform(A)
     # Compute a consistent hash of A (for any type)
     local_hash = _hash_object(A)  # Vector{UInt8}
