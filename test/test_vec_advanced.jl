@@ -55,6 +55,31 @@ ts = @testset MPITestHarness.QuietTestSet "Advanced vector operations" begin
     @test eltype(q.obj) == Float64
     println(io0(), "[DEBUG] Test 4 passed")
 
+    # Test 5: LinearAlgebra.dot function
+    println(io0(), "[DEBUG] Test 5: LinearAlgebra.dot function")
+    x = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+    y = Vec_uniform([5.0, 6.0, 7.0, 8.0])
+    dot_result = LinearAlgebra.dot(x, y)
+    @test dot_result ≈ 70.0
+    @test dot_result ≈ x' * y  # Should match inner product
+    println(io0(), "[DEBUG] Test 5 passed")
+
+    # Test 6: eachrow iterator for Vec
+    println(io0(), "[DEBUG] Test 6: eachrow iterator for Vec")
+    v = Vec_uniform([10.0, 20.0, 30.0, 40.0])
+    iter = eachrow(v)
+    # length(iter) returns the LOCAL number of rows
+    local_len = length(iter)
+    @test local_len >= 0  # Each rank may have 0 or more elements
+    # Test manual iteration - count should match length
+    count = 0
+    for row in iter
+        count += 1
+        @test length(row) == 1  # Each row is 1-element view
+    end
+    @test count == local_len  # Iterations should match local length
+    println(io0(), "[DEBUG] Test 6 passed")
+
     println(io0(), "[DEBUG] All advanced vector operations tests completed")
 end
 
