@@ -635,6 +635,10 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, w::Vec{T}) where {T}
     return _vec_dot(v.obj.v, w.obj.v)
 end
 
+# Dot product: dot(v, w) (returns scalar)
+# Implements LinearAlgebra.dot to support standard Julia syntax
+LinearAlgebra.dot(v::Vec{T}, w::Vec{T}) where {T} = v' * w
+
 # Row vector times transposed matrix: v' * A' (returns row vector)
 function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, At::LinearAlgebra.Adjoint{T, <:Mat{T}}) where {T}
     # v' * A' = (A * v)'
