@@ -69,6 +69,33 @@ try
     println(io0(r=Set([1])), "This line prints only on rank 1 (via io0(r=Set([1])))")
     println(io0(), "✓ io0() helper works correctly")
 
+    # Test 8: Vector adjoint conversion
+    println(io0(), "\n[Test 8] Vector(v') adjoint conversion")
+    v_adj = v'
+    v_adj_julia = Vector(v_adj)
+    if rank == 0
+        @assert v_adj_julia == collect(1.0:8.0)' "Vector adjoint conversion failed"
+        println("✓ Vector adjoint conversion passed")
+    end
+
+    # Test 9: Matrix adjoint conversion
+    println(io0(), "\n[Test 9] Matrix(A') adjoint conversion")
+    A_adj = A'
+    A_adj_julia = Matrix(A_adj)
+    if rank == 0
+        @assert A_adj_julia == A_data' "Matrix adjoint conversion failed"
+        println("✓ Matrix adjoint conversion passed")
+    end
+
+    # Test 10: sparse adjoint conversion
+    println(io0(), "\n[Test 10] sparse(B') adjoint conversion")
+    B_adj = B'
+    B_adj_julia = sparse(B_adj)
+    if rank == 0
+        @assert B_adj_julia == B_sparse' "sparse adjoint conversion failed"
+        println("✓ sparse adjoint conversion passed")
+    end
+
     # Clean up - objects will be finalized automatically when they go out of scope
     # User can call GC.gc() if they want to accelerate resource recovery
     # Then check_and_destroy!() performs the actual collective cleanup

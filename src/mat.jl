@@ -2548,6 +2548,67 @@ function SparseArrays.sparse(x::Mat{T,Prefix}) where {T,Prefix}
 end
 
 """
+    SparseArrays.sparse(At::LinearAlgebra.Adjoint{T, <:Mat{T}}) -> SparseMatrixCSC{T, Int}
+
+**MPI Collective**
+
+Convert an adjoint of a distributed PETSc Mat to an adjoint Julia SparseMatrixCSC.
+Equivalent to `sparse(parent(At))'`.
+
+This is a collective operation - all ranks must call it and will receive the complete sparse matrix transpose.
+"""
+SparseArrays.sparse(At::LinearAlgebra.Adjoint{T, <:Mat{T}}) where {T} = sparse(parent(At))'
+
+"""
+    Base.Matrix(At::LinearAlgebra.Adjoint{T, <:Mat{T}}) -> Matrix{T}
+
+**MPI Collective**
+
+Convert an adjoint of a distributed PETSc Mat to an adjoint Julia Matrix.
+Equivalent to `Matrix(parent(At))'`.
+
+This is a collective operation - all ranks must call it and will receive the complete matrix transpose.
+"""
+Base.Matrix(At::LinearAlgebra.Adjoint{T, <:Mat{T}}) where {T} = Matrix(parent(At))'
+
+# -----------------------------------------------------------------------------
+# J function: unified conversion from PETSc to Julia types
+# -----------------------------------------------------------------------------
+
+"""
+    J(A::Mat{T,Prefix}) -> Union{Matrix{T}, SparseMatrixCSC{T, Int}}
+
+**MPI Collective**
+
+Convert a distributed PETSc Mat to a Julia array type (Matrix or SparseMatrixCSC).
+Dense matrices are converted to Matrix, sparse matrices to SparseMatrixCSC.
+
+This is a collective operation - all ranks must call it and will receive the complete matrix.
+
+# Example
+```julia
+A = Mat_uniform([1.0 2.0; 3.0 4.0])
+A_julia = J(A)  # Returns Matrix{Float64}
+
+B = Mat_uniform(sparse([1.0 0.0; 0.0 2.0]))
+B_julia = J(B)  # Returns SparseMatrixCSC{Float64, Int}
+```
+"""
+J(A::Mat{T,Prefix}) where {T,Prefix} = is_dense(A) ? Matrix(A) : sparse(A)
+
+"""
+    J(At::LinearAlgebra.Adjoint{T, <:Mat{T}}) -> Union{Adjoint{T, Matrix{T}}, Adjoint{T, SparseMatrixCSC{T, Int}}}
+
+**MPI Collective**
+
+Convert an adjoint of a distributed PETSc Mat to a Julia adjoint array type.
+Uses the same logic as J(A) but preserves the adjoint wrapper.
+
+This is a collective operation - all ranks must call it and will receive the complete adjoint matrix.
+"""
+J(At::LinearAlgebra.Adjoint{T, <:Mat{T}}) where {T} = is_dense(parent(At)) ? Matrix(At) : sparse(At)
+
+"""
     Base.show(io::IO, x::Mat{T,Prefix})
 
 **MPI Collective**

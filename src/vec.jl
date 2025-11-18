@@ -921,6 +921,52 @@ function Base.Vector(x::Vec{T}) where T
     return result
 end
 
+"""
+    Vector(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) -> LinearAlgebra.Adjoint{T, Vector{T}}
+
+**MPI Collective**
+
+Convert an adjoint of a distributed PETSc Vec to an adjoint Julia Vector.
+Equivalent to `Vector(parent(vt))'`.
+
+This is a collective operation - all ranks must call it and will receive the complete adjoint vector.
+"""
+Base.Vector(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = Vector(parent(vt))'
+
+# -----------------------------------------------------------------------------
+# J function: unified conversion from PETSc to Julia types
+# -----------------------------------------------------------------------------
+
+"""
+    J(v::Vec{T}) -> Vector{T}
+
+**MPI Collective**
+
+Convert a distributed PETSc Vec to a Julia Vector by gathering all data to all ranks.
+This is a collective operation - all ranks must call it and will receive the complete vector.
+
+Equivalent to `Vector(v)`.
+
+# Example
+```julia
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+v_julia = J(v)  # Returns Vector{Float64}
+```
+"""
+J(v::Vec{T}) where {T} = Vector(v)
+
+"""
+    J(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) -> Adjoint{T, Vector{T}}
+
+**MPI Collective**
+
+Convert an adjoint of a distributed PETSc Vec to an adjoint Julia Vector.
+This is a collective operation - all ranks must call it and will receive the complete adjoint vector.
+
+Equivalent to `Vector(vt)`.
+"""
+J(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}) where {T} = Vector(vt)
+
 # -----------------------------------------------------------------------------
 # Vector Indexing
 # -----------------------------------------------------------------------------

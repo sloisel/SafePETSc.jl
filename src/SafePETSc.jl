@@ -257,6 +257,7 @@ const Mat{T,Prefix} = SafeMPI.DRef{_Mat{T,Prefix}}
 export Vec, Vec_uniform, Vec_sum, default_row_partition
 export zeros_like, ones_like, fill_like
 export Mat, Mat_uniform, Mat_sum
+export J
 export KSP
 export MPIDENSE, MPIAIJ, prefix
 export petsc_options_insert_string
