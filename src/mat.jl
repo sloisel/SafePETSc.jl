@@ -97,17 +97,6 @@ function Mat_uniform(A::SparseMatrixCSC{T};
                           all(r -> col_partition[r] <= col_partition[r+1], 1:nranks)
 
     # Debug output for troubleshooting
-    if !row_partition_valid || !col_partition_valid
-        if rank == 0
-            println("[rank $rank] DEBUG Mat_uniform(::SparseMatrixCSC):")
-            println("  Matrix size: ", size(A))
-            println("  nranks: ", nranks)
-            println("  row_partition: ", row_partition)
-            println("  row_partition_valid: ", row_partition_valid)
-            println("  col_partition: ", col_partition)
-            println("  col_partition_valid: ", col_partition_valid)
-        end
-    end
 
     @mpiassert SafeMPI.mpi_uniform(A) && row_partition_valid && col_partition_valid "Mat_uniform requires A to be mpi_uniform across all ranks; row_partition and col_partition must each have length nranks+1, start at 1, end at M+1/N+1 respectively, and be strictly increasing"
 
@@ -613,36 +602,6 @@ function _mat_to_local_sparse(A::Mat{T,Prefix}) where {T,Prefix}
 
     # Create sparse matrix of full global size
     return sparse(I, J, V, m, n)
-end
-
-# Convert Vec to local sparse matrix (treated as m×1 column vector)
-function _mat_to_local_sparse(v::Vec{T,Prefix}) where {T,Prefix}
-    nranks = MPI.Comm_size(MPI.COMM_WORLD)
-    rank = MPI.Comm_rank(MPI.COMM_WORLD)
-
-    m = length(v)
-    row_lo = v.obj.row_partition[rank+1]
-    row_hi = v.obj.row_partition[rank+2] - 1
-    nlocal = row_hi - row_lo + 1
-
-    # Get local values from the vector
-    local_vals = Vector{T}(undef, nlocal)
-    _vec_getvalues_local!(local_vals, v.obj.v, row_lo, row_hi)
-
-    # Build sparse matrix representation (m×1)
-    I = Int[]
-    J = Int[]
-    V = T[]
-    for i in 1:nlocal
-        global_row = row_lo + i - 1
-        if abs(local_vals[i]) > 0
-            push!(I, global_row)
-            push!(J, 1)  # Column 1 (it's a column vector)
-            push!(V, local_vals[i])
-        end
-    end
-
-    return sparse(I, J, V, m, 1)
 end
 
 # Helper to extract Prefix type parameter from Vec or Mat

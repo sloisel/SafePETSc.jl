@@ -430,10 +430,13 @@ function Base.:*(v::Vec{T,Prefix}, wt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
-    # Use v's row partition as both row and column partition (for v and w)
-    # Result has: rows partitioned like v, columns partitioned like w
+    # For outer product: rows partitioned like v
+    # Each rank computes full rows of the outer product
     row_partition = v.obj.row_partition
-    col_partition = w.obj.row_partition  # Use w's row partition as column partition
+
+    # For square matrices, use same partition for columns as rows
+    # (PETSc standard for square MPIAIJ matrices)
+    col_partition = copy(row_partition)
 
     row_lo = row_partition[rank+1]
     row_hi = row_partition[rank+2] - 1
@@ -443,24 +446,23 @@ function Base.:*(v::Vec{T,Prefix}, wt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}
     col_hi = col_partition[rank+2] - 1
     nlocal_cols = col_hi - col_lo + 1
 
-    # Create distributed PETSc matrix
+    # Create distributed PETSc matrix with standard partitioning
+    # Each rank can still SET values anywhere; assembly will handle communication
     petsc_mat = _mat_create_mpi_for_T(T, nlocal_rows, nlocal_cols, m, n, Prefix)
 
-    # Get local portions of v and w
+    # Get local portion of v and full global w
     v_local = PETSc.unsafe_localarray(v.obj.v; read=true)
-    w_local = PETSc.unsafe_localarray(w.obj.v; read=true)
+    w_global = Vector(w)  # Get full global vector w for outer product
 
     # Set values: result[i,j] = v[i] * w[j]
-    # Each rank computes its local rows and local columns only
+    # Each rank computes its local rows across ALL columns
     for i_local in 1:nlocal_rows
-        i_global = row_lo + i_local - 1
-        row_values = Vector{T}(undef, nlocal_cols)
-        col_indices = Vector{Int}(undef, nlocal_cols)
+        i_global = row_lo + (i_local - 1)  # 1-based global row index
+        row_values = Vector{T}(undef, n)
+        col_indices = collect(1:n)  # All columns (1-based, _mat_setvalues! will convert)
 
-        for j_local in 1:nlocal_cols
-            j_global = col_lo + j_local - 1
-            row_values[j_local] = v_local[i_local] * w_local[j_local]
-            col_indices[j_local] = j_global
+        for j in 1:n
+            row_values[j] = v_local[i_local] * w_global[j]
         end
 
         _mat_setvalues!(petsc_mat, [i_global], col_indices, row_values, PETSc.INSERT_VALUES)

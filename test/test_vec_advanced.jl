@@ -96,6 +96,65 @@ ts = @testset MPITestHarness.QuietTestSet "Advanced vector operations" begin
     @test sum(w) ≈ 42.0
     println(io0(), "[DEBUG] Test 7 passed")
 
+    # Test 8: Scalar multiplication with vectors α * v
+    println(io0(), "[DEBUG] Test 8: Scalar multiplication α * v and v * α")
+    v1 = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+    v2 = 3.0 * v1
+    @test Vector(v2) ≈ [3.0, 6.0, 9.0, 12.0]
+    v3 = v1 * 3.0
+    @test Vector(v3) ≈ [3.0, 6.0, 9.0, 12.0]
+    # Test with negative scalar
+    v4 = -2.0 * v1
+    @test Vector(v4) ≈ [-2.0, -4.0, -6.0, -8.0]
+    # Test with zero scalar
+    v5 = 0.0 * v1
+    @test Vector(v5) ≈ [0.0, 0.0, 0.0, 0.0]
+    println(io0(), "[DEBUG] Test 8 passed")
+
+    # Test 9: Scalar multiplication with adjoint vectors α * vt and vt * α
+    println(io0(), "[DEBUG] Test 9: Scalar multiplication α * vt and vt * α")
+    v6 = Vec_uniform([1.0, 2.0, 3.0])
+    vt1 = v6'
+    vt2 = 2.0 * vt1
+    @test Vector(parent(vt2)) ≈ [2.0, 4.0, 6.0]
+    vt3 = vt1 * 2.0
+    @test Vector(parent(vt3)) ≈ [2.0, 4.0, 6.0]
+    # Test with fractional scalar
+    vt4 = 0.5 * vt1
+    @test Vector(parent(vt4)) ≈ [0.5, 1.0, 1.5]
+    println(io0(), "[DEBUG] Test 9 passed")
+
+    # Test 10: Addition of adjoint vectors (row vectors)
+    println(io0(), "[DEBUG] Test 10: Addition of adjoint vectors vt1 + vt2")
+    a1 = Vec_uniform([1.0, 2.0, 3.0])
+    a2 = Vec_uniform([4.0, 5.0, 6.0])
+    sum_adjoint = a1' + a2'
+    @test Vector(parent(sum_adjoint)) ≈ [5.0, 7.0, 9.0]
+    # Test with subtraction-like addition (negative values)
+    a3 = Vec_uniform([-1.0, -2.0, -3.0])
+    result_adj = a1' + a3'
+    @test Vector(parent(result_adj)) ≈ [0.0, 0.0, 0.0]
+    println(io0(), "[DEBUG] Test 10 passed")
+
+    # Test 11: Outer product v * w' (returns Mat)
+    println(io0(), "[DEBUG] Test 11: Outer product v * w'")
+    # Note: Both vectors must have same length for compatible row partitions in MPI
+    v_outer = Vec_uniform([1.0, 2.0, 3.0])
+    w_outer = Vec_uniform([4.0, 5.0, 6.0])
+    outer_mat = v_outer * w_outer'
+    # Outer product: [1,2,3]' * [4,5,6] = [[4,5,6],[8,10,12],[12,15,18]]
+    outer_mat_dense = Matrix(outer_mat)
+    @test size(outer_mat_dense) == (3, 3)
+    @test outer_mat_dense ≈ [4.0 5.0 6.0; 8.0 10.0 12.0; 12.0 15.0 18.0]
+    # Test outer product with 4-element vectors
+    v_outer2 = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+    w_outer2 = Vec_uniform([10.0, 20.0, 30.0, 40.0])
+    outer_mat2 = v_outer2 * w_outer2'
+    @test size(Matrix(outer_mat2)) == (4, 4)
+    @test Matrix(outer_mat2)[1, :] ≈ [10.0, 20.0, 30.0, 40.0]
+    @test Matrix(outer_mat2)[2, :] ≈ [20.0, 40.0, 60.0, 80.0]
+    println(io0(), "[DEBUG] Test 11 passed")
+
     println(io0(), "[DEBUG] All advanced vector operations tests completed")
 end
 
