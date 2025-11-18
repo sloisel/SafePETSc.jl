@@ -221,6 +221,48 @@ function Base.:\(A::Mat{T,Prefix}, b::Vec{T,Prefix}) where {T,Prefix}
 end
 
 """
+    Base.:\\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) -> Vec{T,PrefixB}
+
+**MPI Collective**
+
+Solve the linear system Ax = b using PETSc's KSP solver, with mixed prefixes.
+
+This method handles the case where A and b have different prefixes (e.g., MPIAIJ matrix
+with MPIDENSE vector). The result vector x will have the same prefix as b.
+
+Creates a KSP solver internally and returns the solution vector x.
+For repeated solves with the same matrix, use `KSP` explicitly for better performance.
+"""
+function Base.:\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) where {T,PrefixA,PrefixB}
+    # Check dimensions and partitioning - coalesced into single MPI synchronization
+    m, n = size(A)
+    vec_length = size(b)[1]
+    @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), and row/column partitions of A must match and equal b's row partition"
+
+    # Create KSP solver
+    ksp_obj = KSP(A)
+
+    # Create result vector with same prefix as b
+    nranks = MPI.Comm_size(MPI.COMM_WORLD)
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    row_lo = A.obj.row_partition[rank+1]
+    row_hi = A.obj.row_partition[rank+2] - 1
+    nlocal = row_hi - row_lo + 1
+
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, PrefixB, A.obj.row_partition)
+
+    # Solve
+    _ksp_solve_vec!(ksp_obj.obj.ksp, x_petsc, b.obj.v)
+
+    PETSc.assemble(x_petsc)
+
+    # Wrap in DRef with same prefix as b
+    obj = _Vec{T,PrefixB}(x_petsc, A.obj.row_partition)
+    return SafeMPI.DRef(obj)
+end
+
+"""
     LinearAlgebra.ldiv!(x::Vec{T,Prefix}, A::Mat{T,Prefix}, b::Vec{T,Prefix}) -> Vec{T,Prefix}
 
 **MPI Collective**

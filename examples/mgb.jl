@@ -632,8 +632,10 @@ catch e
         println(io0(), "MethodError: no method matching ", e.f)
         println(io0(), "Argument types: ", typeof.(e.args))
     end
-    println(io0(), "\nStacktrace:")
-    Base.show_backtrace(io0(), catch_backtrace())
+    println(io0(), "\nFull stacktrace:")
+    bt = catch_backtrace()
+    Base.show_backtrace(io0(), bt)
+    println(io0())
     println(io0(), "\n" * "="^70)
 
     println(io0(), "\nThis is expected - amgb may need additional work to support PETSc types.")
