@@ -1,16 +1,23 @@
 #!/usr/bin/env julia
 # Test UniformScaling operations (A ± I)
 
+using Test
 using MPI
 using SafePETSc
 using LinearAlgebra
 using LinearAlgebra: opnorm
 using SparseArrays
-using Test
 
 SafePETSc.Init()
+include(joinpath(@__DIR__, "mpi_test_harness.jl"))
+using .MPITestHarness
 
-@testset "UniformScaling operations" begin
+comm = MPI.COMM_WORLD
+rank = MPI.Comm_rank(comm)
+nranks = MPI.Comm_size(comm)
+
+# Keep output tidy and aggregate at the end
+ts = @testset MPITestHarness.QuietTestSet "UniformScaling operations" begin
     # Create a simple sparse matrix (deterministic, same on all ranks)
     n = 10
     # Create a tridiagonal matrix (deterministic)
@@ -24,7 +31,7 @@ SafePETSc.Init()
     A_petsc = Mat_uniform(A_sparse; Prefix=SafePETSc.MPIAIJ)
 
     # Test A + I
-    @testset "A + I" begin
+    begin
         B_petsc = A_petsc + I
         B_native = Matrix(B_petsc)
         B_expected = Matrix(A_sparse) + I
@@ -39,7 +46,7 @@ SafePETSc.Init()
     end
 
     # Test I + A
-    @testset "I + A" begin
+    begin
         B_petsc = I + A_petsc
         B_native = Matrix(B_petsc)
         B_expected = I + Matrix(A_sparse)
@@ -49,7 +56,7 @@ SafePETSc.Init()
     end
 
     # Test A - I
-    @testset "A - I" begin
+    begin
         B_petsc = A_petsc - I
         B_native = Matrix(B_petsc)
         B_expected = Matrix(A_sparse) - I
@@ -59,7 +66,7 @@ SafePETSc.Init()
     end
 
     # Test I - A
-    @testset "I - A" begin
+    begin
         B_petsc = I - A_petsc
         B_native = Matrix(B_petsc)
         B_expected = I - Matrix(A_sparse)
@@ -69,7 +76,7 @@ SafePETSc.Init()
     end
 
     # Test A + 2*I (scaled UniformScaling)
-    @testset "A + 2I" begin
+    begin
         B_petsc = A_petsc + 2I
         B_native = Matrix(B_petsc)
         B_expected = Matrix(A_sparse) + 2I
@@ -78,7 +85,7 @@ SafePETSc.Init()
     end
 
     # Test A - 3*I (scaled UniformScaling)
-    @testset "A - 3I" begin
+    begin
         B_petsc = A_petsc - 3I
         B_native = Matrix(B_petsc)
         B_expected = Matrix(A_sparse) - 3I
@@ -87,7 +94,7 @@ SafePETSc.Init()
     end
 
     # Test scalar operations (A + α and A - α)
-    @testset "Scalar addition A + α" begin
+    begin
         α = 2.5
         B_petsc = A_petsc + α
         B_native = Matrix(B_petsc)
@@ -96,7 +103,7 @@ SafePETSc.Init()
         @test norm(B_native - B_expected) < 1e-10
     end
 
-    @testset "Scalar subtraction A - α" begin
+    begin
         α = 1.5
         B_petsc = A_petsc - α
         B_native = Matrix(B_petsc)
@@ -105,7 +112,7 @@ SafePETSc.Init()
         @test norm(B_native - B_expected) < 1e-10
     end
 
-    @testset "Scalar subtraction α - A" begin
+    begin
         α = 10.0
         B_petsc = α - A_petsc
         B_native = Matrix(B_petsc)
@@ -115,7 +122,7 @@ SafePETSc.Init()
     end
 
     # Test with MPIDENSE
-    @testset "Dense matrices with UniformScaling" begin
+    begin
         # Create deterministic dense matrix
         A_dense = Float64[i+j for i in 1:5, j in 1:5]
         A_dense = A_dense + A_dense'  # Symmetric
@@ -130,7 +137,7 @@ SafePETSc.Init()
 
     # Test that non-square matrices fail appropriately
     # TODO: Re-enable after fixing MPI abort handling in tests
-    # @testset "Non-square matrix error" begin
+    # begin
     #     # Create deterministic non-square matrix
     #     A_nonsquare = Float64[i+j for i in 1:5, j in 1:3]
     #     A_petsc_nonsquare = Mat_uniform(A_nonsquare; Prefix=SafePETSc.MPIDENSE)
@@ -140,9 +147,9 @@ SafePETSc.Init()
     #     @test_throws ErrorException A_petsc_nonsquare + 2.0
     #     @test_throws ErrorException A_petsc_nonsquare - 2.0
     # end
-end
+end  # End of UniformScaling operations testset
 
-@testset "Matrix norm operations" begin
+ts2 = @testset MPITestHarness.QuietTestSet "Matrix norm operations" begin
     # Create a deterministic sparse matrix
     n = 10
     A_sparse = spdiagm(
@@ -153,7 +160,7 @@ end
     A_petsc = Mat_uniform(A_sparse; Prefix=SafePETSc.MPIAIJ)
 
     # Test Frobenius norm (default, p=2)
-    @testset "Frobenius norm" begin
+    begin
         norm_petsc = norm(A_petsc)
         norm_native = norm(Matrix(A_sparse))
 
@@ -161,7 +168,7 @@ end
     end
 
     # Test 1-norm (induced operator norm)
-    @testset "opnorm 1-norm" begin
+    begin
         norm_petsc = opnorm(A_petsc, 1)
         norm_native = opnorm(Matrix(A_sparse), 1)
 
@@ -170,7 +177,7 @@ end
     end
 
     # Test Inf-norm (induced operator norm)
-    @testset "opnorm Inf-norm" begin
+    begin
         norm_petsc = opnorm(A_petsc, Inf)
         norm_native = opnorm(Matrix(A_sparse), Inf)
 
@@ -179,7 +186,7 @@ end
     end
 
     # Test with dense matrix
-    @testset "Dense matrix norm" begin
+    begin
         A_dense = Float64[i+j for i in 1:5, j in 1:5]
         A_petsc_dense = Mat_uniform(A_dense; Prefix=SafePETSc.MPIDENSE)
 
@@ -190,10 +197,28 @@ end
     end
 
     # Test that unsupported norms fail
-    @testset "Unsupported norm error" begin
+    begin
         @test_throws ErrorException norm(A_petsc, 3)
         @test_throws ErrorException norm(A_petsc, 0.5)
     end
+end  # Matrix norm operations testset
+
+# Aggregate results across ranks
+local_counts = [ts.counts[:pass], ts.counts[:fail], ts.counts[:error], ts.counts[:broken], ts.counts[:skip]]
+local_counts .+= [ts2.counts[:pass], ts2.counts[:fail], ts2.counts[:error], ts2.counts[:broken], ts2.counts[:skip]]
+
+global_counts = similar(local_counts)
+MPI.Allreduce!(local_counts, global_counts, +, comm)
+
+if rank == 0
+    println("Test Summary: UniformScaling and norm tests (aggregated across $(nranks) ranks)")
+    println("  Pass: $(global_counts[1])  Fail: $(global_counts[2])  Error: $(global_counts[3])  Broken: $(global_counts[4])  Skip: $(global_counts[5])")
 end
 
-println(io0(), "All tests passed!")
+MPI.Barrier(comm)
+
+if global_counts[2] > 0 || global_counts[3] > 0
+    Base.exit(1)
+end
+
+MPI.Barrier(comm)
