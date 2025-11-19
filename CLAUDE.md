@@ -153,6 +153,7 @@ print the Vec or Mat once on rank 0.
 1. **Object Creation**: Every rank runs the same deterministic ID allocation, inserts the new ID into its mirrored `counter_pool`, and initializes `free_ids` state identically
 2. **Automatic Release**: Finalizers enqueue local release IDs (no MPI calls in finalizers)
 3. **Destruction Check**: `check_and_destroy!()` is a collective operation that is automatically called by the library, but can also be called by the user to try and destroy PETSc objects that are eligible for destruction. The Julia garbage collector determines what is destructible, so one can help the discovery of destructible object by forcing a partial or full garbage collection first with GC.gc(false) or GC.gc(true). This is never necessary in examples or in tests, except when testing specifically that DRefs are working as expected. For all other tests, it should not be necessary to gc, or even to call `check_and_destroy!()`. Furthermore, no specific cleanup operation is needed for SafePETSc or SafeMPI. You should never call check_and_destroy!() at the end of scripts to "cleanup".
+4. There is no need to ever call SafeMPI.finalize(), PETSc.finalize() or MPI.finalize(), as these are automatically called in atexit() on process termination. Julia rules on the order of atexit() invocation guarantees that these are finalized in the right order.
 
 ### Key Design Decisions
 
