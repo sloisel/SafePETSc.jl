@@ -474,6 +474,11 @@ function Init()
         _ = Mat_uniform([1.0;;], Prefix=MPIAIJ)
     end
 
+    # Print DEBUG mode status if enabled
+    if DEBUG[]
+        println(io0(), "SafePETSc: DEBUG[]=true")
+    end
+
     return nothing
 end
 
