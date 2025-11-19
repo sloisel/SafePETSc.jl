@@ -1,7 +1,7 @@
 name = "SafePETSc"
 uuid = "50acdc01-ce88-4ca7-bd87-6916c254362e"
 authors = ["Sébastien Loisel <S.Loisel@hw.ac.uk>"]
-version = "0.1.11"
+version = "0.1.12"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -15,16 +15,13 @@ Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-LinearAlgebra = "1.11.0"
 MPI = "0.20"
 MultiGridBarrier = "0.11.25"
 OpenBLAS32_jll = "0.3.29"
 PETSc = "0.3.1"
 SCALAPACK32_jll = "2.2.2"
 SHA = "0.7.0"
-Serialization = "1.11.0"
-SparseArrays = "1.11.0"
-julia = "1.11"
+julia = "1.10"
 
 [extras]
 MPIPreferences = "3da0fdf6-3ccc-4f1b-acd9-58baa6c99267"
