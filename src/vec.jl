@@ -474,7 +474,12 @@ function Base.:*(v::Vec{T,Prefix}, wt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}
 
     # Wrap in DRef
     obj = _Mat{T,Prefix}(petsc_mat, row_partition, col_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: outer product should be exact
+    @debugcheck result 0.0 (*) v wt
+
+    return result
 end
 
 # Out-of-place broadcast: allocate a new Vec (wrapped in DRef) and compute into it.
@@ -627,7 +632,12 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}
     # Wrap in DRef and return as adjoint
     obj = _Vec{T,Prefix}(w_petsc, A.obj.col_partition)
     w = SafeMPI.DRef(obj)
-    return LinearAlgebra.Adjoint(w)
+    result = LinearAlgebra.Adjoint(w)
+
+    # Debug check: v' * A with tolerance for floating point accumulation
+    @debugcheck result ((norm(v, 2) + norm(A, 2)) * eps(real(T)) * max(m, n)) (*) vt A
+
+    return result
 end
 
 # Inner product: v' * w (returns scalar)
@@ -640,7 +650,12 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, w::Vec{T}) where {T}
     @mpiassert v_length == w_length && v.obj.row_partition == w.obj.row_partition "Vector lengths must match (v: $(v_length), w: $(w_length)) and row partitions must match"
 
     # Compute inner product using PETSc VecDot
-    return _vec_dot(v.obj.v, w.obj.v)
+    result = _vec_dot(v.obj.v, w.obj.v)
+
+    # Debug check: dot product with tolerance for floating point accumulation
+    @debugcheck result ((norm(v, 2) + norm(w, 2)) * eps(real(T)) * v_length) (*) vt w
+
+    return result
 end
 
 # Dot product: dot(v, w) (returns scalar)

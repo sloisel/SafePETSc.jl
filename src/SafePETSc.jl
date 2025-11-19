@@ -267,6 +267,7 @@ export BlockProduct, calculate!
 export io0
 export map_rows
 export own_row
+export DEBUG, @debugcheck
 
 """
     io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)
@@ -302,6 +303,105 @@ end
 function io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
     return rank ∈ r ? io : dn
+end
+
+# -----------------------------------------------------------------------------
+# Debug Utilities (must be defined before includes)
+# -----------------------------------------------------------------------------
+
+"""
+    DEBUG
+
+A module-level constant `Ref{Bool}` that controls whether debug checks are enabled.
+Defaults to `false`. Set `DEBUG[] = true` to enable debug assertions.
+
+See also: [`@debugcheck`](@ref)
+"""
+const DEBUG = Ref{Bool}(false)
+
+# Identity methods for J() to handle Julia types that don't need conversion
+J(x::Number) = x
+J(x::AbstractArray) = x
+
+"""
+    debug_helper(y, tol, f, x...)
+
+Helper function for debug checks. Verifies that `y = f(x...)` within tolerance `tol`,
+where `y` and `x...` can be PETSc types or Julia types, and `f` expects native Julia types.
+
+Converts PETSc types to Julia types using `J()` and checks that:
+`norm(J(y) - f(J(x[1]), J(x[2]), ...)) <= tol`
+
+Uses `@mpiassert` with the pattern `!(norm(...) > tol)` so that NaN values
+don't trigger assertions (since `NaN > tol` is `false`, so `!(false)` is `true`).
+
+# Example
+```julia
+# Check that PETSc matrix multiply matches Julia
+C_petsc = A * B
+debug_helper(C_petsc, 1e-10, *, A, B)
+
+# Check with scalar
+B = 2.0 * A
+debug_helper(B, 1e-10, *, 2.0, A)
+```
+
+See also: [`@debugcheck`](@ref), [`DEBUG`](@ref), [`J`](@ref)
+"""
+function debug_helper(y, tol, f, x...)
+    # Convert x... to Julia types
+    x_julia = [J(x[k]) for k = 1:length(x)]
+    # Compute expected result using Julia function
+    expected = f(x_julia...)
+    # Convert y to Julia type
+    y_julia = J(y)
+    # Check that norm of difference is within tolerance
+    # Using !(... > tol) pattern so NaN doesn't trigger assert
+    @mpiassert !(norm(y_julia - expected) > tol) "debug_helper: norm(J(y) - f(J(x)...)) = $(norm(y_julia - expected)) > $tol"
+    return nothing
+end
+
+"""
+    @debugcheck y tol f x...
+
+Debug macro that conditionally calls `debug_helper(y, tol, f, x...)` when `DEBUG[]` is true.
+
+This macro is used to insert optional debug checks that verify PETSc operations match
+their Julia equivalents. The checks are only executed when `DEBUG[]` is set to `true`.
+
+# Arguments
+- `y`: PETSc result to verify
+- `tol`: Tolerance for comparison
+- `f`: Julia function to compare against (use parentheses for operators like `(*)` or `(+)`)
+- `x...`: PETSc inputs to the operation
+
+# Example
+```julia
+# Enable debug mode
+DEBUG[] = true
+
+# Check that PETSc operations match Julia
+A = Mat_uniform([1.0 2.0; 3.0 4.0])
+B = Mat_uniform([5.0 6.0; 7.0 8.0])
+C = A * B
+@debugcheck C 1e-10 (*) A B  # Checks that C == A * B in Julia
+
+# Check with scalar multiplication
+D = 2.0 * A
+@debugcheck D 1e-10 (*) 2.0 A
+
+# Disable debug mode
+DEBUG[] = false
+```
+
+See also: [`debug_helper`](@ref), [`DEBUG`](@ref)
+"""
+macro debugcheck(y, tol, f, x...)
+    return quote
+        if DEBUG[]
+            debug_helper($(esc(y)), $(esc(tol)), $(esc(f)), $(esc.(x)...))
+        end
+    end
 end
 
 include("vec.jl")

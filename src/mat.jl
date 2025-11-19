@@ -342,6 +342,9 @@ function LinearAlgebra.transpose!(B::Mat{T,Prefix}, A::Mat{T,Prefix}) where {T,P
     # (or has a valid precursor) with matching partitions.
     _mat_transpose!(B.obj.A, A.obj.A)
 
+    # Debug check: transpose should be exact
+    @debugcheck B 0.0 transpose A
+
     return B
 end
 
@@ -377,7 +380,12 @@ function Base.:*(A::Mat{T,PrefixA}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
 
     # Wrap in DRef
     obj = _Vec{T,PrefixX}(y_petsc, A.obj.row_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: matrix-vector multiply with tolerance for floating point accumulation
+    @debugcheck result ((norm(A, 2) + norm(x, 2)) * eps(real(T)) * max(m, n)) (*) A x
+
+    return result
 end
 
 """
@@ -402,6 +410,9 @@ function LinearAlgebra.mul!(y::Vec{T,Prefix}, A::Mat{T,Prefix}, x::Vec{T,Prefix}
     _mat_mult_vec!(y.obj.v, A.obj.A, x.obj.v)
 
     PETSc.assemble(y.obj.v)
+
+    # Debug check: in-place matrix-vector multiply
+    @debugcheck y ((norm(A, 2) + norm(x, 2)) * eps(real(T)) * max(m, n)) (*) A x
 
     return y
 end
@@ -443,7 +454,12 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,Pre
 
     # Wrap in DRef
     obj = _Vec{T,PrefixX}(y_petsc, A.obj.col_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: transpose-matrix-vector multiply
+    @debugcheck result ((norm(A, 2) + norm(x, 2)) * eps(real(T)) * max(m, n)) (*) At x
+
+    return result
 end
 
 # PETSc matrix-vector multiplication wrapper
@@ -499,7 +515,12 @@ function Base.:+(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
     PETSc.assemble(Cmat)
 
     obj = _Mat{T,Prefix}(Cmat, A.obj.row_partition, A.obj.col_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: matrix addition should be exact
+    @debugcheck result 0.0 (+) A B
+
+    return result
 end
 
 """
@@ -529,7 +550,12 @@ function Base.:-(A::Mat{T,Prefix}, B::Mat{T,Prefix}) where {T,Prefix}
     PETSc.assemble(Cmat)
 
     obj = _Mat{T,Prefix}(Cmat, A.obj.row_partition, A.obj.col_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: matrix subtraction should be exact
+    @debugcheck result 0.0 (-) A B
+
+    return result
 end
 
 # Helper function to extract owned rows from a PETSc Mat to Julia SparseMatrixCSC
@@ -780,17 +806,27 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims, row_partition=nothing, col_
     if dims == 1 && size(local_result, 2) == 1
         # Extract single column as sparse vector
         local_vec = sparsevec(local_result[:, 1])
-        return Vec_sum(local_vec;
+        result = Vec_sum(local_vec;
                        row_partition=result_row_partition,
                        Prefix=Prefix,
                        own_rank_only=false)
+
+        # Debug check: cat should be exact
+        @debugcheck result 0.0 ((As...; dims) -> cat(As...; dims=dims)) As... dims
+
+        return result
     else
         # Use Mat_sum to combine results across ranks
-        return Mat_sum(local_result;
+        result = Mat_sum(local_result;
                        row_partition=result_row_partition,
                        col_partition=result_col_partition,
                        Prefix=Prefix,
                        own_rank_only=false)
+
+        # Debug check: cat should be exact
+        @debugcheck result 0.0 ((As...; dims) -> cat(As...; dims=dims)) As... dims
+
+        return result
     end
 end
 
@@ -909,11 +945,16 @@ function blockdiag(As::Mat{T,Prefix}...) where {T,Prefix}
     result_col_partition = default_row_partition(total_cols, nranks)
 
     # Use Mat_sum to combine results across ranks
-    return Mat_sum(local_result;
+    result = Mat_sum(local_result;
                    row_partition=result_row_partition,
                    col_partition=result_col_partition,
                    Prefix=Prefix,
                    own_rank_only=false)
+
+    # Debug check: blockdiag should be exact
+    @debugcheck result 0.0 blockdiag As...
+
+    return result
 end
 
 """
@@ -953,7 +994,12 @@ function Base.:*(A::Mat{T,PrefixA}, B::Mat{T,PrefixB}) where {T,PrefixA,PrefixB}
 
     # Wrap in our _Mat type with the queried Prefix and return as DRef
     obj = _Mat{T,ResultPrefix}(C_mat, result_row_partition, result_col_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: matrix-matrix multiply with tolerance for floating point accumulation
+    @debugcheck result ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 2)) (*) A B
+
+    return result
 end
 
 """
@@ -985,7 +1031,12 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, B::Mat{T,Pre
 
     # Wrap in our _Mat type with the queried Prefix and return as DRef
     obj = _Mat{T,ResultPrefix}(C_mat, result_row_partition, result_col_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: transpose-matrix multiply
+    @debugcheck result ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 1)) (*) At B
+
+    return result
 end
 
 """
@@ -1017,7 +1068,12 @@ function Base.:*(A::Mat{T,PrefixA}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Pref
 
     # Wrap in our _Mat type with the queried Prefix and return as DRef
     obj = _Mat{T,ResultPrefix}(C_mat, result_row_partition, result_col_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: matrix-transpose multiply
+    @debugcheck result ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 2)) (*) A Bt
+
+    return result
 end
 
 """
@@ -1053,7 +1109,12 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, Bt::LinearAl
 
     # Wrap in our _Mat type with the queried Prefix
     obj = _Mat{T,ResultPrefix}(C_mat, result_row_partition, result_col_partition)
-    return SafeMPI.DRef(obj)
+    result = SafeMPI.DRef(obj)
+
+    # Debug check: transpose-transpose multiply
+    @debugcheck result ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 1)) (*) At Bt
+
+    return result
 end
 
 """
@@ -1075,6 +1136,9 @@ function LinearAlgebra.mul!(C::Mat{T,Prefix}, A::Mat{T,Prefix}, B::Mat{T,Prefix}
 
     # Perform in-place matrix-matrix multiplication using PETSc
     _mat_mat_mult!(C.obj.A, A.obj.A, B.obj.A)
+
+    # Debug check: in-place matrix-matrix multiply
+    @debugcheck C ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 2)) (*) A B
 
     return C
 end
@@ -1114,7 +1178,12 @@ PETSc.@for_libpetsc begin
 
         # Wrap in our _Mat type
         obj = _Mat{$PetscScalar,Prefix}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition))
-        return SafeMPI.DRef(obj)
+        result = SafeMPI.DRef(obj)
+
+        # Debug check: scalar-matrix multiplication should be exact
+        @debugcheck result 0.0 (*) α A
+
+        return result
     end
 
     """
@@ -1167,7 +1236,12 @@ PETSc.@for_libpetsc begin
 
         # Wrap in our _Mat type
         obj = _Mat{$PetscScalar,Prefix}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition))
-        return SafeMPI.DRef(obj)
+        result = SafeMPI.DRef(obj)
+
+        # Debug check: scalar + matrix (diagonal shift) should be exact
+        @debugcheck result 0.0 ((α, A) -> A + α*LinearAlgebra.I) α A
+
+        return result
     end
 
     """
@@ -1218,7 +1292,12 @@ PETSc.@for_libpetsc begin
 
         # Wrap in our _Mat type
         obj = _Mat{$PetscScalar,Prefix}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition))
-        return SafeMPI.DRef(obj)
+        result = SafeMPI.DRef(obj)
+
+        # Debug check: matrix - scalar (diagonal shift) should be exact
+        @debugcheck result 0.0 ((A, α) -> A - α*LinearAlgebra.I) A α
+
+        return result
     end
 
     """
@@ -1266,7 +1345,12 @@ PETSc.@for_libpetsc begin
 
         # Wrap in our _Mat type
         obj = _Mat{$PetscScalar,Prefix}(result_mat, copy(A.obj.row_partition), copy(A.obj.col_partition))
-        return SafeMPI.DRef(obj)
+        result = SafeMPI.DRef(obj)
+
+        # Debug check: scalar - matrix (αI - A) should be exact
+        @debugcheck result 0.0 ((α, A) -> α*LinearAlgebra.I - A) α A
+
+        return result
     end
 end
 
@@ -1722,11 +1806,16 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...
         end
     end
     # Assemble result via Mat_sum (no pooling for concat operations)
-    return Mat_sum(local_result;
+    result = Mat_sum(local_result;
                    row_partition=row_partition,
                    col_partition=col_partition,
                    Prefix=prefix,
                    own_rank_only=false)
+
+    # Debug check: spdiagm should be exact
+    @debugcheck result 0.0 ((m, n, kv...) -> spdiagm(m, n, kv...)) m n kv...
+
+    return result
 end
 
 PETSc.@for_libpetsc begin

@@ -298,10 +298,20 @@ function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
         Base.finalize(result_local)
         PETSc.assemble(result_petsc)
         obj = _Vec{T,Prefix}(result_petsc, output_row_partition)
-        return SafeMPI.DRef(obj)
+        result = SafeMPI.DRef(obj)
+
+        # Debug check: map_rows should match native Julia
+        @debugcheck result 0.0 ((f, A...) -> vcat((f.((eachrow.(A))...))...)) f A...
+
+        return result
     else  # :mat
         PETSc.assemble(result_petsc)
         obj = _Mat{T,Prefix}(result_petsc, output_row_partition, col_partition)
-        return SafeMPI.DRef(obj)
+        result = SafeMPI.DRef(obj)
+
+        # Debug check: map_rows should match native Julia
+        @debugcheck result 0.0 ((f, A...) -> vcat((f.((eachrow.(A))...))...)) f A...
+
+        return result
     end
 end
