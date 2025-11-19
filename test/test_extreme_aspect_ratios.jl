@@ -6,7 +6,7 @@ using PETSc
 using SafePETSc.SafeMPI
 using LinearAlgebra
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -19,7 +19,7 @@ if rank == 0
     flush(stdout)
 end
 
-ts = @testset MPITestHarness.QuietTestSet "Extreme aspect ratio tests" begin
+ts = @testset QuietTestSet "Extreme aspect ratio tests" begin
 
 # Test 1: Very wide matrix (2×20)
 if rank == 0

@@ -6,7 +6,7 @@ using PETSc
 using SafePETSc.SafeMPI
 using LinearAlgebra
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -20,7 +20,7 @@ if rank == 0
 end
 
 # Keep output tidy and aggregate at the end
-ts = @testset MPITestHarness.QuietTestSet "Vec norm tests" begin
+ts = @testset QuietTestSet "Vec norm tests" begin
 
 if rank == 0
     println("[DEBUG] Vec norm Test 1 starting - 2-norm (default)")

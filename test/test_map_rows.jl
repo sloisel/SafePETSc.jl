@@ -7,7 +7,7 @@ using PETSc
 using SafePETSc.SafeMPI
 using LinearAlgebra
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -18,7 +18,7 @@ nranks = MPI.Comm_size(comm)
 # Reference implementation for native Julia types
 map_rows_native(f, A...) = vcat((f.((eachrow.(A))...))...)
 
-ts = @testset MPITestHarness.QuietTestSet "map_rows" begin
+ts = @testset QuietTestSet "map_rows" begin
     # Test data from user's examples
     B_data = [-0.143343  -0.706601   1.07202;
               -1.2582     1.74033   -0.421202;

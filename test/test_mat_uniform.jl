@@ -7,7 +7,7 @@ using SafePETSc.SafeMPI
 using LinearAlgebra
 using SparseArrays
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 const _VERBOSE = get(ENV, "VERBOSE_MAT_UNIFORM", "0") == "1"
 
@@ -209,7 +209,7 @@ if _VERBOSE
         _mat_uniform_tests_body()
     end
 else
-    ts = @testset MPITestHarness.QuietTestSet "Mat_uniform tests" begin
+    ts = @testset QuietTestSet "Mat_uniform tests" begin
         _mat_uniform_tests_body()
     end
 end

@@ -10,14 +10,14 @@ using SparseArrays
 
 SafePETSc.Init()
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
 # Keep output tidy and aggregate at the end
-ts = @testset MPITestHarness.QuietTestSet "UniformScaling operations" begin
+ts = @testset QuietTestSet "UniformScaling operations" begin
     # Create a simple sparse matrix (deterministic, same on all ranks)
     n = 10
     # Create a tridiagonal matrix (deterministic)
@@ -149,7 +149,7 @@ ts = @testset MPITestHarness.QuietTestSet "UniformScaling operations" begin
     # end
 end  # End of UniformScaling operations testset
 
-ts2 = @testset MPITestHarness.QuietTestSet "Matrix norm operations" begin
+ts2 = @testset QuietTestSet "Matrix norm operations" begin
     # Create a deterministic sparse matrix
     n = 10
     A_sparse = spdiagm(

@@ -6,7 +6,7 @@ using SafePETSc: MPIDENSE, MPIAIJ
 using PETSc
 using SafePETSc.SafeMPI
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -14,7 +14,7 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-ts = @testset MPITestHarness.QuietTestSet "eachrow on mpidense" begin
+ts = @testset QuietTestSet "eachrow on mpidense" begin
     # Build a simple 4x4 matrix with known rows
     A_data = reshape(Float64.(1:16), 4, 4)
     A = SafePETSc.Mat_uniform(A_data; Prefix=MPIDENSE)

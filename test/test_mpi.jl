@@ -4,7 +4,7 @@ using SafePETSc
 SafePETSc.Init()
 using SafePETSc.SafeMPI
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # Initialize MPI if not already initialized
 # This allows the test to be run standalone or as part of a test suite
@@ -31,7 +31,7 @@ function SafeMPI.destroy_obj!(obj::TestObject)
     return nothing
 end
 
-ts = @testset MPITestHarness.QuietTestSet "SafeMPI with MPI" begin
+ts = @testset QuietTestSet "SafeMPI with MPI" begin
 
     begin # Single object GC destruction
         # Run GC test in a separate function to ensure clean scope

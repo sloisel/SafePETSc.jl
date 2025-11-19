@@ -7,7 +7,7 @@ using SafePETSc.SafeMPI
 using LinearAlgebra
 using SparseArrays
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -21,7 +21,7 @@ if rank == 0
 end
 
 # Keep output tidy and aggregate at the end
-ts = @testset MPITestHarness.QuietTestSet "Block diagonal matrix tests" begin
+ts = @testset QuietTestSet "Block diagonal matrix tests" begin
 
 # Test 1: blockdiag with two square matrices
 if rank == 0

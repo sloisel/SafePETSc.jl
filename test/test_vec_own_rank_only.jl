@@ -6,7 +6,7 @@ using PETSc
 using SafePETSc.SafeMPI
 using SparseArrays
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -14,7 +14,7 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-@testset MPITestHarness.QuietTestSet "Vec own_rank_only correctness and no-deadlock" begin
+@testset QuietTestSet "Vec own_rank_only correctness and no-deadlock" begin
     N = 16
     rowp = SafePETSc.default_row_partition(N, nranks)
     lo = rowp[rank+1]

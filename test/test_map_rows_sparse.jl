@@ -9,7 +9,7 @@ using SafePETSc: MPIAIJ, MPIDENSE
 using LinearAlgebra
 using SparseArrays
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 MPI.Initialized() || MPI.Init()
 SafePETSc.Initialized() || SafePETSc.Init()
@@ -18,7 +18,7 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-ts = @testset MPITestHarness.QuietTestSet "map_rows sparse tests" begin
+ts = @testset QuietTestSet "map_rows sparse tests" begin
 
 @testset "eachrow for sparse matrices" begin
     # Create a sparse matrix (same on all ranks)

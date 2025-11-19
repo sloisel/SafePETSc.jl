@@ -4,7 +4,7 @@ using SafePETSc
 SafePETSc.Init()
 using SafePETSc.SafeMPI
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # MPI is initialized by SafePETSc.Init()
 
@@ -12,7 +12,7 @@ const comm = MPI.COMM_WORLD
 const rank = MPI.Comm_rank(comm)
 const nranks = MPI.Comm_size(comm)
 
-ts = @testset MPITestHarness.QuietTestSet "@mpiassert OK (no abort)" begin
+ts = @testset QuietTestSet "@mpiassert OK (no abort)" begin
     # Case: all ranks pass
     ok_all = true
     @mpiassert ok_all

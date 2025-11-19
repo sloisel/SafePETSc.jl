@@ -20,7 +20,6 @@ MultiGridBarrier = "0.11.25"
 OpenBLAS32_jll = "0.3"
 PETSc = "0.3.1"
 SCALAPACK32_jll = "2.2"
-SHA = "0.7.0"
 julia = "1.10"
 
 [extras]

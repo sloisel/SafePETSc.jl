@@ -5,7 +5,7 @@ SafePETSc.Init()
 using PETSc
 using SafePETSc.SafeMPI
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -14,7 +14,7 @@ rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
 # Keep output tidy and aggregate at the end
-ts = @testset MPITestHarness.QuietTestSet "Vec_uniform tests" begin
+ts = @testset QuietTestSet "Vec_uniform tests" begin
 
 # Test 1: Create a uniform vector
 v = ones(16)  # All ranks have the same vector

@@ -11,7 +11,7 @@ using PETSc
 using SafePETSc.SafeMPI
 using LinearAlgebra
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc must be initialized by user code (library does not auto-init)
 if !PETSc.initialized(PETSc.petsclibs[1])
@@ -28,7 +28,7 @@ if rank == 0
 end
 
 # Keep output tidy and aggregate at the end
-ts = @testset MPITestHarness.QuietTestSet "BlockProduct tests" begin
+ts = @testset QuietTestSet "BlockProduct tests" begin
 
 # Test 1: Simple 2x2 block matrix multiplication with scalars
 if rank == 0

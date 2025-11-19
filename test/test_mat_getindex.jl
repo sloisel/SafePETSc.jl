@@ -6,7 +6,7 @@ using PETSc
 using SafePETSc.SafeMPI
 using LinearAlgebra
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 const _VERBOSE = get(ENV, "VERBOSE_MAT_GETINDEX", "0") == "1"
 
@@ -145,7 +145,7 @@ if _VERBOSE
         _mat_getindex_tests_body()
     end
 else
-    ts = @testset MPITestHarness.QuietTestSet "Mat getindex tests" begin
+    ts = @testset QuietTestSet "Mat getindex tests" begin
         _mat_getindex_tests_body()
     end
 end

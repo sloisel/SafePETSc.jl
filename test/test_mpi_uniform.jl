@@ -4,7 +4,7 @@ using SafePETSc
 SafePETSc.Init()
 using SafePETSc.SafeMPI: mpi_uniform
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # MPI is initialized by SafePETSc.Init()
 
@@ -13,7 +13,7 @@ const rank = MPI.Comm_rank(comm)
 const nranks = MPI.Comm_size(comm)
 
 # Keep output tidy and aggregate at the end
-ts = @testset MPITestHarness.QuietTestSet "mpi_uniform" begin
+ts = @testset QuietTestSet "mpi_uniform" begin
     # 1) Identical scalar on all ranks
     A1 = 42
 @test mpi_uniform(A1) == true

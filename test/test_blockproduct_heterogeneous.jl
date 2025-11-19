@@ -7,13 +7,13 @@ using SafePETSc.SafeMPI
 using Random
 using LinearAlgebra
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-ts = @testset MPITestHarness.QuietTestSet "BlockProduct heterogeneous blocks" begin
+ts = @testset QuietTestSet "BlockProduct heterogeneous blocks" begin
 
     # Test heterogeneous blocks with mix of scalar, Vec, Vec', Mat, Mat'
     # Following user's specific structure:

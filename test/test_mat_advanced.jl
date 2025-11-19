@@ -5,13 +5,13 @@ SafePETSc.Init()
 using LinearAlgebra
 using SafePETSc.SafeMPI
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-ts = @testset MPITestHarness.QuietTestSet "Advanced matrix operations" begin
+ts = @testset QuietTestSet "Advanced matrix operations" begin
     println(io0(), "[DEBUG] Advanced matrix operations test starting")
 
     # Test 1: Materialize adjoint as a new matrix: Mat(A')

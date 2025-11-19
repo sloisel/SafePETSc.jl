@@ -147,7 +147,7 @@ julia --project=. -e 'using SafePETSc'
 
 ## Requirements
 
-- Julia ≥ 1.11
+- Julia ≥ 1.10 (LTS)
 - MPI implementation (OpenMPI, MPICH, etc.)
 - PETSc ≥ 0.3.1
 

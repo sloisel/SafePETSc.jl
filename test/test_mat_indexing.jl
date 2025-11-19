@@ -6,7 +6,7 @@ using PETSc
 using SafePETSc.SafeMPI
 using SparseArrays
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 const _VERBOSE = get(ENV, "VERBOSE_MAT_INDEXING", "0") == "1"
 
@@ -163,7 +163,7 @@ if _VERBOSE
         _mat_indexing_tests_body()
     end
 else
-    ts = @testset MPITestHarness.QuietTestSet "Mat indexing tests" begin
+    ts = @testset QuietTestSet "Mat indexing tests" begin
         _mat_indexing_tests_body()
     end
 end

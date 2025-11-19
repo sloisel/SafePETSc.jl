@@ -5,7 +5,7 @@ SafePETSc.Init()
 using PETSc
 using SafePETSc.SafeMPI
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 const _VERBOSE = get(ENV, "VERBOSE_VEC_INDEXING", "0") == "1"
 
@@ -100,7 +100,7 @@ if _VERBOSE
         _vec_indexing_tests_body()
     end
 else
-    ts = @testset MPITestHarness.QuietTestSet "Vec indexing tests" begin
+    ts = @testset QuietTestSet "Vec indexing tests" begin
         _vec_indexing_tests_body()
     end
 end

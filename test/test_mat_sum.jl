@@ -6,7 +6,7 @@ using PETSc
 using SafePETSc.SafeMPI
 using SparseArrays
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -20,7 +20,7 @@ if rank == 0
 end
 
 # Keep output tidy and aggregate at the end
-ts = @testset MPITestHarness.QuietTestSet "Mat_sum tests" begin
+ts = @testset QuietTestSet "Mat_sum tests" begin
 
 if rank == 0
     println("[DEBUG] Mat_sum Test 1 starting")

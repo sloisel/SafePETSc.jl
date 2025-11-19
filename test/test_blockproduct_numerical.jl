@@ -7,7 +7,7 @@ using SafePETSc.SafeMPI
 using LinearAlgebra
 using Random
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 if !PETSc.initialized(PETSc.petsclibs[1])
     PETSc.initialize()
@@ -22,7 +22,7 @@ if rank == 0
     flush(stdout)
 end
 
-ts = @testset MPITestHarness.QuietTestSet "BlockProduct numerical accuracy" begin
+ts = @testset QuietTestSet "BlockProduct numerical accuracy" begin
 
 # Test 1: Simple case - 3 random rectangular matrices (scalar elements)
 if rank == 0

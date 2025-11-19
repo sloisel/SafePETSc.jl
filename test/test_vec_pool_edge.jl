@@ -5,7 +5,7 @@ SafePETSc.Init()
 using PETSc
 using SafePETSc.SafeMPI
 include(joinpath(@__DIR__, "mpi_test_harness.jl"))
-using .MPITestHarness
+using .MPITestHarness: QuietTestSet
 
 # PETSc is initialized by SafePETSc.Init()
 
@@ -19,7 +19,7 @@ if rank == 0
 end
 
 # Keep output tidy and aggregate at the end
-ts = @testset MPITestHarness.QuietTestSet "Vec pooling edge case tests" begin
+ts = @testset QuietTestSet "Vec pooling edge case tests" begin
 
 # Test 1: Pool stats behavior
 if rank == 0
