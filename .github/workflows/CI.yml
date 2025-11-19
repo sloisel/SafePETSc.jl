@@ -30,7 +30,7 @@ jobs:
 
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1'  # Latest stable release
+          version: '1.10'
           arch: x64
 
       - uses: julia-actions/cache@v2
