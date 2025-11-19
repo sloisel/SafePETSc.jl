@@ -184,6 +184,9 @@ end
 # Public API
 # ============================================================================
 
+# Module-level flag to track whether MUMPS has been configured
+const MUMPS_CONFIGURED = Ref(false)
+
 """
     fem2d_petsc(::Type{T}=Float64; kwargs...) where {T}
 
@@ -191,6 +194,8 @@ Create a PETSc-based Geometry from fem2d parameters.
 
 This function calls `fem2d(kwargs...)` to create a native geometry, then converts
 it to use PETSc distributed types (Mat and Vec) for distributed computing.
+
+On first call, configures PETSc to use MUMPS direct solver for accurate linear solves.
 
 # Arguments
 - `T::Type`: Element type for the geometry (default: Float64)
@@ -205,6 +210,25 @@ g = fem2d_petsc(Float64; maxh=0.1)
 ```
 """
 function fem2d_petsc(::Type{T}=Float64; kwargs...) where {T}
+    # Configure PETSc to use MUMPS direct solver on first call
+    # This ensures exact solves for Newton iterations
+    if !MUMPS_CONFIGURED[]
+        rank = MPI.Comm_rank(MPI.COMM_WORLD)
+        if rank == 0
+            println("Configuring PETSc to use MUMPS direct solver...")
+        end
+
+        # Set MUMPS as the direct solver for both sparse (MPIAIJ) and dense (MPIDENSE) matrices
+        # -ksp_type preonly: Don't use iterative solver, just apply preconditioner
+        # -pc_type lu: Use LU factorization as preconditioner
+        # -pc_factor_mat_solver_type mumps: Use MUMPS for the factorization
+        # We need to set these for both prefixes since matrices can have either prefix
+        SafePETSc.petsc_options_insert_string("-MPIAIJ_ksp_type preonly -MPIAIJ_pc_type lu -MPIAIJ_pc_factor_mat_solver_type mumps")
+        SafePETSc.petsc_options_insert_string("-MPIDENSE_ksp_type preonly -MPIDENSE_pc_type lu -MPIDENSE_pc_factor_mat_solver_type mumps")
+
+        MUMPS_CONFIGURED[] = true
+    end
+
     # Create native geometry
     g_native = fem2d(; kwargs...)
 

@@ -10,7 +10,8 @@ using .MultiGridBarrierPETSc
 using MultiGridBarrier
 using LinearAlgebra
 
-SafePETSc.DEBUG[] = true
+# Set DEBUG to false to enable PETSc solves with MUMPS direct solver
+SafePETSc.DEBUG[] = false
 
 for L in 1:5
     println(io0(), "Testing L=$L...")
