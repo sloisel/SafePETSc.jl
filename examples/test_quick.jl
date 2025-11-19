@@ -19,14 +19,14 @@ for L in 1:5
     # Solve with PETSc distributed types
     println(io0(), "  L=$L: Starting PETSc solve...")
     flush(stdout)
-    sol_petsc = MultiGridBarrierPETSc.fem2d_solve(Float64; L=L, p=1.0, verbose=false, maxit=10)
+    sol_petsc = MultiGridBarrierPETSc.fem2d_solve(Float64; L=L, p=1.0, verbose=false)
     println(io0(), "  L=$L: PETSc solution computed.")
     flush(stdout)
 
     # Solve with native Julia types (sequential, no logfile needed)
     println(io0(), "  L=$L: Starting native solve...")
     flush(stdout)
-    sol_native = MultiGridBarrier.fem2d_solve(Float64; L=L, p=1.0, verbose=false, maxit=10)
+    sol_native = MultiGridBarrier.fem2d_solve(Float64; L=L, p=1.0, verbose=false)
     println(io0(), "  L=$L: Native solution computed.")
     flush(stdout)
 
