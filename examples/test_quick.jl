@@ -10,6 +10,8 @@ using .MultiGridBarrierPETSc
 using MultiGridBarrier
 using LinearAlgebra
 
+SafePETSc.DEBUG[] = true
+
 for L in 1:5
     println(io0(), "Testing L=$L...")
     flush(stdout)

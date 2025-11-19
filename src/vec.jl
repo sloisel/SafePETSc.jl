@@ -680,7 +680,12 @@ v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
 s = sum(v)  # Returns 10.0 on all ranks
 ```
 """
-Base.sum(v::Vec{T}) where {T} = _vec_sum(v.obj.v)
+function Base.sum(v::Vec{T}) where {T}
+    result = _vec_sum(v.obj.v)
+    n = size(v)[1]
+    @debugcheck result (n * eps(real(T)) * norm(J(v), 1)) sum v
+    return result
+end
 
 # Norm of a vector: norm(v, p) (returns scalar)
 # Implements LinearAlgebra.norm to support standard Julia syntax
@@ -708,12 +713,19 @@ ninf = norm(v, Inf) # Returns 4.0 (inf-norm)
 ```
 """
 function LinearAlgebra.norm(v::Vec{T}, p::Real=2) where {T}
+    n = size(v)[1]
     if p == 2
-        return _vec_norm(v.obj.v, Val(2))
+        result = _vec_norm(v.obj.v, Val(2))
+        @debugcheck result (n * eps(real(T)) * norm(J(v), 1)) norm v
+        return result
     elseif p == 1
-        return _vec_norm(v.obj.v, Val(1))
+        result = _vec_norm(v.obj.v, Val(1))
+        @debugcheck result (n * eps(real(T)) * norm(J(v), 1)) ((v) -> norm(v, 1)) v
+        return result
     elseif isinf(p)
-        return _vec_norm(v.obj.v, Val(Inf))
+        result = _vec_norm(v.obj.v, Val(Inf))
+        @debugcheck result (n * eps(real(T)) * norm(J(v), 1)) ((v) -> norm(v, Inf)) v
+        return result
     else
         error("Unsupported norm type: p = $p. Supported values are 1, 2, and Inf.")
     end
