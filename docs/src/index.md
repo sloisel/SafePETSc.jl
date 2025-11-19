@@ -104,6 +104,14 @@ Pkg.add("SafePETSc")
 
 See the [Getting Started](getting_started.md) guide for a tutorial on using SafePETSc.
 
+## Author's remarks
+
+In the early 90s, Bill Gropp and Barry Smith gave us PETSc and made the impossible possible, to solve mathematical problems on large clusters of computers. Although PETSc is a great boon, it is not my favorite thing to debug, especially this particular project, which consists essentially of exposing existing PETSc functionality to the Julia environment -- "glue code". Because of this, I "vibe-coded" this whole Julia-PETSc interface into existence with the help of an AI tool named Claude. As I monitored Claude, I regularly found it making all sorts of mistakes that I fixed as best I could, but I am fairly well convinced that I did not catch all of them. It remains to be seen which is worse: AI mistakes, or human mistakes!
+
+Sincerely,
+
+S. Loisel
+
 ## Index
 
 ```@index

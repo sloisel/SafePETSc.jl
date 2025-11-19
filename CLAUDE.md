@@ -27,7 +27,6 @@ julia --project=. -e 'using SafePETSc'
 ## Directory structure
 - Source files for the library are in src/
 - Test scripts are in test/
-- User-centric examples are in examples/. The number of examples should be modest, not to exceed 10. If there are more than 10, consult the user on what to do. There should be at most one example per main feature.
 - Documentation with Documenter is in docs/. Make sure the documentation builds, is free of errors and warnings as much as possible. All user-visible API should be documented, internal functions should not be documented. The User Guide should describe all main features.
 
 ### Testing with MPI
