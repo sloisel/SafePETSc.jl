@@ -184,6 +184,9 @@ if rank == 0
 end
 end # !_VERBOSE
 
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()
+
 
 # Note: We don't call MPI.Finalize() here because Julia's MPI.jl
 # automatically finalizes MPI at exit via atexit hook

@@ -14,3 +14,6 @@ ok_some = (rank != 2)
 
 # Should never reach here due to abort
 println("[rank $rank] unexpected: test did not abort")
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

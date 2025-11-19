@@ -8,6 +8,7 @@ using SparseArrays
 export DistributedRefManager, DRef, check_and_destroy!, destroy_obj!, default_manager, enable_assert, set_assert
 export DestroySupport, CanDestroy, CannotDestroy, destroy_trait, mpi_any, mpi_uniform, mpierror, @mpiassert
 export default_check
+export finalize, is_finalized
 
 """
     default_check
@@ -22,6 +23,19 @@ SafePETSc.default_check[] = 100  # Only cleanup every 100 object creations
 ```
 """
 const default_check = Ref{Int}(10)
+
+"""
+    finalized
+
+**MPI Non-Collective**
+
+Module-level flag indicating whether SafeMPI has been finalized.
+When set to `true`, all finalizers exit early to prevent race conditions during
+process shutdown. Set via `finalize()`.
+
+See also: [`finalize`](@ref), [`is_finalized`](@ref)
+"""
+const finalized = Ref{Bool}(false)
 
 """
     DestroySupport
@@ -117,6 +131,48 @@ SafeMPI.set_assert(true)   # Re-enable assertions
 ```
 """
 set_assert(x::Bool) = (enable_assert[] = x; nothing)
+
+"""
+    finalize() -> nothing
+
+**MPI Non-Collective**
+
+Mark SafeMPI as finalized, causing all subsequent finalizer calls to exit early.
+
+This should be called before process teardown to prevent race conditions where
+finalizers attempt to use MPI/PETSc after they have begun shutting down. After
+calling this function, all DRef finalizers will return immediately without
+performing any cleanup operations.
+
+**Important**: Do not call this from within an atexit handler, as Julia may
+have already started running finalizers. Call it explicitly at the end of your
+program or test before the process exits.
+
+# Example
+```julia
+# At end of test file, before process exits
+SafeMPI.finalize()
+```
+
+See also: [`is_finalized`](@ref)
+"""
+function finalize()
+    finalized[] = true
+    return nothing
+end
+
+"""
+    is_finalized() -> Bool
+
+**MPI Non-Collective**
+
+Check whether SafeMPI has been finalized via `finalize()`.
+
+Returns `true` if `finalize()` has been called, `false` otherwise.
+
+See also: [`finalize`](@ref)
+"""
+is_finalized() = finalized[]
 
 function __init__()
     default_manager[] = DistributedRefManager()
@@ -234,6 +290,11 @@ function _allocate_id!(manager::DistributedRefManager)
 end
 
 function _release!(ref::DRef)
+    # Exit early if SafeMPI has been finalized (prevents race conditions during shutdown)
+    if finalized[]
+        return
+    end
+
     # Check if MPI is still initialized (guards against calls after MPI_Finalize)
     if !MPI.Initialized() || MPI.Finalized()
         return
@@ -242,7 +303,7 @@ function _release!(ref::DRef)
     # Simply enqueue for processing at the next safe point (check_and_destroy!)
     # NO MPI CALLS HERE - this is safe to call from GC finalizers
     _enqueue_release!(ref.manager, ref.counter_id)
-    
+
     nothing
 end
 
@@ -332,6 +393,11 @@ SafeMPI.check_and_destroy!(max_check_count=10)  # Only cleanup every 10th call
 See also: [`DRef`](@ref), [`DistributedRefManager`](@ref)
 """
 function check_and_destroy!(manager=default_manager[]; max_check_count::Integer=1)
+    # Abort if called after finalization (programming error - should call finalize() at end of program)
+    if finalized[]
+        MPI.Abort(MPI.COMM_WORLD, 1)
+    end
+
     manager.check_count += 1
     if manager.check_count >= max_check_count
         manager.check_count = 0

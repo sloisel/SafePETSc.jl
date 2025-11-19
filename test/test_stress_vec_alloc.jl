@@ -70,4 +70,7 @@ using SparseArrays
     MPI.Barrier(MPI.COMM_WORLD)
 end
 
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()
+
 # Rely on library finalization at exit

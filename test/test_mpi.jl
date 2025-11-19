@@ -143,6 +143,9 @@ if rank == 0 && (global_counts[2] > 0 || global_counts[3] > 0)
     Base.exit(1)
 end
 
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()
+
 # Note: We don't call MPI.Finalize() here because:
 # 1. Julia's MPI.jl automatically finalizes MPI at exit via atexit hook
 # 2. If we finalize here, subsequent test files cannot use MPI

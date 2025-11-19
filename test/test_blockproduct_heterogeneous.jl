@@ -153,3 +153,6 @@ end
 
 # Ensure all ranks reach this point before deciding outcome
 MPI.Barrier(comm)
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

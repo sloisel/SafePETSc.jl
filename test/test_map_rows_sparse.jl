@@ -196,3 +196,6 @@ if rank == 0
     println("All map_rows sparse matrix tests passed!")
     println("="^70)
 end
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

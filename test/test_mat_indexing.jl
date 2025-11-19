@@ -200,3 +200,6 @@ if rank == 0
     flush(stdout)
 end
 end # !_VERBOSE
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

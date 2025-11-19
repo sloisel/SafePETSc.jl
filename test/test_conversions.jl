@@ -118,3 +118,6 @@ finally
     PETSc.finalize()
     MPI.Finalize()
 end
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

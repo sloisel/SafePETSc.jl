@@ -222,3 +222,6 @@ if global_counts[2] > 0 || global_counts[3] > 0
 end
 
 MPI.Barrier(comm)
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

@@ -324,3 +324,6 @@ if rank == 0
     println("[DEBUG] Matrix concatenation test file completed successfully")
     flush(stdout)
 end
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

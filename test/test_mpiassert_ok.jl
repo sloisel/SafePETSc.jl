@@ -56,3 +56,6 @@ end
 if rank == 0
     println("@mpiassert OK test completed")
 end
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

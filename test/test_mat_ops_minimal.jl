@@ -49,3 +49,6 @@ catch e
     end
     rethrow()
 end
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

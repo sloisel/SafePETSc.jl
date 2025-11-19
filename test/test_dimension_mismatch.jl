@@ -104,3 +104,6 @@ end
 # If we reach here, the test failed to catch the dimension error
 println("[Rank $rank] ERROR: Test case $test_case did not catch dimension mismatch!")
 exit(1)
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()

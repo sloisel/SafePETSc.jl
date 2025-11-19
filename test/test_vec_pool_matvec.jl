@@ -58,3 +58,6 @@ MPI.Barrier(comm)
 if rank == 0
     println("\n=== Test completed ===")
 end
+
+# Finalize SafeMPI to prevent shutdown race conditions
+SafeMPI.finalize()
