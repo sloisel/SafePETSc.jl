@@ -62,5 +62,3 @@ if rank == 0
     println("Test completed successfully!")
 end
 
-# Finalize SafeMPI to prevent shutdown race conditions
-SafePETSc.finalize()

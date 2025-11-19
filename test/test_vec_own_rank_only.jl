@@ -83,5 +83,3 @@ nranks = MPI.Comm_size(comm)
     MPI.Barrier(comm)
 end
 
-# Finalize SafeMPI to prevent shutdown race conditions
-SafePETSc.finalize()

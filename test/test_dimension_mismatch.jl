@@ -105,5 +105,3 @@ end
 println("[Rank $rank] ERROR: Test case $test_case did not catch dimension mismatch!")
 exit(1)
 
-# Finalize SafeMPI to prevent shutdown race conditions
-SafePETSc.finalize()

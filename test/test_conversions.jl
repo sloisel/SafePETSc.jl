@@ -114,10 +114,4 @@ catch e
         end
     end
     rethrow(e)
-finally
-    PETSc.finalize()
-    MPI.Finalize()
 end
-
-# Finalize SafeMPI to prevent shutdown race conditions
-SafePETSc.finalize()

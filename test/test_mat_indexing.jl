@@ -201,5 +201,3 @@ if rank == 0
 end
 end # !_VERBOSE
 
-# Finalize SafeMPI to prevent shutdown race conditions
-SafePETSc.finalize()

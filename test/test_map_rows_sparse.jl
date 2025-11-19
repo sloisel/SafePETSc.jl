@@ -197,5 +197,3 @@ if rank == 0
     println("="^70)
 end
 
-# Finalize SafeMPI to prevent shutdown race conditions
-SafePETSc.finalize()

@@ -68,5 +68,3 @@ end
 
 MPI.Barrier(comm)
 
-# Finalize SafeMPI to prevent shutdown race conditions
-SafePETSc.finalize()

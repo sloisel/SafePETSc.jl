@@ -50,5 +50,3 @@ catch e
     rethrow()
 end
 
-# Finalize SafeMPI to prevent shutdown race conditions
-SafePETSc.finalize()

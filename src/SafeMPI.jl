@@ -176,6 +176,14 @@ is_finalized() = finalized[]
 
 function __init__()
     default_manager[] = DistributedRefManager()
+
+    # Register atexit handler to automatically finalize SafeMPI
+    atexit() do
+        # Only finalize if SafeMPI has not already been finalized
+        if !finalized[]
+            finalize()
+        end
+    end
 end
 
 """
