@@ -635,7 +635,7 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}
     result = LinearAlgebra.Adjoint(w)
 
     # Debug check: v' * A with tolerance for floating point accumulation
-    @debugcheck result ((norm(v, 2) + norm(A, 2)) * eps(real(T)) * max(m, n)) (*) vt A
+    @debugcheck result ((norm(v) + norm(A)) * eps(real(T)) * max(m, n)) (*) vt A
 
     return result
 end
@@ -653,7 +653,7 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, w::Vec{T}) where {T}
     result = _vec_dot(v.obj.v, w.obj.v)
 
     # Debug check: dot product with tolerance for floating point accumulation
-    @debugcheck result ((norm(v, 2) + norm(w, 2)) * eps(real(T)) * v_length) (*) vt w
+    @debugcheck result ((norm(v) + norm(w)) * eps(real(T)) * v_length) (*) vt w
 
     return result
 end

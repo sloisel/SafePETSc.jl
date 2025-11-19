@@ -319,9 +319,12 @@ See also: [`@debugcheck`](@ref)
 """
 const DEBUG = Ref{Bool}(false)
 
-# Identity methods for J() to handle Julia types that don't need conversion
-J(x::Number) = x
-J(x::AbstractArray) = x
+# Default identity method for J() - returns input unchanged
+# Specific PETSc conversion methods are defined in vec.jl and mat.jl
+J(x) = x
+
+# Special handling for Pair to convert the value
+J(p::Pair) = p.first => J(p.second)
 
 """
     debug_helper(y, tol, f, x...)

@@ -383,7 +383,7 @@ function Base.:*(A::Mat{T,PrefixA}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
     result = SafeMPI.DRef(obj)
 
     # Debug check: matrix-vector multiply with tolerance for floating point accumulation
-    @debugcheck result ((norm(A, 2) + norm(x, 2)) * eps(real(T)) * max(m, n)) (*) A x
+    @debugcheck result ((norm(A) + norm(x)) * eps(real(T)) * max(m, n)) (*) A x
 
     return result
 end
@@ -412,7 +412,7 @@ function LinearAlgebra.mul!(y::Vec{T,Prefix}, A::Mat{T,Prefix}, x::Vec{T,Prefix}
     PETSc.assemble(y.obj.v)
 
     # Debug check: in-place matrix-vector multiply
-    @debugcheck y ((norm(A, 2) + norm(x, 2)) * eps(real(T)) * max(m, n)) (*) A x
+    @debugcheck y ((norm(A) + norm(x)) * eps(real(T)) * max(m, n)) (*) A x
 
     return y
 end
@@ -457,7 +457,7 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,Pre
     result = SafeMPI.DRef(obj)
 
     # Debug check: transpose-matrix-vector multiply
-    @debugcheck result ((norm(A, 2) + norm(x, 2)) * eps(real(T)) * max(m, n)) (*) At x
+    @debugcheck result ((norm(A) + norm(x)) * eps(real(T)) * max(m, n)) (*) At x
 
     return result
 end
@@ -811,8 +811,8 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims, row_partition=nothing, col_
                        Prefix=Prefix,
                        own_rank_only=false)
 
-        # Debug check: cat should be exact
-        @debugcheck result 0.0 ((As...; dims) -> cat(As...; dims=dims)) As... dims
+        # Debug check: cat with dims=1 should be exact
+        @debugcheck result 0.0 ((As...) -> cat(As...; dims=1)) As...
 
         return result
     else
@@ -823,8 +823,8 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims, row_partition=nothing, col_
                        Prefix=Prefix,
                        own_rank_only=false)
 
-        # Debug check: cat should be exact
-        @debugcheck result 0.0 ((As...; dims) -> cat(As...; dims=dims)) As... dims
+        # Debug check: cat should be exact (dims value is captured from enclosing scope)
+        @debugcheck result 0.0 ((As_inner...) -> cat(As_inner...; dims=dims)) As...
 
         return result
     end
@@ -997,7 +997,7 @@ function Base.:*(A::Mat{T,PrefixA}, B::Mat{T,PrefixB}) where {T,PrefixA,PrefixB}
     result = SafeMPI.DRef(obj)
 
     # Debug check: matrix-matrix multiply with tolerance for floating point accumulation
-    @debugcheck result ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 2)) (*) A B
+    @debugcheck result ((norm(A) + norm(B)) * eps(real(T)) * size(A, 2)) (*) A B
 
     return result
 end
@@ -1034,7 +1034,7 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, B::Mat{T,Pre
     result = SafeMPI.DRef(obj)
 
     # Debug check: transpose-matrix multiply
-    @debugcheck result ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 1)) (*) At B
+    @debugcheck result ((norm(A) + norm(B)) * eps(real(T)) * size(A, 1)) (*) At B
 
     return result
 end
@@ -1071,7 +1071,7 @@ function Base.:*(A::Mat{T,PrefixA}, Bt::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Pref
     result = SafeMPI.DRef(obj)
 
     # Debug check: matrix-transpose multiply
-    @debugcheck result ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 2)) (*) A Bt
+    @debugcheck result ((norm(A) + norm(B)) * eps(real(T)) * size(A, 2)) (*) A Bt
 
     return result
 end
@@ -1112,7 +1112,7 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, Bt::LinearAl
     result = SafeMPI.DRef(obj)
 
     # Debug check: transpose-transpose multiply
-    @debugcheck result ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 1)) (*) At Bt
+    @debugcheck result ((norm(A) + norm(B)) * eps(real(T)) * size(A, 1)) (*) At Bt
 
     return result
 end
@@ -1138,7 +1138,7 @@ function LinearAlgebra.mul!(C::Mat{T,Prefix}, A::Mat{T,Prefix}, B::Mat{T,Prefix}
     _mat_mat_mult!(C.obj.A, A.obj.A, B.obj.A)
 
     # Debug check: in-place matrix-matrix multiply
-    @debugcheck C ((norm(A, 2) + norm(B, 2)) * eps(real(T)) * size(A, 2)) (*) A B
+    @debugcheck C ((norm(A) + norm(B)) * eps(real(T)) * size(A, 2)) (*) A B
 
     return C
 end
@@ -1813,7 +1813,7 @@ function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...
                    own_rank_only=false)
 
     # Debug check: spdiagm should be exact
-    @debugcheck result 0.0 ((m, n, kv...) -> spdiagm(m, n, kv...)) m n kv...
+    @debugcheck result 0.0 ((m, n, kv...) -> SparseArrays.spdiagm(m, n, kv...)) m n kv...
 
     return result
 end
