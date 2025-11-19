@@ -326,6 +326,9 @@ J(x) = x
 # Special handling for Pair to convert the value
 J(p::Pair) = p.first => J(p.second)
 
+# Special handling for Adjoint to convert the parent
+J(At::LinearAlgebra.Adjoint) = J(parent(At))'
+
 """
     debug_helper(y, tol, f, x...)
 

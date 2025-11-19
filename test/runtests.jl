@@ -15,6 +15,11 @@ catch err
     @warn "Precompile step hit an error; tests may still proceed" err
 end
 
+# Enable DEBUG mode for all tests to verify PETSc operations against native Julia
+SafePETSc.DEBUG[] = true
+println("DEBUG mode enabled - all @debugcheck assertions will be verified")
+flush(stdout)
+
 # Helper to run a test file under mpiexec with a fixed project and check exit status
 function run_mpi_test(test_file::AbstractString; nprocs::Integer=4, expect_success::Bool=true)
     mpiexec_cmd = MPI.mpiexec()

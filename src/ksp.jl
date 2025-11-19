@@ -199,7 +199,7 @@ function Base.:\(A::Mat{T,Prefix}, b::Vec{T,Prefix}) where {T,Prefix}
 
     # Debug mode: bypass PETSc and use native Julia solve
     if DEBUG[]
-        return Vec_uniform(J(A) \ J(b); row_partition=A.obj.row_partition, Prefix=Prefix)
+        return Vec_uniform(Vector(J(A) \ J(b)); row_partition=A.obj.row_partition, Prefix=Prefix)
     end
 
     # Create KSP solver
@@ -246,7 +246,7 @@ function Base.:\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) where {T,PrefixA,PrefixB}
 
     # Debug mode: bypass PETSc and use native Julia solve
     if DEBUG[]
-        return Vec_uniform(J(A) \ J(b); row_partition=A.obj.row_partition, Prefix=PrefixB)
+        return Vec_uniform(Vector(J(A) \ J(b)); row_partition=A.obj.row_partition, Prefix=PrefixB)
     end
 
     # Create KSP solver
@@ -346,7 +346,7 @@ function Base.:\(A::Mat{T,PrefixA}, B::Mat{T,PrefixB}) where {T,PrefixA,PrefixB}
 
     # Debug mode: bypass PETSc and use native Julia solve
     if DEBUG[]
-        return Mat_uniform(J(A) \ J(B); row_partition=A.obj.row_partition, col_partition=B.obj.col_partition, Prefix=PrefixB)
+        return Mat_uniform(Matrix(J(A) \ J(B)); row_partition=A.obj.row_partition, col_partition=B.obj.col_partition, Prefix=PrefixB)
     end
 
     # Create KSP solver
@@ -454,7 +454,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}, b::Vec{T,Prefix}
 
     # Debug mode: bypass PETSc and use native Julia solve
     if DEBUG[]
-        return Vec_uniform(J(At) \ J(b); row_partition=A.obj.col_partition, Prefix=Prefix)
+        return Vec_uniform(Vector(J(At) \ J(b)); row_partition=A.obj.col_partition, Prefix=Prefix)
     end
 
     # Create KSP solver
@@ -500,7 +500,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,PrefixA}}, B::Mat{T,Prefix
 
     # Debug mode: bypass PETSc and use native Julia solve
     if DEBUG[]
-        return Mat_uniform(J(At) \ J(B); row_partition=A.obj.col_partition, col_partition=B.obj.col_partition, Prefix=PrefixB)
+        return Mat_uniform(Matrix(J(At) \ J(B)); row_partition=A.obj.col_partition, col_partition=B.obj.col_partition, Prefix=PrefixB)
     end
 
     # Create KSP solver
@@ -550,7 +550,7 @@ function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}
     # Debug mode: bypass PETSc and use native Julia solve
     if DEBUG[]
         x_julia = J(bt) / J(A)
-        return Vec_uniform(Vector(x_julia); row_partition=A.obj.row_partition, Prefix=Prefix)'
+        return Vec_uniform(vec(collect(x_julia)); row_partition=A.obj.row_partition, Prefix=Prefix)'
     end
 
     # Create KSP solver
@@ -589,7 +589,7 @@ function Base.:/(B::Mat{T,PrefixB}, A::Mat{T,PrefixA}) where {T,PrefixB,PrefixA}
 
     # Debug mode: bypass PETSc and use native Julia solve
     if DEBUG[]
-        return Mat_uniform(J(B) / J(A); row_partition=B.obj.row_partition, col_partition=A.obj.col_partition, Prefix=PrefixB)
+        return Mat_uniform(Matrix(J(B) / J(A)); row_partition=B.obj.row_partition, col_partition=A.obj.col_partition, Prefix=PrefixB)
     end
 
     # Step 1: Transpose B (B must be dense, so B^T will be dense)
@@ -646,7 +646,7 @@ function Base.:/(B::Mat{T,PrefixB}, At::LinearAlgebra.Adjoint{T, <:Mat{T,PrefixA
 
     # Debug mode: bypass PETSc and use native Julia solve
     if DEBUG[]
-        return Mat_uniform(J(B) / J(At); row_partition=B.obj.row_partition, col_partition=A.obj.row_partition, Prefix=PrefixB)
+        return Mat_uniform(Matrix(J(B) / J(At)); row_partition=B.obj.row_partition, col_partition=A.obj.row_partition, Prefix=PrefixB)
     end
 
     # Step 1: Transpose B (B must be dense, so B^T will be dense)
