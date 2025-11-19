@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Developer Guide · SafePETSc.jl 0.1.12</title><meta name="title" content="Developer Guide · SafePETSc.jl 0.1.12"/><meta property="og:title" content="Developer Guide · SafePETSc.jl 0.1.12"/><meta property="twitter:title" content="Developer Guide · SafePETSc.jl 0.1.12"/><meta name="description" content="Documentation for SafePETSc.jl 0.1.12."/><meta property="og:description" content="Documentation for SafePETSc.jl 0.1.12."/><meta property="twitter:description" content="Documentation for SafePETSc.jl 0.1.12."/><meta property="og:url" content="https://sloisel.github.io/SafePETSc.jl/developer/"/><meta property="twitter:url" content="https://sloisel.github.io/SafePETSc.jl/developer/"/><link rel="canonical" href="https://sloisel.github.io/SafePETSc.jl/developer/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">SafePETSc.jl 0.1.12</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../getting_started/">Getting Started</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../guide/vectors/">Vectors</a></li><li><a class="tocitem" href="../guide/matrices/">Matrices</a></li><li><a class="tocitem" href="../guide/solvers/">Linear Solvers</a></li><li><a class="tocitem" href="../guide/io/">Input/Output and Display</a></li><li><a class="tocitem" href="../guide/mpi_programming/">MPI Programming</a></li><li><a class="tocitem" href="../guide/distributed_refs/">Distributed Reference Management</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../api/safempi/">SafeMPI</a></li><li><a class="tocitem" href="../api/vectors/">Vectors</a></li><li><a class="tocitem" href="../api/matrices/">Matrices</a></li><li><a class="tocitem" href="../api/solvers/">Solvers</a></li></ul></li><li class="is-active"><a class="tocitem" href>Developer Guide</a><ul class="internal"><li><a class="tocitem" href="#Architecture-Overview"><span>Architecture Overview</span></a></li><li><a class="tocitem" href="#Adding-New-Distributed-Types"><span>Adding New Distributed Types</span></a></li><li><a class="tocitem" href="#Testing"><span>Testing</span></a></li><li><a class="tocitem" href="#Coding-Guidelines"><span>Coding Guidelines</span></a></li><li><a class="tocitem" href="#Performance-Considerations"><span>Performance Considerations</span></a></li><li><a class="tocitem" href="#Documentation"><span>Documentation</span></a></li><li><a class="tocitem" href="#Contributing"><span>Contributing</span></a></li><li><a class="tocitem" href="#Debugging-Tips"><span>Debugging Tips</span></a></li><li><a class="tocitem" href="#Resources"><span>Resources</span></a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Developer Guide</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Developer Guide</a></li></ul></nav><div class="docs-right"><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Developer-Guide"><a class="docs-heading-anchor" href="#Developer-Guide">Developer Guide</a><a id="Developer-Guide-1"></a><a class="docs-heading-anchor-permalink" href="#Developer-Guide" title="Permalink"></a></h1><p>This guide is for developers who want to contribute to SafePETSc or extend it with custom distributed types.</p><h2 id="Architecture-Overview"><a class="docs-heading-anchor" href="#Architecture-Overview">Architecture Overview</a><a id="Architecture-Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Architecture-Overview" title="Permalink"></a></h2><p>SafePETSc consists of two main layers:</p><ol><li><strong>SafeMPI</strong>: Low-level distributed reference management</li><li><strong>SafePETSc</strong>: High-level PETSc wrappers using SafeMPI</li></ol><h3 id="SafeMPI-Layer"><a class="docs-heading-anchor" href="#SafeMPI-Layer">SafeMPI Layer</a><a id="SafeMPI-Layer-1"></a><a class="docs-heading-anchor-permalink" href="#SafeMPI-Layer" title="Permalink"></a></h3><p>The <code>SafeMPI</code> module implements reference counting across MPI ranks:</p><pre><code class="nohighlight hljs">┌─────────────────────────────────────────────┐
+│  User Code                                  │
+│  creates DRef-wrapped objects               │
+└─────────────┬───────────────────────────────┘
+              │
+┌─────────────▼────────────────────────────────┐
+│  SafeMPI.DRef{T}                             │
+│  - Wraps object                              │
+│  - Finalizer calls _release!                 │
+│  - Enqueues release ID locally (no MPI)      │
+└─────────────┬────────────────────────────────┘
+              │
+┌─────────────▼────────────────────────────────┐
+│  DistributedRefManager (mirrored on all ranks)│
+│  - Maintains identical counter_pool/free_ids │
+│  - Allgathers release IDs to update counters │
+│  - Pushes ready IDs back into `free_ids`     │
+└─────────────┬────────────────────────────────┘
+              │
+┌─────────────▼───────────────────────────────┐
+│  destroy_obj!(obj)                          │
+│  - Called on all ranks simultaneously       │
+│  - User-defined cleanup routine             │
+└─────────────────────────────────────────────┘</code></pre><h3 id="SafePETSc-Layer"><a class="docs-heading-anchor" href="#SafePETSc-Layer">SafePETSc Layer</a><a id="SafePETSc-Layer-1"></a><a class="docs-heading-anchor-permalink" href="#SafePETSc-Layer" title="Permalink"></a></h3><p>Wraps PETSc objects with <code>DRef</code>:</p><pre><code class="language-julia hljs">struct _Vec{T,Prefix}
+    v::PETSc.Vec{T}
+    row_partition::Vector{Int}
+end
+
+const Vec{T,Prefix} = DRef{_Vec{T,Prefix}}
+
+# Opt-in to distributed management
+SafeMPI.destroy_trait(::Type{_Vec{T,Prefix}}) where {T,Prefix} = SafeMPI.CanDestroy()
+
+# Define cleanup
+function SafeMPI.destroy_obj!(x::_Vec{T,Prefix}) where {T,Prefix}
+    _destroy_petsc_vec!(x.v)
+end</code></pre><h2 id="Adding-New-Distributed-Types"><a class="docs-heading-anchor" href="#Adding-New-Distributed-Types">Adding New Distributed Types</a><a id="Adding-New-Distributed-Types-1"></a><a class="docs-heading-anchor-permalink" href="#Adding-New-Distributed-Types" title="Permalink"></a></h2><p>To add your own distributed type:</p><h3 id="1.-Define-the-Internal-Type"><a class="docs-heading-anchor" href="#1.-Define-the-Internal-Type">1. Define the Internal Type</a><a id="1.-Define-the-Internal-Type-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Define-the-Internal-Type" title="Permalink"></a></h3><pre><code class="language-julia hljs">struct _MyDistributedType
+    # Your fields here
+    handle::Ptr{Cvoid}  # e.g., MPI handle
+    data::Vector{Float64}
+    # ... other fields
+end</code></pre><h3 id="2.-Create-Type-Alias"><a class="docs-heading-anchor" href="#2.-Create-Type-Alias">2. Create Type Alias</a><a id="2.-Create-Type-Alias-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Create-Type-Alias" title="Permalink"></a></h3><pre><code class="language-julia hljs">const MyDistributedType = SafeMPI.DRef{_MyDistributedType}</code></pre><h3 id="3.-Opt-In-to-Management"><a class="docs-heading-anchor" href="#3.-Opt-In-to-Management">3. Opt-In to Management</a><a id="3.-Opt-In-to-Management-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Opt-In-to-Management" title="Permalink"></a></h3><pre><code class="language-julia hljs">SafeMPI.destroy_trait(::Type{_MyDistributedType}) = SafeMPI.CanDestroy()</code></pre><h3 id="4.-Implement-Cleanup"><a class="docs-heading-anchor" href="#4.-Implement-Cleanup">4. Implement Cleanup</a><a id="4.-Implement-Cleanup-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Implement-Cleanup" title="Permalink"></a></h3><pre><code class="language-julia hljs">function SafeMPI.destroy_obj!(obj::_MyDistributedType)
+    # IMPORTANT: This is called on ALL ranks simultaneously
+    # Must be a collective operation
+
+    # Example: Free MPI resource
+    if obj.handle != C_NULL
+        MPI.Free(obj.handle)
+    end
+
+    # Clean up other resources
+    # ...
+end</code></pre><h3 id="5.-Create-Constructor"><a class="docs-heading-anchor" href="#5.-Create-Constructor">5. Create Constructor</a><a id="5.-Create-Constructor-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Create-Constructor" title="Permalink"></a></h3><pre><code class="language-julia hljs">function MyDistributedType(data::Vector{Float64})
+    # Allocate distributed resource
+    handle = allocate_mpi_resource(data)
+
+    # Wrap in internal type
+    obj = _MyDistributedType(handle, data)
+
+    # Wrap in DRef (triggers cleanup coordination)
+    return DRef(obj)
+end</code></pre><h2 id="Testing"><a class="docs-heading-anchor" href="#Testing">Testing</a><a id="Testing-1"></a><a class="docs-heading-anchor-permalink" href="#Testing" title="Permalink"></a></h2><h3 id="Unit-Tests-Structure"><a class="docs-heading-anchor" href="#Unit-Tests-Structure">Unit Tests Structure</a><a id="Unit-Tests-Structure-1"></a><a class="docs-heading-anchor-permalink" href="#Unit-Tests-Structure" title="Permalink"></a></h3><p>SafePETSc uses a dual-file testing approach:</p><ul><li><code>test/runtests.jl</code>: Entry point that spawns MPI processes</li><li><code>test/test_*.jl</code>: Individual test files run with MPI</li></ul><p>Example test file:</p><pre><code class="language-julia hljs"># test/test_myfeature.jl
+using SafePETSc
+using Test
+using MPI
+
+SafePETSc.Init()
+
+@testset &quot;My Feature&quot; begin
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+
+    # Test uniform distribution
+    v = Vec_uniform([1.0, 2.0, 3.0])
+    @test size(v) == (3,)
+
+    # Test operations
+    y = v .+ 1.0
+    @test eltype(y) == Float64
+
+    # Cleanup
+    SafeMPI.check_and_destroy!()
+end</code></pre><h3 id="Running-Tests"><a class="docs-heading-anchor" href="#Running-Tests">Running Tests</a><a id="Running-Tests-1"></a><a class="docs-heading-anchor-permalink" href="#Running-Tests" title="Permalink"></a></h3><pre><code class="language-bash hljs"># Run all tests
+julia --project=. -e &#39;using Pkg; Pkg.test()&#39;
+
+# Run specific test
+julia --project=. -e &#39;using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) --project=. test/test_myfeature.jl`)&#39;</code></pre><h2 id="Coding-Guidelines"><a class="docs-heading-anchor" href="#Coding-Guidelines">Coding Guidelines</a><a id="Coding-Guidelines-1"></a><a class="docs-heading-anchor-permalink" href="#Coding-Guidelines" title="Permalink"></a></h2><h3 id="Reference-Management"><a class="docs-heading-anchor" href="#Reference-Management">Reference Management</a><a id="Reference-Management-1"></a><a class="docs-heading-anchor-permalink" href="#Reference-Management" title="Permalink"></a></h3><ol><li><strong>Always use <code>DRef</code></strong>: Wrap distributed objects in <code>DRef</code> to ensure cleanup</li><li><strong>Cleanup at creation</strong>: <code>_make_ref</code> automatically calls <code>check_and_destroy!</code></li><li><strong>No manual cleanup in operations</strong>: Avoid <code>check_and_destroy!</code> in regular functions</li><li><strong>Collective operations</strong>: <code>destroy_obj!</code> must be collective</li></ol><h3 id="Error-Handling"><a class="docs-heading-anchor" href="#Error-Handling">Error Handling</a><a id="Error-Handling-1"></a><a class="docs-heading-anchor-permalink" href="#Error-Handling" title="Permalink"></a></h3><ol><li><strong>Use <code>@mpiassert</code></strong>: For collective error checking</li><li><strong>Coalesce assertions</strong>: Combine conditions into single <code>@mpiassert</code></li><li><strong>Informative messages</strong>: Include context in error messages</li></ol><pre><code class="language-julia hljs"># Good: single assertion with multiple conditions
+@mpiassert (size(A, 2) == size(B, 1) &amp;&amp;
+            A.obj.col_partition == B.obj.row_partition) &quot;Matrix dimensions and partitions must match for multiplication&quot;
+
+# Less good: multiple assertions
+@mpiassert size(A, 2) == size(B, 1) &quot;Dimension mismatch&quot;
+@mpiassert A.obj.col_partition == B.obj.row_partition &quot;Partition mismatch&quot;</code></pre><h3 id="PETSc-Interop"><a class="docs-heading-anchor" href="#PETSc-Interop">PETSc Interop</a><a id="PETSc-Interop-1"></a><a class="docs-heading-anchor-permalink" href="#PETSc-Interop" title="Permalink"></a></h3><ol><li><strong>Use PETSc.@for_libpetsc</strong>: For multi-precision support</li><li><strong>GPU-friendly operations</strong>: Prefer bulk operations over element access</li><li><strong>Const for MAT<em>INITIAL</em>MATRIX</strong>: Use module constant <code>MAT_INITIAL_MATRIX = Cint(0)</code></li></ol><pre><code class="language-julia hljs">PETSc.@for_libpetsc begin
+    function my_petsc_operation(mat::PETSc.Mat{$PetscScalar})
+        PETSc.@chk ccall((:PetscFunction, $libpetsc), ...)
+    end
+end</code></pre><h2 id="Performance-Considerations"><a class="docs-heading-anchor" href="#Performance-Considerations">Performance Considerations</a><a id="Performance-Considerations-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Considerations" title="Permalink"></a></h2><h3 id="Cleanup-Overhead"><a class="docs-heading-anchor" href="#Cleanup-Overhead">Cleanup Overhead</a><a id="Cleanup-Overhead-1"></a><a class="docs-heading-anchor-permalink" href="#Cleanup-Overhead" title="Permalink"></a></h3><ul><li><code>check_and_destroy!</code> uses collective <code>Allgather/Allgatherv</code> operations and periodically triggers partial GC</li><li>Default: partial GC every 10 object creations (controlled by <code>SafePETSc.default_check[]</code>)</li><li>Tune <code>default_check[]</code> based on application: lower values = less memory, more overhead</li></ul><h3 id="Memory-Management"><a class="docs-heading-anchor" href="#Memory-Management">Memory Management</a><a id="Memory-Management-1"></a><a class="docs-heading-anchor-permalink" href="#Memory-Management" title="Permalink"></a></h3><ul><li>Use <code>DRef</code> scoping to control lifetimes</li><li>Avoid global <code>DRef</code> variables (prevent cleanup)</li><li>Consider explicit cleanup in long loops</li></ul><h3 id="GPU-Support"><a class="docs-heading-anchor" href="#GPU-Support">GPU Support</a><a id="GPU-Support-1"></a><a class="docs-heading-anchor-permalink" href="#GPU-Support" title="Permalink"></a></h3><ul><li>SafePETSc prioritizes GPU-friendly PETSc operations</li><li>Set PETSc options for GPU: <code>-mat_type aijcusparse -vec_type cuda</code></li><li>Avoid element-wise access (causes GPU↔CPU transfers)</li></ul><h2 id="Documentation"><a class="docs-heading-anchor" href="#Documentation">Documentation</a><a id="Documentation-1"></a><a class="docs-heading-anchor-permalink" href="#Documentation" title="Permalink"></a></h2><h3 id="Docstrings"><a class="docs-heading-anchor" href="#Docstrings">Docstrings</a><a id="Docstrings-1"></a><a class="docs-heading-anchor-permalink" href="#Docstrings" title="Permalink"></a></h3><p>Follow Julia documentation conventions:</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    my_function(x::Type; option=default) -&gt; ReturnType
+
+Brief one-line description.
+
+Extended description with more details about the function&#39;s behavior,
+parameters, and return values.
+
+# Arguments
+- `x::Type`: Description of x
+- `option::Type=default`: Description of optional parameter
+
+# Returns
+- `ReturnType`: Description of return value
+
+# Examples</code></pre><p>julia result = my_function(input)</p><pre><code class="nohighlight hljs">
+See also: [`related_function`](@ref), [`another_function`](@ref)
+&quot;&quot;&quot;
+function my_function(x; option=default)
+    # Implementation
+end</code></pre><h3 id="Adding-Documentation-Pages"><a class="docs-heading-anchor" href="#Adding-Documentation-Pages">Adding Documentation Pages</a><a id="Adding-Documentation-Pages-1"></a><a class="docs-heading-anchor-permalink" href="#Adding-Documentation-Pages" title="Permalink"></a></h3><ol><li>Create markdown file in <code>docs/src/</code></li><li>Add to <code>pages</code> in <code>docs/make.jl</code></li><li>Build: <code>julia --project=docs docs/make.jl</code></li></ol><h2 id="Contributing"><a class="docs-heading-anchor" href="#Contributing">Contributing</a><a id="Contributing-1"></a><a class="docs-heading-anchor-permalink" href="#Contributing" title="Permalink"></a></h2><h3 id="Pull-Request-Process"><a class="docs-heading-anchor" href="#Pull-Request-Process">Pull Request Process</a><a id="Pull-Request-Process-1"></a><a class="docs-heading-anchor-permalink" href="#Pull-Request-Process" title="Permalink"></a></h3><ol><li>Fork the repository</li><li>Create a feature branch</li><li>Add tests for new functionality</li><li>Update documentation</li><li>Run tests: <code>julia --project=. -e &#39;using Pkg; Pkg.test()&#39;</code></li><li>Submit pull request</li></ol><h3 id="Code-Review-Checklist"><a class="docs-heading-anchor" href="#Code-Review-Checklist">Code Review Checklist</a><a id="Code-Review-Checklist-1"></a><a class="docs-heading-anchor-permalink" href="#Code-Review-Checklist" title="Permalink"></a></h3><ul><li>[ ] Tests pass</li><li>[ ] Documentation updated</li><li>[ ] Docstrings added for public API</li><li>[ ] Reference management correct</li><li>[ ] Collective operations properly coordinated</li><li>[ ] Performance considerations addressed</li></ul><h2 id="Debugging-Tips"><a class="docs-heading-anchor" href="#Debugging-Tips">Debugging Tips</a><a id="Debugging-Tips-1"></a><a class="docs-heading-anchor-permalink" href="#Debugging-Tips" title="Permalink"></a></h2><h3 id="MPI-Hangs"><a class="docs-heading-anchor" href="#MPI-Hangs">MPI Hangs</a><a id="MPI-Hangs-1"></a><a class="docs-heading-anchor-permalink" href="#MPI-Hangs" title="Permalink"></a></h3><p>If program hangs, likely causes:</p><ol><li><strong>Non-collective operation</strong>: One rank skipped a collective call</li><li><strong>Unbalanced branching</strong>: Ranks took different code paths</li><li><strong>Missing <code>@mpiassert</code></strong>: Error on one rank, others waiting</li></ol><p>Debug with:</p><pre><code class="language-julia hljs"># Add at suspicious points
+println(io0(), &quot;Reached checkpoint A&quot;)
+MPI.Barrier(MPI.COMM_WORLD)</code></pre><h3 id="Memory-Leaks"><a class="docs-heading-anchor" href="#Memory-Leaks">Memory Leaks</a><a id="Memory-Leaks-1"></a><a class="docs-heading-anchor-permalink" href="#Memory-Leaks" title="Permalink"></a></h3><p>Check for:</p><ol><li>Global <code>DRef</code> variables</li><li>Skipped <code>check_and_destroy!</code> in long loops</li><li>Circular references preventing GC</li></ol><p>Inspect manager state:</p><pre><code class="language-julia hljs">manager = SafeMPI.default_manager[]
+println(io0(), &quot;Active objects: &quot;, length(manager.counter_pool))
+println(io0(), &quot;Pending releases: &quot;, length(manager.pending_releases))</code></pre><h3 id="Assertion-Failures"><a class="docs-heading-anchor" href="#Assertion-Failures">Assertion Failures</a><a id="Assertion-Failures-1"></a><a class="docs-heading-anchor-permalink" href="#Assertion-Failures" title="Permalink"></a></h3><p>Enable verbose output:</p><pre><code class="language-julia hljs"># Assertions enabled by default
+SafeMPI.enable_assert[]  # true
+
+# Check conditions
+@mpiassert condition &quot;Detailed error message&quot;</code></pre><h2 id="Resources"><a class="docs-heading-anchor" href="#Resources">Resources</a><a id="Resources-1"></a><a class="docs-heading-anchor-permalink" href="#Resources" title="Permalink"></a></h2><ul><li><a href="https://petsc.org/release/documentation/">PETSc Documentation</a></li><li><a href="https://juliaparallel.org/MPI.jl/">MPI.jl Documentation</a></li><li><a href="https://documenter.juliadocs.org/">Documenter.jl Guide</a></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../api/solvers/">« Solvers</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.0 on <span class="colophon-date" title="Wednesday 19 November 2025 21:00">Wednesday 19 November 2025</span>. Using Julia version 1.12.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
