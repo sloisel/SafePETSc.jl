@@ -208,8 +208,8 @@ PETSc.@for_libpetsc begin
     end
 
     function _return_vec_to_pool_impl!(v::PETSc.Vec{$PetscScalar}, row_partition::Vector{Int}, Prefix::Type)
-        # Don't pool if PETSc is finalizing
-        if PETSc.finalized($petsclib)
+        # Don't pool if MPI or PETSc is finalizing (guards against shutdown race conditions)
+        if !MPI.Initialized() || MPI.Finalized() || PETSc.finalized($petsclib)
             return nothing
         end
 
