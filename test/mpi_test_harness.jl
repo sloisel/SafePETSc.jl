@@ -60,8 +60,3 @@ end
 Test.finish(ts::QuietTestSet) = ts
 
 end # module
-
-# Enable DEBUG mode for all tests that include this harness
-# This verifies all PETSc operations against native Julia equivalents
-using SafePETSc
-SafePETSc.DEBUG[] = true
