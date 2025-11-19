@@ -106,4 +106,4 @@ println("[Rank $rank] ERROR: Test case $test_case did not catch dimension mismat
 exit(1)
 
 # Finalize SafeMPI to prevent shutdown race conditions
-SafeMPI.finalize()
+SafePETSc.finalize()

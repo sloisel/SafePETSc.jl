@@ -102,9 +102,9 @@ prefix(MPIAIJ)    # Returns "MPIAIJ_"
 prefix(::Type{MPIDENSE}) = "MPIDENSE_"
 prefix(::Type{MPIAIJ}) = "MPIAIJ_"
 
-# Re-export default_check from SafeMPI for convenient access
-using .SafeMPI: default_check
-export default_check
+# Re-export default_check, finalize, and is_finalized from SafeMPI for convenient access
+using .SafeMPI: default_check, finalize, is_finalized
+export default_check, finalize, is_finalized
 
 
 # PETSc constants for matrix operations

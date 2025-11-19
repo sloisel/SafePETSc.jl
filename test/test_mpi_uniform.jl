@@ -69,4 +69,4 @@ if global_counts[2] > 0 || global_counts[3] > 0
 end
 
 # Finalize SafeMPI to prevent shutdown race conditions
-SafeMPI.finalize()
+SafePETSc.finalize()

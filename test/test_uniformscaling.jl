@@ -224,4 +224,4 @@ end
 MPI.Barrier(comm)
 
 # Finalize SafeMPI to prevent shutdown race conditions
-SafeMPI.finalize()
+SafePETSc.finalize()

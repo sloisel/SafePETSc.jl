@@ -71,6 +71,6 @@ using SparseArrays
 end
 
 # Finalize SafeMPI to prevent shutdown race conditions
-SafeMPI.finalize()
+SafePETSc.finalize()
 
 # Rely on library finalization at exit

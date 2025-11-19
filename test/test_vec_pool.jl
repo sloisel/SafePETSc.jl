@@ -235,7 +235,7 @@ end
 MPI.Barrier(comm)
 
 # Finalize SafeMPI to prevent shutdown race conditions
-SafeMPI.finalize()
+SafePETSc.finalize()
 
 # Note: We don't call MPI.Finalize() here because Julia's MPI.jl
 # automatically finalizes MPI at exit via atexit hook

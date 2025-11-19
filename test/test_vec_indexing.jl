@@ -139,4 +139,4 @@ end
 end # !_VERBOSE
 
 # Finalize SafeMPI to prevent shutdown race conditions
-SafeMPI.finalize()
+SafePETSc.finalize()
