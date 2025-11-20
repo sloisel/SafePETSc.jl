@@ -5,7 +5,7 @@ This guide will help you get started with SafePETSc.jl for distributed parallel 
 ## Prerequisites
 
 SafePETSc requires:
-- Julia 1.6 or later
+- Julia 1.10 or later
 - MPI installation (OpenMPI, MPICH, etc.)
 - PETSc installation
 
