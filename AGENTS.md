@@ -22,7 +22,7 @@ Use 4-space indentation, no tabs, and keep exports near the top of each file (`s
 - Prefer `MPI.mpiexec()` inside Julia to locate the correct launcher that matches the active MPIPreferences (e.g., MPICH_jll). Example: `run(`\$(MPI.mpiexec()) -n 4 …`)`.
 - Command-line `mpiexec` also works if your PATH points to the same MPI used by MPIPreferences. Avoid mixing system/OpenMPI with MPICH_jll.
 - There is no `@mpiexec` macro; use `MPI.mpiexec()` or install the wrapper via `MPI.install_mpiexecjl()` and invoke `mpiexecjl`.
-- Run any Julia file on 4 ranks (portable one-liner): `julia --project=. -e 'using MPI; run(`\$(MPI.mpiexec()) -n 4 \$(Base.julia_cmd()) --project=. path/to/foo.jl`)'`. If you installed the wrapper: `mpiexecjl -n 4 julia --project=. path/to/foo.jl`.
+- Run any Julia file on 4 ranks (portable one-liner): `julia -e 'using MPI; run(`\$(MPI.mpiexec()) -n 4 \$(Base.julia_cmd()) path/to/foo.jl`)'`. If you installed the wrapper: `mpiexecjl -n 4 julia path/to/foo.jl`. Add `--project=your_project` if the file needs a specific project environment.
 
 ## Commit & Pull Request Guidelines
 Recent history (`git log -5`) shows short, imperative summaries such as `matrix product first version` and `Add Vec_sum for summing sparse vectors across MPI ranks`; follow that format and omit trailing periods. Each pull request should include: scope summary, links to issues or PETSc tickets, the exact test command (e.g., `Pkg.test()` plus any targeted `mpiexec` runs), and notes about MPI/MPIPreferences changes. Provide screenshots or logs only when debugging distributed failures so reviewers can see rank-tagged output.

@@ -15,10 +15,17 @@ SafePETSc programs must be run with MPI. Use the MPI.jl wrapper to ensure compat
 
 ```bash
 # Run with 4 MPI processes
-julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) --project=. your_script.jl`)'
+julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) your_script.jl`)'
 ```
 
 This ensures the correct MPI implementation and Julia executable are used.
+
+!!! note "Using Project Environments"
+    If your script requires a specific Julia project environment, add `--project=your_project_path` to the julia command:
+    ```bash
+    julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) --project=. your_script.jl`)'
+    ```
+    This is only needed if SafePETSc is not installed globally or if you need other project-specific dependencies.
 
 ### Using System MPI on HPC Clusters
 
@@ -106,7 +113,7 @@ Example `my_job.sh` script:
 module load openmpi
 
 # Run Julia with MPI
-julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 32 $(Base.julia_cmd()) --project=. my_script.jl`)'
+julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 32 $(Base.julia_cmd()) my_script.jl`)'
 ```
 
 Or for PBS/Torque:
@@ -119,7 +126,7 @@ Or for PBS/Torque:
 cd $PBS_O_WORKDIR
 module load openmpi
 
-julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 32 $(Base.julia_cmd()) --project=. my_script.jl`)'
+julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 32 $(Base.julia_cmd()) my_script.jl`)'
 ```
 
 #### Important Notes
@@ -250,7 +257,7 @@ SafeMPI.check_and_destroy!()
 Save the above code as `example.jl` and run:
 
 ```bash
-julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) --project=. example.jl`)'
+julia -e 'using MPI; run(`$(MPI.mpiexec()) -n 4 $(Base.julia_cmd()) example.jl`)'
 ```
 
 ## Next Steps
