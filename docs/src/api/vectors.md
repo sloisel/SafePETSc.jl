@@ -55,6 +55,8 @@ Convert distributed vectors to Julia arrays for inspection and display:
 Base.Vector(::SafePETSc.Vec)
 ```
 
+The universal [`J`](@ref SafePETSc.J) function also converts vectors: `J(v)` is equivalent to `Vector(v)`.
+
 Display methods (automatically used by `println`, `display`, etc.):
 - `show(io::IO, v::Vec)` - Display vector contents
 - `show(io::IO, mime::MIME, v::Vec)` - Display with MIME type support

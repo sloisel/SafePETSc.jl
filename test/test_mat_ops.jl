@@ -509,34 +509,6 @@ drx = drA \ drb
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Test 21: @debugcheck and debug_helper (placebo test for codecov)
-if rank == 0
-    println("[DEBUG] Test 21: @debugcheck and debug_helper")
-    flush(stdout)
-end
-
-# Enable DEBUG mode temporarily
-old_debug = SafePETSc.DEBUG[]
-SafePETSc.DEBUG[] = true
-
-# Create simple vectors for debug check
-x_data = Float64.(1:4)
-drx = SafePETSc.Vec_uniform(x_data)
-dry = SafePETSc.Vec_uniform(zeros(4))
-
-# Perform an operation that uses @debugcheck (e.g., vector addition)
-drz = drx + dry  # This internally calls @debugcheck if DEBUG[] is true
-
-# Verify result
-@test drz isa SafeMPI.DRef
-@test size(drz) == (4,)
-
-# Restore DEBUG mode
-SafePETSc.DEBUG[] = old_debug
-
-SafeMPI.check_and_destroy!()
-MPI.Barrier(comm)
-
 if rank == 0
     println("[DEBUG] All tests completed")
     flush(stdout)

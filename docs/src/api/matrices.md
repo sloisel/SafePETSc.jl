@@ -47,6 +47,7 @@ Convert distributed matrices to Julia arrays for inspection and display:
 ```@docs
 Base.Matrix(::SafePETSc.Mat)
 SparseArrays.sparse(::SafePETSc.Mat)
+SafePETSc.J
 SafePETSc.is_dense
 ```
 

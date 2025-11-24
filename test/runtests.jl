@@ -15,10 +15,6 @@ catch err
     @warn "Precompile step hit an error; tests may still proceed" err
 end
 
-# DEBUG mode disabled by default for performance
-# Set SafePETSc.DEBUG[] = true manually to enable @debugcheck assertions
-SafePETSc.DEBUG[] = false
-
 # Helper to run a test file under mpiexec with a fixed project and check exit status
 function run_mpi_test(test_file::AbstractString; nprocs::Integer=4, expect_success::Bool=true)
     mpiexec_cmd = MPI.mpiexec()

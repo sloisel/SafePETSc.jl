@@ -296,41 +296,19 @@ combined = map_rows((x, y) -> [x[1] + y[1], x[1] * y[1]]', v1, v2)
 
 ## PETSc Options and the Prefix Type Parameter
 
-SafePETSc vectors have a `Prefix` type parameter (e.g., `Vec{Float64,MPIAIJ}`) that controls PETSc configuration through option prefixes. SafePETSc provides two built-in prefix types:
-
-### Built-in Prefix Types
-
-- **`MPIAIJ`** (default): General-purpose prefix
-  - String prefix: `"MPIAIJ_"`
-  - Use for: Most vector operations
-
-- **`MPIDENSE`**: Dense matrix operations prefix
-  - String prefix: `"MPIDENSE_"`
-  - Use for: Vectors associated with dense matrices
+SafePETSc vectors have a `Prefix` type parameter (e.g., `Vec{Float64,MPIAIJ}`) that controls PETSc configuration. The two built-in prefixes are `MPIAIJ` (default) and `MPIDENSE`.
 
 **Important**: All PETSc vectors are inherently dense (they store all elements), regardless of the `Prefix` parameter. The prefix only affects which PETSc options are applied, not the internal storage format. Unlike matrices, there is no "sparse vector" format in PETSc.
 
-### Setting PETSc Options
-
-You can configure PETSc behavior for vectors with a specific prefix:
-
 ```julia
-# Configure CUDA vectors for dense operations
-petsc_options_insert_string("-MPIDENSE_vec_type cuda")
-
-# Create vector with MPIDENSE prefix
+# Create vector with specific prefix
 v = Vec_uniform(data; Prefix=MPIDENSE)
-# Now PETSc will use CUDA for this vector
 
-# Configure standard MPI vectors differently
-petsc_options_insert_string("-MPIAIJ_vec_type standard")
-w = Vec_uniform(data; Prefix=MPIAIJ)
-# This vector uses the standard MPI type
+# Configure PETSc options for that prefix
+petsc_options_insert_string("-MPIDENSE_vec_type cuda")
 ```
 
-The string prefix (e.g., `"MPIDENSE_"`, `"MPIAIJ_"`) is automatically prepended to option names when PETSc processes options for objects with that prefix type.
-
-Advanced users can define custom prefix types (not documented here).
+See [Matrices: PETSc Options and Prefix Types](matrices.md#petsc-options-and-the-prefix-type-parameter) for complete documentation of the prefix system.
 
 ## Examples
 
@@ -404,92 +382,23 @@ y = y + 1.0
 
 ## Converting to Julia Arrays
 
-You can convert a distributed `Vec` to a native Julia `Vector` using the `Vector()` constructor. This is useful for interoperability with other Julia packages, data export, or analysis.
+Convert a distributed `Vec` to a native Julia `Vector`:
 
 ```julia
-# Create a distributed vector
 v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
-
-# Convert to Julia Vector
 v_julia = Vector(v)  # Returns Vector{Float64}
+
+# Or use the universal J() function
+v_julia = J(v)       # Same result
 ```
 
-### Important: Collective Operation
+**Important:** Conversion is a **collective operation** - all ranks must call it.
 
-**The conversion is a collective operation** - all ranks must call it:
-
-```julia
-# ✓ CORRECT - All ranks participate
-v_julia = Vector(v)  # All ranks get the complete vector
-
-# ❌ WRONG - Will hang MPI!
-if rank == 0
-    v_julia = Vector(v)  # Only rank 0 calls, others wait forever
-end
-```
-
-After conversion, **all ranks receive the complete vector**. The data is gathered from all ranks using MPI collective operations.
-
-### When to Use Conversions
-
-**Good use cases:**
-- **Interoperability**: Pass data to packages that don't support PETSc
-- **Small-scale analysis**: Compute properties on small vectors
-- **Data export**: Save results to files
-- **Visualization**: Convert for plotting libraries
-
-```julia
-using Plots
-
-# Solve distributed system
-A = Mat_uniform([2.0 1.0; 1.0 3.0])
-b = Vec_uniform([1.0, 2.0])
-x = A \ b
-
-# Convert for plotting (small vector, so conversion is cheap)
-x_julia = Vector(x)
-plot(x_julia, label="Solution")
-```
-
-**Avoid conversions for:**
-- **Large datasets**: Gathers all data to all ranks (expensive!)
-- **Intermediate computations**: Keep data in PETSc format
-- **Repeated access**: Don't convert in loops
-
-```julia
-# ❌ BAD - Expensive conversion in loop
-for i in 1:1000
-    v_julia = Vector(v)  # Wasteful! Gathers data every iteration
-    process(v_julia[1])
-end
-
-# ✓ BETTER - Convert once if needed
-v_julia = Vector(v)
-for i in 1:1000
-    process(v_julia[1])
-end
-```
-
-### Working with Converted Vectors
-
-After conversion, you have a standard Julia array:
-
-```julia
-using Statistics
-using LinearAlgebra
-
-x = Vec_uniform([1.0, 2.0, 3.0, 4.0])
-x_julia = Vector(x)
-
-# Use with any Julia package
-μ = mean(x_julia)     # Statistics
-σ = std(x_julia)
-n = norm(x_julia)     # LinearAlgebra
-
-println(io0(), "Mean: $μ, Std: $σ, Norm: $n")
-```
-
-See [Converting to Native Julia Arrays](io.md#converting-to-native-julia-arrays) for more details and examples.
+See [Converting to Native Julia Arrays](io.md#converting-to-native-julia-arrays) for complete documentation including:
+- The universal `J()` conversion function
+- Performance considerations
+- When to use (and avoid) conversions
+- Working with converted data
 
 ## See Also
 

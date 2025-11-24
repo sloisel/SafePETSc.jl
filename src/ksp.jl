@@ -200,11 +200,6 @@ function Base.:\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) where {T,PrefixA,PrefixB}
     vec_length = size(b)[1]
     @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), and row/column partitions of A must match and equal b's row partition"
 
-    # Debug mode: bypass PETSc and use native Julia solve
-    if DEBUG[]
-        return Vec_uniform(Vector(J(A) \ J(b)); row_partition=A.obj.row_partition, Prefix=PrefixB)
-    end
-
     # Create KSP solver
     ksp_obj = KSP(A)
 
@@ -299,11 +294,6 @@ function Base.:\(A::Mat{T,PrefixA}, B::Mat{T,PrefixB}) where {T,PrefixA,PrefixB}
     m, n = size(A)
     p, q = size(B)
     @mpiassert m == n && m == p && A.obj.row_partition == B.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix A must be square (A: $(m)×$(n)), matrix rows must match (B: $(p)×$(q)), and row/column partitions of A must match and equal B's row partition"
-
-    # Debug mode: bypass PETSc and use native Julia solve
-    if DEBUG[]
-        return Mat_uniform(Matrix(J(A) \ J(B)); row_partition=A.obj.row_partition, col_partition=B.obj.col_partition, Prefix=PrefixB)
-    end
 
     # Create KSP solver
     ksp_obj = KSP(A)
@@ -408,11 +398,6 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}, b::Vec{T,Prefix}
     vec_length = size(b)[1]
     @mpiassert m == n && n == vec_length && A.obj.col_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix columns must match vector length (b: $(vec_length)), row/column partitions of A must match, and column partition must equal b's row partition"
 
-    # Debug mode: bypass PETSc and use native Julia solve
-    if DEBUG[]
-        return Vec_uniform(Vector(J(At) \ J(b)); row_partition=A.obj.col_partition, Prefix=Prefix)
-    end
-
     # Create KSP solver
     ksp_obj = KSP(A)
 
@@ -453,11 +438,6 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,PrefixA}}, B::Mat{T,Prefix
     m, n = size(A)
     p, q = size(B)
     @mpiassert m == n && n == p && A.obj.col_partition == B.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix A must be square (A: $(m)×$(n)), matrix columns must match (B: $(p)×$(q)), row/column partitions of A must match, and column partition must equal B's row partition"
-
-    # Debug mode: bypass PETSc and use native Julia solve
-    if DEBUG[]
-        return Mat_uniform(Matrix(J(At) \ J(B)); row_partition=A.obj.col_partition, col_partition=B.obj.col_partition, Prefix=PrefixB)
-    end
 
     # Create KSP solver
     ksp_obj = KSP(A)
@@ -503,12 +483,6 @@ function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}
     vec_length = size(b)[1]
     @mpiassert m == n && m == vec_length && A.obj.row_partition == b.obj.row_partition && A.obj.row_partition == A.obj.col_partition "Matrix must be square (A: $(m)×$(n)), matrix rows must match vector length (b: $(vec_length)), and row/column partitions of A must match and equal b's row partition"
 
-    # Debug mode: bypass PETSc and use native Julia solve
-    if DEBUG[]
-        x_julia = J(bt) / J(A)
-        return Vec_uniform(vec(collect(x_julia)); row_partition=A.obj.row_partition, Prefix=Prefix)'
-    end
-
     # Create KSP solver
     ksp_obj = KSP(A)
 
@@ -542,11 +516,6 @@ function Base.:/(B::Mat{T,PrefixB}, A::Mat{T,PrefixA}) where {T,PrefixB,PrefixA}
     m, n = size(A)
     p, q = size(B)
     @mpiassert m == n && q == m && A.obj.row_partition == A.obj.col_partition && B.obj.col_partition == A.obj.row_partition "Matrix A must be square (A: $(m)×$(n)), B columns must match A size (B: $(p)×$(q)), row/column partitions of A must match, and B's column partition must equal A's row partition"
-
-    # Debug mode: bypass PETSc and use native Julia solve
-    if DEBUG[]
-        return Mat_uniform(Matrix(J(B) / J(A)); row_partition=B.obj.row_partition, col_partition=A.obj.col_partition, Prefix=PrefixB)
-    end
 
     # Step 1: Transpose B (B must be dense, so B^T will be dense)
     B_T = _mat_transpose(B.obj.A, PrefixB)
@@ -599,11 +568,6 @@ function Base.:/(B::Mat{T,PrefixB}, At::LinearAlgebra.Adjoint{T, <:Mat{T,PrefixA
     m, n = size(A)
     p, q = size(B)
     @mpiassert m == n && q == n && A.obj.row_partition == A.obj.col_partition && B.obj.col_partition == A.obj.col_partition "Matrix A must be square (A: $(m)×$(n)), B columns must match A' size (B: $(p)×$(q)), and row/column partitions of A must match and equal B's column partition"
-
-    # Debug mode: bypass PETSc and use native Julia solve
-    if DEBUG[]
-        return Mat_uniform(Matrix(J(B) / J(At)); row_partition=B.obj.row_partition, col_partition=A.obj.row_partition, Prefix=PrefixB)
-    end
 
     # Step 1: Transpose B (B must be dense, so B^T will be dense)
     B_T = _mat_transpose(B.obj.A, PrefixB)

@@ -201,6 +201,39 @@ A_sparse = Mat_uniform(sparse([1, 2], [1, 2], [1.0, 4.0], 10, 10))
 A_csc = sparse(A_sparse)  # Returns SparseMatrixCSC{Float64, Int}
 ```
 
+### Universal Conversion with J()
+
+The `J()` function provides a uniform interface for converting any SafePETSc object to its native Julia equivalent. It automatically chooses the appropriate conversion based on the input type:
+
+```julia
+# J() automatically selects the right conversion
+v = Vec_uniform([1.0, 2.0, 3.0])
+v_julia = J(v)  # Vector{Float64} (same as Vector(v))
+
+A_dense = Mat_uniform([1.0 2.0; 3.0 4.0])
+A_julia = J(A_dense)  # Matrix{Float64} (same as Matrix(A))
+
+A_sparse = Mat_uniform(sparse([1.0 0.0; 0.0 2.0]))
+A_julia = J(A_sparse)  # SparseMatrixCSC (same as sparse(A))
+
+# Scalars and other types pass through unchanged
+x = J(3.14)  # 3.14
+```
+
+`J()` is particularly useful in generic code where you want to convert multiple PETSc objects without knowing their specific types:
+
+```julia
+# Convert all arguments at once using broadcasting
+args_julia = J.((A, b, x))  # Converts each to its Julia equivalent
+```
+
+**Conversion rules:**
+- `Vec{T}` → `Vector{T}`
+- `Mat{T}` (dense) → `Matrix{T}`
+- `Mat{T}` (sparse) → `SparseMatrixCSC{T,Int}`
+- Adjoint types preserve the adjoint wrapper
+- Non-PETSc types pass through unchanged
+
 ### Important: Collective Operations
 
 **All conversion functions are collective operations** - every rank must call them:

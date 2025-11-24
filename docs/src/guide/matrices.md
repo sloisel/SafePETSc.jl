@@ -506,130 +506,32 @@ A = Mat_sum(local_matrix)
 
 ## Converting to Julia Arrays
 
-You can convert distributed `Mat` objects to native Julia arrays for interoperability, analysis, or export. SafePETSc provides two conversion options depending on matrix structure.
-
-### Dense Matrix Conversion
-
-Use `Matrix()` to convert to a dense Julia array:
+Convert distributed `Mat` objects to native Julia arrays:
 
 ```julia
-# Create a distributed matrix
+# Dense matrix conversion
 A = Mat_uniform([1.0 2.0; 3.0 4.0])
+A_julia = Matrix(A)  # Returns Matrix{Float64}
 
-# Convert to Julia Matrix
-A_dense = Matrix(A)  # Returns Matrix{Float64}
-```
-
-### Sparse Matrix Conversion
-
-Use `sparse()` to convert to a sparse CSC matrix (preserves sparsity):
-
-```julia
+# Sparse matrix conversion (preserves sparsity)
 using SparseArrays
+B = Mat_uniform(sparse([1, 2], [1, 2], [1.0, 4.0], 10, 10))
+B_csc = sparse(B)    # Returns SparseMatrixCSC{Float64, Int}
 
-# Create sparse matrix
-n = 10_000
-I = [1:n; 1:n-1; 2:n]
-J = [1:n; 2:n; 1:n-1]
-V = [2.0*ones(n); -ones(n-1); -ones(n-1)]
-A = Mat_sum(sparse(I, J, V, n, n))
-
-# Convert to CSC format (preserves sparsity)
-A_csc = sparse(A)  # Returns SparseMatrixCSC{Float64, Int}
-
-# Don't use Matrix() for sparse matrices!
-A_dense = Matrix(A)  # Creates 10000×10000 dense array - wasteful!
+# Universal J() function (auto-selects dense vs sparse)
+A_julia = J(A)       # Matrix{Float64} for dense
+B_julia = J(B)       # SparseMatrixCSC for sparse
 ```
 
-### Checking Matrix Type with is_dense
+Use `is_dense(A)` to check if a matrix uses dense storage.
 
-Use `is_dense()` to determine if a matrix is stored in dense format:
+**Important:** Conversion is a **collective operation** - all ranks must call it.
 
-```julia
-using SparseArrays
-
-A_dense = Mat_uniform([1.0 2.0; 3.0 4.0])
-A_sparse = Mat_uniform(sparse([1, 2], [1, 2], [1.0, 4.0], 10, 10))
-
-is_dense(A_dense)   # Returns true (matrix type contains "dense")
-is_dense(A_sparse)  # Returns false (matrix type is sparse)
-
-# Use appropriate conversion
-if is_dense(A)
-    A_julia = Matrix(A)      # Convert to dense
-else
-    A_julia = sparse(A)      # Convert to sparse CSC
-end
-```
-
-The `is_dense()` function checks the PETSc matrix type string and returns `true` if it contains "dense" (case-insensitive). This handles various dense types like "seqdense", "mpidense", and vendor-specific dense matrix types.
-
-### Important: Collective Operation
-
-**Both conversion functions are collective operations** - all ranks must call them:
-
-```julia
-# ✓ CORRECT - All ranks participate
-A_julia = Matrix(A)  # All ranks get the complete matrix
-
-# ❌ WRONG - Will hang MPI!
-if rank == 0
-    A_julia = Matrix(A)  # Only rank 0 calls, others wait forever
-end
-```
-
-After conversion, **all ranks receive the complete matrix**. The data is gathered from all ranks using MPI collective operations.
-
-### When to Use Conversions
-
-**Good use cases:**
-- **Interoperability**: Pass data to packages that don't support PETSc
-- **Small-scale analysis**: Compute eigenvalues, determinants, etc.
-- **Data export**: Save results to files
-- **Visualization**: Convert for plotting libraries
-
-```julia
-using LinearAlgebra
-
-# Solve distributed system
-A = Mat_uniform([2.0 1.0; 1.0 3.0])
-b = Vec_uniform([1.0, 2.0])
-x = A \ b
-
-# Convert for analysis (small matrix, so conversion is cheap)
-A_julia = Matrix(A)
-λ = eigvals(A_julia)       # Compute eigenvalues
-det_A = det(A_julia)       # Compute determinant
-
-println(io0(), "Eigenvalues: ", λ)
-println(io0(), "Determinant: ", det_A)
-```
-
-**Avoid conversions for:**
-- **Large matrices**: Gathers all data to all ranks (very expensive!)
-- **Intermediate computations**: Keep data in PETSc format
-- **Dense conversion of sparse matrices**: Use `sparse()` instead
-
-### Performance Considerations
-
-Conversion performance scales with:
-- **Matrix size**: Larger matrices take longer to gather
-- **Rank count**: More ranks means more communication
-- **Sparsity**: Sparse conversions are more efficient than dense for large sparse matrices
-
-```julia
-# Small: fast conversion (< 1ms)
-A_small = Mat_uniform(ones(100, 100))
-A_julia = Matrix(A_small)
-
-# Large sparse: use sparse() not Matrix()
-n = 1_000_000
-A_large_sparse = Mat_sum(sparse(..., n, n))
-A_csc = sparse(A_large_sparse)    # Efficient
-# A_dense = Matrix(A_large_sparse)  # Would allocate n×n dense array!
-```
-
-See [Converting to Native Julia Arrays](io.md#converting-to-native-julia-arrays) for more details and examples.
+See [Converting to Native Julia Arrays](io.md#converting-to-native-julia-arrays) for complete documentation including:
+- The universal `J()` conversion function
+- Performance considerations and when to avoid conversions
+- Sparse vs dense conversion guidelines
+- Working with converted data
 
 ## Compatibility Notes
 

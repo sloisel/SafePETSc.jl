@@ -475,10 +475,6 @@ function Base.:*(v::Vec{T,Prefix}, wt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}
     # Wrap in DRef
     obj = _Mat{T,Prefix}(petsc_mat, row_partition, col_partition)
     result = SafeMPI.DRef(obj)
-
-    # Debug check: outer product should be exact
-    @debugcheck result 0.0 (*) v wt
-
     return result
 end
 
@@ -633,10 +629,6 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}
     obj = _Vec{T,Prefix}(w_petsc, A.obj.col_partition)
     w = SafeMPI.DRef(obj)
     result = LinearAlgebra.Adjoint(w)
-
-    # Debug check: v' * A with tolerance for floating point accumulation
-    @debugcheck result ((norm(v) + norm(A)) * eps(real(T)) * max(m, n)) (*) vt A
-
     return result
 end
 
@@ -651,10 +643,6 @@ function Base.:*(vt::LinearAlgebra.Adjoint{T, <:Vec{T}}, w::Vec{T}) where {T}
 
     # Compute inner product using PETSc VecDot
     result = _vec_dot(v.obj.v, w.obj.v)
-
-    # Debug check: dot product with tolerance for floating point accumulation
-    @debugcheck result ((norm(v) + norm(w)) * eps(real(T)) * v_length) (*) vt w
-
     return result
 end
 
@@ -682,8 +670,6 @@ s = sum(v)  # Returns 10.0 on all ranks
 """
 function Base.sum(v::Vec{T}) where {T}
     result = _vec_sum(v.obj.v)
-    n = size(v)[1]
-    @debugcheck result (n * eps(real(T)) * norm(J(v), 1)) sum v
     return result
 end
 
@@ -713,19 +699,12 @@ ninf = norm(v, Inf) # Returns 4.0 (inf-norm)
 ```
 """
 function LinearAlgebra.norm(v::Vec{T}, p::Real=2) where {T}
-    n = size(v)[1]
     if p == 2
-        result = _vec_norm(v.obj.v, Val(2))
-        @debugcheck result (n * eps(real(T)) * norm(J(v), 1)) norm v
-        return result
+        return _vec_norm(v.obj.v, Val(2))
     elseif p == 1
-        result = _vec_norm(v.obj.v, Val(1))
-        @debugcheck result (n * eps(real(T)) * norm(J(v), 1)) ((v) -> norm(v, 1)) v
-        return result
+        return _vec_norm(v.obj.v, Val(1))
     elseif isinf(p)
-        result = _vec_norm(v.obj.v, Val(Inf))
-        @debugcheck result (n * eps(real(T)) * norm(J(v), 1)) ((v) -> norm(v, Inf)) v
-        return result
+        return _vec_norm(v.obj.v, Val(Inf))
     else
         error("Unsupported norm type: p = $p. Supported values are 1, 2, and Inf.")
     end
