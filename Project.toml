@@ -1,7 +1,7 @@
 name = "SafePETSc"
 uuid = "50acdc01-ce88-4ca7-bd87-6916c254362e"
 authors = ["Sébastien Loisel <S.Loisel@hw.ac.uk>"]
-version = "0.1.14"
+version = "0.1.15"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
