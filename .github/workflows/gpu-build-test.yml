@@ -44,16 +44,23 @@ jobs:
       - name: Install ROCm/HIP
         if: matrix.gpu == 'hip'
         run: |
-          # Add ROCm repository
+          # Add ROCm repository (using 6.0 for Ubuntu 22.04 compatibility)
           sudo mkdir -p --mode=0755 /etc/apt/keyrings
           wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
             gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+          # Use Ubuntu 22.04 (jammy) repo for compatibility
           echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.0.2 jammy main" | \
             sudo tee /etc/apt/sources.list.d/rocm.list
+          # Set package priority
+          echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | \
+            sudo tee /etc/apt/preferences.d/rocm-pin-600
           sudo apt-get update
-          # Install minimal HIP compiler (not full ROCm stack)
-          sudo apt-get install -y hip-dev
-          hipcc --version
+          # Install HIP runtime and compiler (hipcc)
+          sudo apt-get install -y rocm-hip-runtime-dev hip-base
+          # Add ROCm to PATH (persists to subsequent steps)
+          echo "/opt/rocm/bin" >> $GITHUB_PATH
+          # Verify installation
+          /opt/rocm/bin/hipcc --version
 
       # oneAPI/SYCL installation
       - name: Install Intel oneAPI
@@ -84,8 +91,9 @@ jobs:
       - name: Build PETSc with STRUMPACK + ${{ matrix.gpu }}
         env:
           GPU_BACKEND: ${{ matrix.gpu }}
+        shell: bash
         run: |
-          # Source oneAPI environment if needed
+          # Source oneAPI environment if needed (sets many env vars for SYCL)
           if [ "${{ matrix.gpu }}" = "sycl" ]; then
             source /opt/intel/oneapi/setvars.sh
           fi
