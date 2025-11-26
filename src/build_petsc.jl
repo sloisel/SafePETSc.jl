@@ -95,8 +95,6 @@ end
         rebuild::Bool=false,
         with_debugging::Bool=false,
         with_cuda::Bool=false,
-        with_hip::Bool=false,
-        with_sycl::Bool=false,
         verbose::Bool=true
     ) -> String
 
@@ -130,8 +128,6 @@ MPIPreferences.use_system_binary()
 - `rebuild`: Force rebuild even if library already exists.
 - `with_debugging`: Build with debugging symbols (slower but useful for development).
 - `with_cuda`: Enable NVIDIA GPU support (requires CUDA Toolkit, Linux only).
-- `with_hip`: Enable AMD GPU support (requires ROCm, Linux only).
-- `with_sycl`: Enable Intel GPU support (requires oneAPI, Linux only).
 - `verbose`: Print progress messages during build.
 
 # Returns
@@ -153,9 +149,6 @@ SafePETSc.build_petsc_strumpack()
 
 # Build with NVIDIA GPU support (Linux only)
 SafePETSc.build_petsc_strumpack(with_cuda=true)
-
-# Build with AMD GPU support (Linux only)
-SafePETSc.build_petsc_strumpack(with_hip=true)
 
 # Follow the prompts to configure your startup.jl, then restart Julia
 ```
@@ -186,8 +179,6 @@ function build_petsc_strumpack(;
     rebuild::Bool=false,
     with_debugging::Bool=false,
     with_cuda::Bool=false,
-    with_hip::Bool=false,
-    with_sycl::Bool=false,
     verbose::Bool=true
 )
     # Determine install location
@@ -195,13 +186,11 @@ function build_petsc_strumpack(;
         install_dir = @get_scratch!("petsc_strumpack")
     end
 
-    # Validate GPU options (all GPU SDKs are Linux-only)
-    gpu_requested = with_cuda || with_hip || with_sycl
-    if gpu_requested && Sys.isapple()
+    # Validate GPU options (CUDA SDK is Linux-only)
+    if with_cuda && Sys.isapple()
         error("""
-        GPU support is not available on macOS.
+        CUDA support is not available on macOS.
 
-        CUDA, ROCm (HIP), and oneAPI (SYCL) SDKs are Linux-only.
         NVIDIA dropped macOS CUDA support in 2019.
 
         Use the default CPU-only build on macOS:
@@ -209,27 +198,13 @@ function build_petsc_strumpack(;
         """)
     end
 
-    # Check GPU SDK availability
+    # Check CUDA SDK availability
     if with_cuda && !_check_cuda_available()
         error("""
         CUDA not found! To build with NVIDIA GPU support, install CUDA Toolkit first.
 
         Ubuntu: sudo apt install nvidia-cuda-toolkit
         Or download from: https://developer.nvidia.com/cuda-downloads
-        """)
-    end
-    if with_hip && !_check_hip_available()
-        error("""
-        HIP not found! To build with AMD GPU support, install ROCm first.
-
-        See: https://rocm.docs.amd.com/projects/install-on-linux/en/latest/
-        """)
-    end
-    if with_sycl && !_check_sycl_available()
-        error("""
-        SYCL not found! To build with Intel GPU support, install oneAPI first.
-
-        See: https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit.html
         """)
     end
 
@@ -260,7 +235,7 @@ function build_petsc_strumpack(;
     src_dir = _download_and_extract_petsc(install_dir, verbose)
 
     # Build PETSc with STRUMPACK
-    _build_petsc_with_strumpack(src_dir, install_dir, with_debugging, with_cuda, with_hip, with_sycl, verbose)
+    _build_petsc_with_strumpack(src_dir, install_dir, with_debugging, with_cuda, verbose)
 
     # Verify the build succeeded
     if !isfile(lib_path)
@@ -330,34 +305,9 @@ function _check_cuda_available()
     end
 end
 
-"""
-    _check_hip_available() -> Bool
-
-Check if AMD ROCm/HIP toolkit (hipcc) is available.
-"""
-function _check_hip_available()
-    try
-        !isempty(read(`hipcc --version`, String))
-    catch
-        false
-    end
-end
-
-"""
-    _check_sycl_available() -> Bool
-
-Check if Intel oneAPI SYCL compiler (icpx) is available.
-"""
-function _check_sycl_available()
-    try
-        !isempty(read(`icpx --version`, String))
-    catch
-        false
-    end
-end
 
 function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_debugging::Bool,
-                                     with_cuda::Bool, with_hip::Bool, with_sycl::Bool, verbose::Bool)
+                                     with_cuda::Bool, verbose::Bool)
     # Check for system MPI (required)
     if !_check_system_mpi()
         error("""
@@ -387,32 +337,16 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
     end
 
     # Build configuration flags - includes both STRUMPACK and MUMPS
-    # SYCL requires Intel compilers and must download MPICH (can't use system MPI wrappers)
-    if with_sycl
-        configure_flags = [
-            "--prefix=$install_dir",
-            "--with-cc=icx",
-            "--with-cxx=icpx",
-            "--with-fc=0",  # Intel Fortran (ifx) often not installed; disable Fortran
-            "--download-mpich",
-            "--with-debugging=$(with_debugging ? 1 : 0)",
-            "--with-shared-libraries=1",
-        ]
-        if verbose
-            @info "SYCL build: using Intel compilers (icx/icpx) and downloading MPICH"
-        end
-    else
-        configure_flags = [
-            "--prefix=$install_dir",
-            "--with-cc=mpicc",
-            "--with-cxx=mpicxx",
-            has_mpif90 ? "--with-fc=mpif90" : "--with-fc=0",
-            "--with-debugging=$(with_debugging ? 1 : 0)",
-            "--with-shared-libraries=1",
-        ]
-        if verbose
-            @info "Using system MPI compilers (mpicc, mpicxx)"
-        end
+    configure_flags = [
+        "--prefix=$install_dir",
+        "--with-cc=mpicc",
+        "--with-cxx=mpicxx",
+        has_mpif90 ? "--with-fc=mpif90" : "--with-fc=0",
+        "--with-debugging=$(with_debugging ? 1 : 0)",
+        "--with-shared-libraries=1",
+    ]
+    if verbose
+        @info "Using system MPI compilers (mpicc, mpicxx)"
     end
 
     # Add common dependencies
@@ -434,31 +368,14 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
         "--with-x=0",
     ])
 
-    # Add GPU backend flags
+    # Add CUDA GPU backend flags
     if with_cuda
         push!(configure_flags, "--with-cuda")
         if verbose
             @info "Enabling CUDA support for NVIDIA GPUs"
         end
-    end
-    if with_hip
-        # Explicitly specify hipcc and HIP directory (ROCm installation)
-        push!(configure_flags, "--with-hip", "--with-hipc=hipcc", "--with-hip-dir=/opt/rocm")
-        if verbose
-            @info "Enabling HIP support for AMD GPUs (using hipcc from /opt/rocm)"
-        end
-    end
-    if with_sycl
-        # Explicitly specify icpx as the SYCL compiler (must be in PATH)
-        push!(configure_flags, "--with-sycl", "--with-syclc=icpx")
-        if verbose
-            @info "Enabling SYCL support for Intel GPUs (using icpx)"
-        end
-    end
-
-    # SLATE is required for GPU-accelerated STRUMPACK (GPU-enabled ScaLAPACK alternative)
-    # SLATE requires OpenMP support
-    if with_cuda || with_hip || with_sycl
+        # SLATE is required for GPU-accelerated STRUMPACK (GPU-enabled ScaLAPACK alternative)
+        # SLATE requires OpenMP support
         push!(configure_flags, "--with-openmp", "--download-slate")
         if verbose
             @info "Adding OpenMP and SLATE for GPU-accelerated ScaLAPACK"

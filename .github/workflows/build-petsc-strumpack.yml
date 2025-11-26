@@ -1,0 +1,112 @@
+name: Build PETSc STRUMPACK
+
+on:
+  workflow_dispatch:
+    inputs:
+      with_cuda:
+        description: 'Build with CUDA support'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  build:
+    name: Build PETSc with STRUMPACK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mpich libmpich-dev gfortran cmake python3 bison
+
+      - name: Install CUDA toolkit
+        if: inputs.with_cuda
+        run: |
+          sudo apt-get install -y nvidia-cuda-toolkit
+          nvcc --version
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+          arch: x64
+
+      - uses: julia-actions/cache@v2
+
+      - name: Build package
+        uses: julia-actions/julia-buildpkg@v1
+
+      - name: Build PETSc with STRUMPACK
+        env:
+          WITH_CUDA: ${{ inputs.with_cuda }}
+        run: |
+          julia --project=. -e '
+            using SafePETSc
+            with_cuda = ENV["WITH_CUDA"] == "true"
+            println("Building PETSc with STRUMPACK", with_cuda ? " + CUDA" : "", "...")
+            SafePETSc.build_petsc_strumpack(with_cuda=with_cuda, verbose=true)
+          ' < /dev/null
+
+      - name: Get build info
+        id: build-info
+        run: |
+          # Get the library path
+          LIB_PATH=$(julia --project=. -e 'using SafePETSc; print(SafePETSc.petsc_strumpack_library_path())')
+          INSTALL_DIR=$(dirname $(dirname $LIB_PATH))
+          echo "install_dir=$INSTALL_DIR" >> $GITHUB_OUTPUT
+          echo "lib_path=$LIB_PATH" >> $GITHUB_OUTPUT
+
+          # Create version tag
+          PETSC_VERSION=$(grep 'PETSC_VERSION' src/build_petsc.jl | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          DATE=$(date +%Y%m%d)
+          CUDA_SUFFIX=${{ inputs.with_cuda && '-cuda' || '' }}
+          TAG="petsc-${PETSC_VERSION}${CUDA_SUFFIX}-${DATE}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "petsc_version=$PETSC_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Package build
+        run: |
+          INSTALL_DIR="${{ steps.build-info.outputs.install_dir }}"
+          TAG="${{ steps.build-info.outputs.tag }}"
+
+          # Create tarball of the entire install directory
+          cd $(dirname $INSTALL_DIR)
+          tar -czvf ${TAG}.tar.gz $(basename $INSTALL_DIR)
+          mv ${TAG}.tar.gz $GITHUB_WORKSPACE/
+
+          echo "Created: ${TAG}.tar.gz"
+          ls -lh $GITHUB_WORKSPACE/${TAG}.tar.gz
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.build-info.outputs.tag }}
+          name: PETSc ${{ steps.build-info.outputs.petsc_version }} with STRUMPACK${{ inputs.with_cuda && ' + CUDA' || '' }}
+          body: |
+            Pre-built PETSc library with STRUMPACK and MUMPS solvers.
+
+            **Build Configuration:**
+            - PETSc version: ${{ steps.build-info.outputs.petsc_version }}
+            - STRUMPACK: enabled
+            - MUMPS: enabled
+            - CUDA: ${{ inputs.with_cuda && 'enabled' || 'disabled' }}
+            - Platform: Linux x86_64 (Ubuntu)
+            - MPI: MPICH
+
+            **Usage:**
+            ```bash
+            # Download and extract
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.build-info.outputs.tag }}/${{ steps.build-info.outputs.tag }}.tar.gz
+            tar -xzf ${{ steps.build-info.outputs.tag }}.tar.gz
+
+            # Set environment variable before starting Julia
+            export JULIA_PETSC_LIBRARY=/path/to/petsc_strumpack/lib/libpetsc.so
+            ```
+          files: ${{ steps.build-info.outputs.tag }}.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,7 +7,7 @@ SafePETSc supports both MUMPS (default) and STRUMPACK as sparse direct solvers. 
 | Feature | MUMPS (Default) | STRUMPACK |
 |---------|-----------------|-----------|
 | Included in PETSc_jll | Yes | No (requires build) |
-| GPU Acceleration | Limited | CUDA, HIP, SYCL |
+| GPU Acceleration | Limited | CUDA |
 | MPI Scalability | Good | Better |
 | Compression | BLR | BLR, HSS, HODLR |
 | Setup | None | One-time build |
@@ -15,7 +15,7 @@ SafePETSc supports both MUMPS (default) and STRUMPACK as sparse direct solvers. 
 ## When to Use STRUMPACK
 
 Consider STRUMPACK when:
-- You have access to GPUs (NVIDIA, AMD, or Intel)
+- You have access to NVIDIA GPUs
 - Your problems are large and MPI scalability matters
 - You want to use low-rank compression (BLR, HSS) to reduce memory
 - You're running on HPC clusters
@@ -69,20 +69,16 @@ using SafePETSc
 # CPU-only build (works on macOS and Linux)
 SafePETSc.build_petsc_strumpack()
 
-# Build with GPU support (Linux only, requires SDK installed)
-SafePETSc.build_petsc_strumpack(with_cuda=true)   # NVIDIA GPUs
-SafePETSc.build_petsc_strumpack(with_hip=true)    # AMD GPUs
-SafePETSc.build_petsc_strumpack(with_sycl=true)   # Intel GPUs
+# Build with CUDA GPU support (Linux only, requires CUDA Toolkit)
+SafePETSc.build_petsc_strumpack(with_cuda=true)
 ```
 
 **GPU Build Requirements** (Linux only):
 | GPU | Parameter | SDK Required |
 |-----|-----------|--------------|
 | NVIDIA | `with_cuda=true` | CUDA Toolkit (`nvcc`) |
-| AMD | `with_hip=true` | ROCm (`hipcc`) |
-| Intel | `with_sycl=true` | oneAPI (`icpx`) |
 
-GPU SDKs are not available on macOS. The CPU-only build still provides STRUMPACK's
+CUDA is not available on macOS. The CPU-only build still provides STRUMPACK's
 compression features and MPI scalability benefits.
 
 The build function will:
@@ -125,9 +121,6 @@ On clusters with non-shared home directories, either:
 ```julia
 # On NVIDIA GPU cluster
 SafePETSc.build_petsc_strumpack(install_dir="/software/petsc-strumpack", with_cuda=true)
-
-# On AMD GPU cluster
-SafePETSc.build_petsc_strumpack(install_dir="/software/petsc-strumpack", with_hip=true)
 ```
 
 2. Or set the environment variable in your job script:
@@ -213,13 +206,7 @@ BLR is recommended as it works well without additional dependencies.
 
 ## GPU Acceleration
 
-STRUMPACK supports multiple GPU backends:
-
-| Backend | Hardware | Libraries |
-|---------|----------|-----------|
-| CUDA | NVIDIA GPUs | cuBLAS, cuSOLVER |
-| HIP | AMD GPUs | rocBLAS, rocSOLVER |
-| SYCL | Intel GPUs | oneMKL |
+STRUMPACK supports NVIDIA CUDA GPUs via cuBLAS and cuSOLVER.
 
 Enable GPU acceleration:
 

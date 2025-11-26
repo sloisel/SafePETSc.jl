@@ -2,28 +2,12 @@ name: GPU Build Test
 
 on:
   workflow_dispatch:
-    inputs:
-      gpu_backend:
-        description: 'GPU backend to test (or "all")'
-        required: true
-        default: 'all'
-        type: choice
-        options:
-          - all
-          - cuda
-          - hip
-          - sycl
 
 jobs:
   test-gpu-build:
-    name: Test ${{ matrix.gpu }} build
+    name: Test CUDA build
     runs-on: ubuntu-latest
     timeout-minutes: 120
-
-    strategy:
-      fail-fast: false
-      matrix:
-        gpu: ${{ github.event.inputs.gpu_backend == 'all' && fromJSON('["cuda", "hip", "sycl"]') || fromJSON(format('["{0}"]', github.event.inputs.gpu_backend)) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,56 +17,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mpich libmpich-dev gfortran cmake python3 bison
 
-      # CUDA installation
       - name: Install CUDA toolkit
-        if: matrix.gpu == 'cuda'
         run: |
           sudo apt-get install -y nvidia-cuda-toolkit
           nvcc --version
-
-      # ROCm/HIP installation
-      - name: Install ROCm/HIP
-        if: matrix.gpu == 'hip'
-        run: |
-          # Add ROCm repository (using 6.0 for Ubuntu 22.04 compatibility)
-          sudo mkdir -p --mode=0755 /etc/apt/keyrings
-          wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
-            gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
-          # Use Ubuntu 22.04 (jammy) repo for compatibility
-          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.0.2 jammy main" | \
-            sudo tee /etc/apt/sources.list.d/rocm.list
-          # Set package priority
-          echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | \
-            sudo tee /etc/apt/preferences.d/rocm-pin-600
-          sudo apt-get update
-          # Install full ROCm development meta-package (includes all HIP development tools)
-          sudo apt-get install -y rocm-dev
-          # Add ROCm to PATH (persists to subsequent steps)
-          echo "/opt/rocm/bin" >> $GITHUB_PATH
-          # Verify installation
-          /opt/rocm/bin/hipcc --version
-
-      # oneAPI/SYCL installation
-      - name: Install Intel oneAPI
-        if: matrix.gpu == 'sycl'
-        run: |
-          # Add Intel repository
-          wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
-            gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
-            sudo tee /etc/apt/sources.list.d/oneAPI.list
-          sudo apt-get update
-          # Install DPC++ compiler
-          sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp
-          # Add oneAPI compiler to PATH (persists to subsequent steps)
-          # Find the actual compiler version directory
-          ONEAPI_COMPILER_DIR=$(ls -d /opt/intel/oneapi/compiler/*/bin | head -1)
-          echo "$ONEAPI_COMPILER_DIR" >> $GITHUB_PATH
-          # Also set LD_LIBRARY_PATH for runtime libraries
-          ONEAPI_LIB_DIR=$(ls -d /opt/intel/oneapi/compiler/*/lib | head -1)
-          echo "LD_LIBRARY_PATH=$ONEAPI_LIB_DIR:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-          # Verify installation
-          $ONEAPI_COMPILER_DIR/icpx --version
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -94,20 +32,12 @@ jobs:
       - name: Build package
         uses: julia-actions/julia-buildpkg@v1
 
-      - name: Build PETSc with STRUMPACK + ${{ matrix.gpu }}
-        env:
-          GPU_BACKEND: ${{ matrix.gpu }}
+      - name: Build PETSc with STRUMPACK + CUDA
         run: |
           julia --project=. -e '
             using SafePETSc
-            gpu = ENV["GPU_BACKEND"]
-            println("Building PETSc with STRUMPACK + $gpu support...")
-            SafePETSc.build_petsc_strumpack(;
-              with_cuda = gpu == "cuda",
-              with_hip = gpu == "hip",
-              with_sycl = gpu == "sycl",
-              verbose = true
-            )
+            println("Building PETSc with STRUMPACK + CUDA support...")
+            SafePETSc.build_petsc_strumpack(with_cuda=true, verbose=true)
           ' < /dev/null
 
       - name: Verify build
