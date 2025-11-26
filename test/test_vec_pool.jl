@@ -13,22 +13,6 @@ comm = MPI.COMM_WORLD
 rank = MPI.Comm_rank(comm)
 nranks = MPI.Comm_size(comm)
 
-# Define test prefixes for pool testing
-struct TestPrefix end
-SafePETSc.prefix(::Type{TestPrefix}) = "test_"
-
-struct Prefix1 end
-SafePETSc.prefix(::Type{Prefix1}) = "prefix1_"
-
-struct Prefix2 end
-SafePETSc.prefix(::Type{Prefix2}) = "prefix2_"
-
-struct ClearTestPrefix end
-SafePETSc.prefix(::Type{ClearTestPrefix}) = "clear_test_"
-
-struct ZeroTestPrefix end
-SafePETSc.prefix(::Type{ZeroTestPrefix}) = "zero_test_"
-
 # Keep output tidy and aggregate at the end
 ts = @testset QuietTestSet "Vec pooling tests" begin
 
@@ -37,7 +21,7 @@ ts = @testset QuietTestSet "Vec pooling tests" begin
 SafePETSc.clear_vec_pool!()
 
 v = ones(16)
-dr1 = SafePETSc.Vec_uniform(v; Prefix=TestPrefix)
+dr1 = SafePETSc.Vec_uniform(v)
 ptr1 = dr1.obj.v.ptr  # Store pointer to underlying PETSc vec
 
 # Destroy the vector (should go to pool)
@@ -49,13 +33,13 @@ MPI.Barrier(comm)
 # Check pool stats
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    # Pool should contain one vector of size 16 with prefix "test_"
-    @test haskey(stats, (16, "test_", Float64))
-    @test stats[(16, "test_", Float64)] == 1
+    # Pool should contain one vector of size 16
+    @test haskey(stats, (16, Float64))
+    @test stats[(16, Float64)] == 1
 end
 
-# Create another vector with same size and prefix - should reuse from pool
-dr2 = SafePETSc.Vec_uniform(v; Prefix=TestPrefix)
+# Create another vector with same size - should reuse from pool
+dr2 = SafePETSc.Vec_uniform(v)
 ptr2 = dr2.obj.v.ptr
 
 # Should have the same pointer (reused from pool)
@@ -64,17 +48,20 @@ ptr2 = dr2.obj.v.ptr
 # Pool should now be empty
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test !haskey(stats, (16, "test_", Float64)) || stats[(16, "test_", Float64)] == 0
+    @test !haskey(stats, (16, Float64)) || stats[(16, Float64)] == 0
 end
 
 # Cleanup
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Test 2: Different prefix should not reuse
+# Test 2: Different size should not reuse
 SafePETSc.clear_vec_pool!()
 
-dr3 = SafePETSc.Vec_uniform(v; Prefix=Prefix1)
+v8 = ones(8)
+v16 = ones(16)
+
+dr3 = SafePETSc.Vec_uniform(v8)
 ptr3 = dr3.obj.v.ptr
 
 dr3 = nothing
@@ -82,8 +69,8 @@ GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Create with different prefix - should NOT reuse
-dr4 = SafePETSc.Vec_uniform(v; Prefix=Prefix2)
+# Create with different size - should NOT reuse
+dr4 = SafePETSc.Vec_uniform(v16)
 ptr4 = dr4.obj.v.ptr
 
 @test ptr3 != ptr4
@@ -96,8 +83,8 @@ MPI.Barrier(comm)
 
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "prefix1_", Float64))
-    @test haskey(stats, (16, "prefix2_", Float64))
+    @test haskey(stats, (8, Float64))
+    @test haskey(stats, (16, Float64))
 end
 
 SafeMPI.check_and_destroy!()
@@ -157,7 +144,7 @@ MPI.Barrier(comm)
 # Test 5: Clear pool destroys vectors
 SafePETSc.clear_vec_pool!()
 
-dr8 = SafePETSc.Vec_uniform(v; Prefix=ClearTestPrefix)
+dr8 = SafePETSc.Vec_uniform(v)
 dr8 = nothing
 GC.gc()
 SafeMPI.check_and_destroy!()
@@ -166,7 +153,7 @@ MPI.Barrier(comm)
 # Verify vector is in pool
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "clear_test_", Float64))
+    @test haskey(stats, (16, Float64))
 end
 
 # Clear pool - should destroy vectors
@@ -184,7 +171,7 @@ SafePETSc.clear_vec_pool!()
 
 # Create vector with non-zero values
 v_nonzero = collect(1.0:16.0)
-dr9 = SafePETSc.Vec_uniform(v_nonzero; Prefix=ZeroTestPrefix)
+dr9 = SafePETSc.Vec_uniform(v_nonzero)
 
 dr9 = nothing
 GC.gc()
@@ -193,7 +180,7 @@ MPI.Barrier(comm)
 
 # Create new vector with zeros - should reuse from pool
 v_zeros = zeros(16)
-dr10 = SafePETSc.Vec_uniform(v_zeros; Prefix=ZeroTestPrefix)
+dr10 = SafePETSc.Vec_uniform(v_zeros)
 
 # Check that values are zeros (were cleared by pool)
 local_view = PETSc.unsafe_localarray(dr10.obj.v; read=true, write=false)

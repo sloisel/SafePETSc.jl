@@ -253,10 +253,10 @@ end
 
 using SafePETSc: MPIAIJ, MPIDENSE
 diag_data = Float64.(1:5)
-drdiag_dense = SafePETSc.Vec_uniform(diag_data; Prefix=MPIDENSE)
+drdiag = SafePETSc.Vec_uniform(diag_data)
 
-# Create sparse matrix from dense vector using prefix parameter
-drA = spdiagm(0 => drdiag_dense; prefix=MPIAIJ)
+# Create sparse matrix from vector using prefix parameter
+drA = spdiagm(0 => drdiag; prefix=MPIAIJ)
 @test drA isa SafeMPI.DRef
 @test size(drA) == (5, 5)
 @test typeof(drA.obj) == SafePETSc._Mat{Float64, MPIAIJ}
@@ -279,8 +279,8 @@ if rank == 0
     flush(stdout)
 end
 
-drdiag_dense = SafePETSc.Vec_uniform(diag_data; Prefix=MPIDENSE)
-drA = spdiagm(0 => drdiag_dense; prefix=MPIDENSE)
+drdiag = SafePETSc.Vec_uniform(diag_data)
+drA = spdiagm(0 => drdiag; prefix=MPIDENSE)
 @test drA isa SafeMPI.DRef
 @test size(drA) == (5, 5)
 @test typeof(drA.obj) == SafePETSc._Mat{Float64, MPIDENSE}
@@ -305,11 +305,11 @@ end
 lower_data = ones(Float64, 4) * (-1.0)
 diag_data = ones(Float64, 5) * 2.0
 upper_data = ones(Float64, 4) * (-1.0)
-drlower_dense = SafePETSc.Vec_uniform(lower_data; Prefix=MPIDENSE)
-drdiag_dense = SafePETSc.Vec_uniform(diag_data; Prefix=MPIDENSE)
-drupper_dense = SafePETSc.Vec_uniform(upper_data; Prefix=MPIDENSE)
+drlower = SafePETSc.Vec_uniform(lower_data)
+drdiag = SafePETSc.Vec_uniform(diag_data)
+drupper = SafePETSc.Vec_uniform(upper_data)
 
-drA = spdiagm(-1 => drlower_dense, 0 => drdiag_dense, 1 => drupper_dense; prefix=MPIAIJ)
+drA = spdiagm(-1 => drlower, 0 => drdiag, 1 => drupper; prefix=MPIAIJ)
 @test drA isa SafeMPI.DRef
 @test size(drA) == (5, 5)
 @test typeof(drA.obj) == SafePETSc._Mat{Float64, MPIAIJ}

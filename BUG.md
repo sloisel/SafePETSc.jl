@@ -8,7 +8,7 @@ While implementing column extraction feature (`A[:,k]`), I discovered pre-existi
 
 The column extraction feature was successfully implemented:
 - **File**: `src/mat.jl:1163-1218`
-- **Function**: `Base.getindex(A::Mat{T,Prefix}, ::Colon, k::Int) -> Vec{T,Prefix}`
+- **Function**: `Base.getindex(A::Mat{T,Prefix}, ::Colon, k::Int) -> Vec{T}`
 - **Tests**: `test/test_mat_getindex.jl` - 52 passes, 0 failures
 - **Status**: Feature works correctly
 

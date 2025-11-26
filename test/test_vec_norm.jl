@@ -201,9 +201,9 @@ if rank == 0
     flush(stdout)
 end
 
-# Test 10: Test with MPIDENSE prefix explicitly
+# Test 10: Additional norm test
 v10_native = [2.0, -3.0, 4.0, -5.0]
-v10 = SafePETSc.Vec_uniform(v10_native; Prefix=SafePETSc.MPIDENSE)
+v10 = SafePETSc.Vec_uniform(v10_native)
 
 norm_dense = norm(v10)
 norm_native_dense = norm(v10_native)

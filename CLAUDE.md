@@ -54,10 +54,10 @@ This pattern allows `Pkg.test()` to work correctly by having `runtests.jl` call 
 ## User-Facing Features
 
 SafePETSc implements a Julia-native interface for PETSc, allowing natural mathematical expressions. Users will
-use Vec{T,Prefix}, Mat{T,Prefix} and KSP{T,Prefix} objects to interface with PETSc. These are aliases to DRef{T}
-objects in the SafeMPI sub-module, which enables collective garbage collection across the MPI cluster. The Prefix
-type parameter will typically be either MPIAIJ or MPIDENSE. It is possible for the user to define more Prefixes,
-but at this time we are not encouraging it.
+use Vec{T}, Mat{T,Prefix} and KSP{T,Prefix} objects to interface with PETSc. These are aliases to DRef{T}
+objects in the SafeMPI sub-module, which enables collective garbage collection across the MPI cluster. For matrices,
+the Prefix type parameter will typically be either MPIAIJ or MPIDENSE. Vectors always use the MPIDENSE prefix
+internally and do not expose a Prefix type parameter.
 
 ### Vector Operations
 
@@ -137,7 +137,7 @@ y = fill_like(x, val)    # Fill with value
 ### IO
 
 Use io0() to print or otherwise perform io from a single rank. It can be used as follows: `println(io0(),"Hello from rank 0!").
-The Vec{T,Prefix} and Mat{T,Prefix} implement `show(...)` methods, but these are collective. Therefore, you can do `println(io0(),A)` and it will
+The Vec{T} and Mat{T,Prefix} implement `show(...)` methods, but these are collective. Therefore, you can do `println(io0(),A)` and it will
 print the Vec or Mat once on rank 0.
 
 ### Key Differences from Native Julia

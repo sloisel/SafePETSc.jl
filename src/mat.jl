@@ -345,7 +345,7 @@ function LinearAlgebra.transpose!(B::Mat{T,Prefix}, A::Mat{T,Prefix}) where {T,P
 end
 
 """
-    Base.:*(A::Mat{T,Prefix}, x::Vec{T,Prefix}) -> Vec{T,Prefix}
+    Base.:*(A::Mat{T,Prefix}, x::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -353,7 +353,7 @@ Matrix-vector multiplication: y = A * x.
 
 Returns a new distributed vector with the result.
 """
-function Base.:*(A::Mat{T,PrefixA}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
+function Base.:*(A::Mat{T,Prefix}, x::Vec{T}) where {T,Prefix}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(x)[1]
@@ -367,7 +367,7 @@ function Base.:*(A::Mat{T,PrefixA}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
     row_hi = A.obj.row_partition[rank+2] - 1
     nlocal = row_hi - row_lo + 1
 
-    y_petsc = _vec_create_mpi_for_T(T, nlocal, m, PrefixX, A.obj.row_partition)
+    y_petsc = _vec_create_mpi_for_T(T, nlocal, m, A.obj.row_partition)
 
     # Perform matrix-vector multiplication using PETSc
     _mat_mult_vec!(y_petsc, A.obj.A, x.obj.v)
@@ -375,13 +375,13 @@ function Base.:*(A::Mat{T,PrefixA}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
     PETSc.assemble(y_petsc)
 
     # Wrap in DRef
-    obj = _Vec{T,PrefixX}(y_petsc, A.obj.row_partition)
+    obj = _Vec{T}(y_petsc, A.obj.row_partition)
     result = SafeMPI.DRef(obj)
     return result
 end
 
 """
-    LinearAlgebra.mul!(y::Vec{T,Prefix}, A::Mat{T,Prefix}, x::Vec{T,Prefix}) -> Vec{T,Prefix}
+    LinearAlgebra.mul!(y::Vec{T}, A::Mat{T,Prefix}, x::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -389,7 +389,7 @@ In-place matrix-vector multiplication: y = A * x.
 
 Reuses the pre-allocated vector y. Dimensions and partitions must match appropriately.
 """
-function LinearAlgebra.mul!(y::Vec{T,Prefix}, A::Mat{T,Prefix}, x::Vec{T,Prefix}) where {T,Prefix}
+function LinearAlgebra.mul!(y::Vec{T}, A::Mat{T,Prefix}, x::Vec{T}) where {T,Prefix}
     # Check dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(A)
     y_length = size(y)[1]
@@ -406,19 +406,18 @@ function LinearAlgebra.mul!(y::Vec{T,Prefix}, A::Mat{T,Prefix}, x::Vec{T,Prefix}
 end
 
 """
-    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,PrefixX}) -> Vec{T,PrefixX}
+    Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, x::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
 Transpose-matrix-vector multiplication: y = A' * x.
 
 Computes the product of a transposed matrix and a vector using PETSc's MatMultTranspose.
-Matrices and vectors can have different prefixes.
 
 Returns a new distributed vector with the result.
 """
-function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,PrefixX}) where {T,PrefixA,PrefixX}
-    A = parent(At)::Mat{T,PrefixA}
+function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,Prefix}}, x::Vec{T}) where {T,Prefix}
+    A = parent(At)::Mat{T,Prefix}
 
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
@@ -433,7 +432,7 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,Pre
     col_hi = A.obj.col_partition[rank+2] - 1
     nlocal = col_hi - col_lo + 1
 
-    y_petsc = _vec_create_mpi_for_T(T, nlocal, n, PrefixX, A.obj.col_partition)
+    y_petsc = _vec_create_mpi_for_T(T, nlocal, n, A.obj.col_partition)
 
     # Perform y = A^T * x using PETSc
     _mat_mult_transpose_vec!(y_petsc, A.obj.A, x.obj.v)
@@ -441,7 +440,7 @@ function Base.:*(At::LinearAlgebra.Adjoint{<:Any,<:Mat{T,PrefixA}}, x::Vec{T,Pre
     PETSc.assemble(y_petsc)
 
     # Wrap in DRef
-    obj = _Vec{T,PrefixX}(y_petsc, A.obj.col_partition)
+    obj = _Vec{T}(y_petsc, A.obj.col_partition)
     result = SafeMPI.DRef(obj)
     return result
 end
@@ -605,7 +604,7 @@ end
 
 # Helper function to extract owned elements from a PETSc Vec to Julia SparseMatrixCSC (as column vector)
 # Treats the Vec as a single-column matrix for concatenation operations
-function _mat_to_local_sparse(v::Vec{T,Prefix}) where {T,Prefix}
+function _mat_to_local_sparse(v::Vec{T}) where {T}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -639,8 +638,9 @@ function _mat_to_local_sparse(v::Vec{T,Prefix}) where {T,Prefix}
     end
 end
 
-# Helper to extract Prefix type parameter from Vec or Mat
-_get_prefix(::Union{Vec{T,P}, Mat{T,P}}) where {T,P} = P
+# Helper to extract Prefix type parameter from Mat (Vec no longer has Prefix)
+_get_prefix(::Mat{T,P}) where {T,P} = P
+_get_prefix(::Vec) = MPIAIJ  # Default for Vec when we need a Prefix
 
 # Helper to get row partition (works for both Vec and Mat)
 _get_row_partition(v::Vec) = v.obj.row_partition
@@ -668,18 +668,18 @@ function _compute_output_width(As, dims)
 end
 
 """
-    Base.cat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...; dims) -> Union{Vec{T,Prefix}, Mat{T,Prefix}}
+    Base.cat(As::Union{Vec{T},Mat{T,Prefix}}...; dims) -> Union{Vec{T}, Mat{T,Prefix}}
 
 **MPI Collective**
 
 Concatenate distributed PETSc vectors and/or matrices along dimension `dims`.
 
 # Arguments
-- `As::Union{Vec{T,Prefix},Mat{T,Prefix}}...`: One or more vectors or matrices with the same element type `T`
+- `As::Union{Vec{T},Mat{T,Prefix}}...`: One or more vectors or matrices with the same element type `T`
 - `dims`: Concatenation dimension (1 for vertical/vcat, 2 for horizontal/hcat)
 
 # Return Type
-- Returns `Vec{T,Prefix}` when `dims=1` and result has a single column (vertical stacking of vectors)
+- Returns `Vec{T}` when `dims=1` and result has a single column (vertical stacking of vectors)
 - Returns `Mat{T,Prefix}` otherwise (horizontal concatenation or matrix inputs)
 
 # Requirements
@@ -709,7 +709,7 @@ The concatenation is performed by:
 # Vertical concatenation (stacking) - returns Vec
 x = Vec_uniform([1.0, 2.0, 3.0])
 y = Vec_uniform([4.0, 5.0, 6.0])
-v = vcat(x, y)  # Returns Vec{Float64,MPIAIJ} with 6 elements
+v = vcat(x, y)  # Returns Vec{Float64} with 6 elements
 
 # Horizontal concatenation - returns Mat
 M = hcat(x, y)  # Returns Mat{Float64,MPIDENSE} of size 3×2
@@ -784,7 +784,6 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims, row_partition=nothing, col_
         local_vec = sparsevec(local_result[:, 1])
         result = Vec_sum(local_vec;
                        row_partition=result_row_partition,
-                       Prefix=Prefix,
                        own_rank_only=false)
 
         return result
@@ -800,7 +799,7 @@ function Base.cat(As::Union{Vec{T},Mat{T}}...; dims, row_partition=nothing, col_
 end
 
 """
-    Base.vcat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...) -> Union{Vec{T,Prefix}, Mat{T,Prefix}}
+    Base.vcat(As::Union{Vec{T},Mat{T,Prefix}}...) -> Union{Vec{T},Mat{T,Prefix}}
 
 **MPI Collective**
 
@@ -810,7 +809,7 @@ Equivalent to `cat(As...; dims=1)`. Stacks inputs vertically, increasing the num
 while keeping the number of columns constant.
 
 # Return Type
-- Returns `Vec{T,Prefix}` when concatenating only vectors (single-column result)
+- Returns `Vec{T}` when concatenating only vectors (single-column result)
 - Returns `Mat{T,Prefix}` when concatenating matrices or when result has multiple columns
 
 # Requirements
@@ -825,7 +824,7 @@ All inputs must have the same number of columns and the same column partition.
 # Concatenating vectors returns a Vec
 x = Vec_uniform([1.0, 2.0])
 y = Vec_uniform([3.0, 4.0])
-v = vcat(x, y)  # Vec{Float64,MPIAIJ} with 4 elements
+v = vcat(x, y)  # Vec{Float64} with 4 elements
 
 # Concatenating matrices returns a Mat
 A = Mat_uniform(sparse([1 2; 3 4]))
@@ -838,7 +837,7 @@ See also: [`cat`](@ref), [`hcat`](@ref)
 Base.vcat(As::Union{Vec{T},Mat{T}}...) where {T} = cat(As...; dims=1)
 
 """
-    Base.hcat(As::Union{Vec{T,Prefix},Mat{T,Prefix}}...) -> Mat{T,Prefix}
+    Base.hcat(As::Union{Vec{T},Mat{T,Prefix}}...) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -1562,8 +1561,8 @@ end
 import SparseArrays: spdiagm
 
 """
-    spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...) -> Mat{T,Prefix}
-    spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...) -> Mat{T,Prefix}
+    spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; prefix=MPIAIJ) -> Mat{T,Prefix}
+    spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...; prefix=MPIAIJ) -> Mat{T,Prefix}
 
 **MPI Collective**
 
@@ -1578,9 +1577,7 @@ All vectors must have the same element type `T`. The matrix dimensions
 are inferred from the diagonal positions and vector lengths, or can be specified explicitly.
 
 # Optional Keyword Arguments
-- `prefix`: Matrix prefix type to use for the result. Defaults to the input vector's prefix.
-  Use this to create a matrix with a different prefix than the input vectors (e.g., create
-  MPIAIJ from MPIDENSE vectors, or vice versa).
+- `prefix`: Matrix prefix type to use for the result. Defaults to MPIAIJ (sparse).
 - `row_partition`: Override the default equal-row partitioning (length `nranks+1`, start at 1,
   end at `m+1`, non-decreasing). Defaults to `default_row_partition(m, nranks)`.
 - `col_partition`: Override the default equal-column partitioning (length `nranks+1`, start at 1,
@@ -1594,12 +1591,12 @@ A = spdiagm(-1 => lower, 0 => diag, 1 => upper)
 # Create a 100×100 matrix with specified vectors on diagonals
 B = spdiagm(100, 100, 0 => v1, 1 => v2)
 
-# Create MPIAIJ (sparse) matrix from MPIDENSE vector
-v_dense = Vec_uniform(data; Prefix=MPIDENSE)
-A_sparse = spdiagm(0 => v_dense; prefix=MPIAIJ)
+# Create MPIAIJ (sparse) matrix
+v = Vec_uniform(data)
+A_sparse = spdiagm(0 => v; prefix=MPIAIJ)
 ```
 """
-function spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...; prefix=Prefix, kwargs...) where {T,Prefix}
+function spdiagm(kv::Pair{<:Integer, <:Vec{T}}...; prefix=MPIAIJ, kwargs...) where {T}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
@@ -1624,10 +1621,10 @@ function spdiagm(kv::Pair{<:Integer, <:Vec{T,Prefix}}...; prefix=Prefix, kwargs.
     return spdiagm(m, n, kv...; prefix=prefix, kwargs...)
 end
 
-function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T,Prefix}}...;
+function spdiagm(m::Integer, n::Integer, kv::Pair{<:Integer, <:Vec{T}}...;
                  row_partition::Vector{Int}=default_row_partition(m, MPI.Comm_size(MPI.COMM_WORLD)),
                  col_partition::Vector{Int}=default_row_partition(n, MPI.Comm_size(MPI.COMM_WORLD)),
-                 prefix=Prefix) where {T,Prefix}
+                 prefix=MPIAIJ) where {T}
     if length(kv) == 0
         throw(ArgumentError("spdiagm requires at least one diagonal"))
     end
@@ -1964,7 +1961,7 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    Base.getindex(A::Mat{T,Prefix}, ::Colon, k::Int) -> Vec{T,Prefix}
+    Base.getindex(A::Mat{T,Prefix}, ::Colon, k::Int) -> Vec{T}
 
 **MPI Non-Collective**
 
@@ -2032,7 +2029,7 @@ function Base.getindex(A::DRef{_Mat{T,Prefix}}, ::Colon, k::Int) where {T,Prefix
     end
 
     # Create distributed PETSc Vec
-    petsc_vec = _vec_create_mpi_for_T(T, nlocal_rows, m, Prefix, A.obj.row_partition)
+    petsc_vec = _vec_create_mpi_for_T(T, nlocal_rows, m, A.obj.row_partition)
 
     # Fill local portion
     local_view = PETSc.unsafe_localarray(petsc_vec; read=true, write=true)
@@ -2044,7 +2041,7 @@ function Base.getindex(A::DRef{_Mat{T,Prefix}}, ::Colon, k::Int) where {T,Prefix
     PETSc.assemble(petsc_vec)
 
     # Wrap and return
-    obj = _Vec{T,Prefix}(petsc_vec, A.obj.row_partition)
+    obj = _Vec{T}(petsc_vec, A.obj.row_partition)
     return SafeMPI.DRef(obj)
 end
 

@@ -216,14 +216,14 @@ ts = @testset QuietTestSet "map_rows" begin
         end
     end
 
-    # Test 10: prefix propagation
+    # Test 10: result type verification
     begin
-        # Test that prefix is properly set
+        # Test that result is proper Vec type
         B = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
         result = map_rows(sum, B)
 
         # Result should be a valid Vec
-        @test result isa SafePETSc.Vec{Float64,MPIDENSE}
+        @test result isa SafePETSc.Vec{Float64}
     end
 end
 

@@ -1,6 +1,6 @@
 # Vectors
 
-SafePETSc provides distributed vectors through the `Vec{T,Prefix}` type, which wraps PETSc's distributed vector functionality with automatic memory management.
+SafePETSc provides distributed vectors through the `Vec{T}` type, which wraps PETSc's distributed vector functionality with automatic memory management.
 
 ## Creating Vectors
 
@@ -16,8 +16,7 @@ v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
 partition = [1, 3, 5]  # rank 0: rows 1-2, rank 1: rows 3-4
 v = Vec_uniform([1.0, 2.0, 3.0, 4.0]; row_partition=partition)
 
-# With custom prefix type (advanced, see PETSc Options below)
-v = Vec_uniform([1.0, 2.0]; Prefix=MPIDENSE)
+# Vectors always use MPIDENSE prefix internally
 ```
 
 ### Sum Distribution
@@ -109,19 +108,19 @@ x = Vec_uniform([1.0, 2.0, 3.0])
 y = Vec_uniform([4.0, 5.0, 6.0])
 
 # Vertical concatenation (stacking) - creates a longer vector
-v = vcat(x, y)  # Vec{Float64,MPIAIJ} with 6 elements
+v = vcat(x, y)  # Vec{Float64} with 6 elements
 
 # Horizontal concatenation - creates a matrix (auto-upgrades to MPIDENSE)
 M = hcat(x, y)  # 3×2 Mat{Float64,MPIDENSE}
 ```
 
 !!! tip "Vector Concatenation Behavior"
-    - `vcat` of vectors returns a `Vec{T,Prefix}` (preserves vector type)
+    - `vcat` of vectors returns a `Vec{T}` (preserves vector type)
     - `hcat` of vectors returns a `Mat{T,Prefix}` (creates a multi-column matrix)
     - `vcat` of matrices returns a `Mat{T,Prefix}`
 
-    The `Prefix` is automatically upgraded to `MPIDENSE` for horizontal concatenation
-    since vectors are inherently dense.
+    Vectors always use MPIDENSE prefix internally. Horizontal concatenation creates
+    a dense matrix since vectors are inherently dense.
 
 ## Partitioning
 
@@ -294,21 +293,16 @@ combined = map_rows((x, y) -> [x[1] + y[1], x[1] * y[1]]', v1, v2)
 - Results are automatically assembled into a new distributed object
 - Works efficiently with both vectors and matrices (see [Matrices guide](matrices.md#row-wise-operations-with-map_rows))
 
-## PETSc Options and the Prefix Type Parameter
+## PETSc Options
 
-SafePETSc vectors have a `Prefix` type parameter (e.g., `Vec{Float64,MPIAIJ}`) that controls PETSc configuration. The two built-in prefixes are `MPIAIJ` (default) and `MPIDENSE`.
-
-**Important**: All PETSc vectors are inherently dense (they store all elements), regardless of the `Prefix` parameter. The prefix only affects which PETSc options are applied, not the internal storage format. Unlike matrices, there is no "sparse vector" format in PETSc.
+SafePETSc vectors always use the MPIDENSE prefix internally for PETSc options. Unlike matrices, vectors do not expose a Prefix type parameter because all PETSc vectors are inherently dense (they store all elements).
 
 ```julia
-# Create vector with specific prefix
-v = Vec_uniform(data; Prefix=MPIDENSE)
-
-# Configure PETSc options for that prefix
+# Configure PETSc options for vectors (uses MPIDENSE prefix)
 petsc_options_insert_string("-MPIDENSE_vec_type cuda")
 ```
 
-See [Matrices: PETSc Options and Prefix Types](matrices.md#petsc-options-and-the-prefix-type-parameter) for complete documentation of the prefix system.
+See [Matrices: PETSc Options and Prefix Types](matrices.md#petsc-options-and-the-prefix-type-parameter) for the prefix system used by matrices.
 
 ## Examples
 

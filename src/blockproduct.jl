@@ -6,13 +6,13 @@
 Union type representing valid elements in a block matrix.
 
 Elements can be:
-- `Mat{T,Prefix}`: PETSc distributed matrix
-- `Vec{T,Prefix}`: PETSc distributed vector
-- `Adjoint{T, Vec{T,Prefix}}`: Adjoint of a vector (for row vector operations)
-- `Adjoint{T, Mat{T,Prefix}}`: Adjoint of a matrix (for matrix transpose operations)
+- `Mat{T,Prefix}`: PETSc distributed matrix (must match the BlockProduct's Prefix)
+- `Vec{T}`: PETSc distributed vector
+- `Adjoint{T, Vec{T}}`: Adjoint of a vector
+- `Adjoint{T, Mat{T,Prefix}}`: Adjoint of a matrix (must match the BlockProduct's Prefix)
 - Scalar values (Number types), where `0` represents structural zeros
 """
-const BlockElement{T,Prefix} = Union{Mat{T,Prefix}, Vec{T,Prefix}, Adjoint{T, Vec{T,Prefix}}, Adjoint{T, Mat{T,Prefix}}, Number}
+const BlockElement{T,Prefix} = Union{Mat{T,Prefix}, SafeMPI.DRef{_Vec{T}}, Adjoint{T, SafeMPI.DRef{_Vec{T}}}, Adjoint{T, Mat{T,Prefix}}, Number}
 
 """
     BlockProduct{T,Prefix}
@@ -84,6 +84,8 @@ mutable struct BlockProduct{T,Prefix}
 end
 
 # Helper to validate individual elements
+# Note: Vec elements can have any Prefix (vectors don't need to match matrix Prefix),
+# but Mat elements must match the expected Prefix.
 function _validate_element(elem, block_idx, i, j, ExpectedPrefix::Type)
     if elem isa Number
         return  # scalar is OK (including 0 for structural zeros)
@@ -94,17 +96,12 @@ function _validate_element(elem, block_idx, i, j, ExpectedPrefix::Type)
             error("Prefix mismatch at block $block_idx [$i,$j]: expected '$ExpectedPrefix', got '$elem_prefix_type'")
         end
     elseif elem isa Vec
-        # Check that elem is Vec{T,ExpectedPrefix} for some T
-        if !(elem isa Vec{<:Any,ExpectedPrefix})
-            elem_prefix_type = typeof(elem).parameters[2]
-            error("Prefix mismatch at block $block_idx [$i,$j]: expected '$ExpectedPrefix', got '$elem_prefix_type'")
-        end
+        # Vec can have any Prefix - no validation needed
+        # (vectors don't have a meaningful sparse/dense distinction like matrices)
+        return
     elseif elem isa Adjoint && elem.parent isa Vec
-        # Check that elem.parent is Vec{T,ExpectedPrefix} for some T
-        if !(elem.parent isa Vec{<:Any,ExpectedPrefix})
-            elem_prefix_type = typeof(elem.parent).parameters[2]
-            error("Prefix mismatch at block $block_idx [$i,$j]: expected '$ExpectedPrefix', got '$elem_prefix_type'")
-        end
+        # Vec adjoint can have any Prefix - no validation needed
+        return
     elseif elem isa Adjoint && elem.parent isa Mat
         # Check that elem.parent is Mat{T,ExpectedPrefix} for some T
         if !(elem.parent isa Mat{<:Any,ExpectedPrefix})
@@ -121,11 +118,11 @@ end
 
 Create a BlockProduct from a vector of block matrices.
 
-The element type `T` and prefix type `Prefix` are inferred from the first PETSc object encountered.
-All matrices/vectors must use the same `Prefix` type.
+The element type `T` is inferred from the first PETSc object encountered.
+The prefix type is inferred from the first Mat object, or uses the provided Prefix keyword.
 """
 function BlockProduct(prod::Vector{<:Matrix}; Prefix::Type=MPIAIJ)
-    # Infer element type and prefix type from first PETSc object
+    # Infer element type from first PETSc object, and prefix from first Mat
     T = nothing
     InferredPrefix = nothing
     for block in prod
@@ -138,19 +135,18 @@ function BlockProduct(prod::Vector{<:Matrix}; Prefix::Type=MPIAIJ)
                 break
             elseif elem isa Vec
                 T = eltype(elem.obj.v)
-                InferredPrefix = typeof(elem.obj).parameters[2]
-                break
+                # Vec has no Prefix, continue looking for a Mat
             elseif elem isa Adjoint && elem.parent isa Vec
                 T = eltype(elem.parent.obj.v)
-                InferredPrefix = typeof(elem.parent.obj).parameters[2]
-                break
+                # Vec has no Prefix, continue looking for a Mat
             elseif elem isa Adjoint && elem.parent isa Mat
                 T = eltype(elem.parent.obj.A)
                 InferredPrefix = typeof(elem.parent.obj).parameters[2]
                 break
             end
         end
-        T !== nothing && break
+        # Only break if we found both T and InferredPrefix, or if we found a Mat
+        (T !== nothing && InferredPrefix !== nothing) && break
     end
 
     if T === nothing
@@ -354,7 +350,7 @@ end
 # _copy_vec_inplace!(dest::Vec, src::Vec)
 # Copy src vector into dest vector using PETSc VecCopy.
 PETSc.@for_libpetsc begin
-    function _copy_vec_inplace!(dest::Vec{$PetscScalar,Prefix}, src::Vec{$PetscScalar,Prefix}) where Prefix
+    function _copy_vec_inplace!(dest::Vec{$PetscScalar}, src::Vec{$PetscScalar})
         PETSc.@chk ccall(
             (:VecCopy, $libpetsc),
             PETSc.PetscErrorCode,
@@ -400,7 +396,7 @@ end
 # _accumulate_vecs_inplace!(dest::Vec, terms::Vector)
 # Zero dest and accumulate all term vectors into it using VecSet and VecAXPY.
 PETSc.@for_libpetsc begin
-    function _accumulate_vecs_inplace!(dest::Vec{$PetscScalar,Prefix}, terms::Vector) where Prefix
+    function _accumulate_vecs_inplace!(dest::Vec{$PetscScalar}, terms::Vector)
         # Zero out dest
         PETSc.@chk ccall(
             (:VecSet, $libpetsc),

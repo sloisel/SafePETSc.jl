@@ -41,11 +41,11 @@ GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Pool should have one entry (default Prefix is MPIAIJ)
+# Pool should have one entry
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "MPIAIJ_", Float64))
-    @test stats[(16, "MPIAIJ_", Float64)] == 1
+    @test haskey(stats, (16, Float64))
+    @test stats[(16, Float64)] == 1
 end
 
 # Create another vector - should reuse from pool
@@ -55,39 +55,34 @@ dr2 = SafePETSc.Vec_uniform(v)
 # Pool should now be empty
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test !haskey(stats, (16, "MPIAIJ_", Float64)) || stats[(16, "MPIAIJ_", Float64)] == 0
+    @test !haskey(stats, (16, Float64)) || stats[(16, Float64)] == 0
 end
 
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Test 2: Different prefixes don't share pool entries
+# Test 2: Multiple vectors can be pooled under the same key
 if rank == 0
-    println("[DEBUG] Test 2: Different prefixes use separate pool entries")
+    println("[DEBUG] Test 2: Multiple vectors pooled under same key")
     flush(stdout)
 end
 
 SafePETSc.clear_vec_pool!()
 
-# Create vector with MPIAIJ prefix
-dr_a = SafePETSc.Vec_uniform(v; Prefix=SafePETSc.MPIAIJ)
+# Create two vectors of same size
+dr_a = SafePETSc.Vec_uniform(v)
+dr_b = SafePETSc.Vec_uniform(v)
 dr_a = nothing
-GC.gc()
-SafeMPI.check_and_destroy!()
-MPI.Barrier(comm)
-
-# Create vector with MPIDENSE prefix
-dr_b = SafePETSc.Vec_uniform(v; Prefix=SafePETSc.MPIDENSE)
 dr_b = nothing
 GC.gc()
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
-# Both should be in pool with different prefixes
+# Both should be in pool under same key (2 vectors of size 16)
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "MPIAIJ_", Float64))
-    @test haskey(stats, (16, "MPIDENSE_", Float64))
+    @test haskey(stats, (16, Float64))
+    @test stats[(16, Float64)] == 2
 end
 
 SafeMPI.check_and_destroy!()
@@ -120,9 +115,9 @@ MPI.Barrier(comm)
 # Check all three sizes are in pool
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (8, "MPIAIJ_", Float64))
-    @test haskey(stats, (16, "MPIAIJ_", Float64))
-    @test haskey(stats, (32, "MPIAIJ_", Float64))
+    @test haskey(stats, (8, Float64))
+    @test haskey(stats, (16, Float64))
+    @test haskey(stats, (32, Float64))
 end
 
 # Create size 16 - should only consume the 16-sized vector
@@ -132,9 +127,9 @@ dr16_new = SafePETSc.Vec_uniform(v16)
 # Other sizes should still be in pool
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (8, "MPIAIJ_", Float64))
-    @test haskey(stats, (32, "MPIAIJ_", Float64))
-    @test !haskey(stats, (16, "MPIAIJ_", Float64)) || stats[(16, "MPIAIJ_", Float64)] == 0
+    @test haskey(stats, (8, Float64))
+    @test haskey(stats, (32, Float64))
+    @test !haskey(stats, (16, Float64)) || stats[(16, Float64)] == 0
 end
 
 SafeMPI.check_and_destroy!()
@@ -159,7 +154,7 @@ MPI.Barrier(comm)
 # Should be in pool
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "MPIAIJ_", Float64))
+    @test haskey(stats, (16, Float64))
 end
 
 # Disable pooling
@@ -177,8 +172,8 @@ MPI.Barrier(comm)
 # Pool should still have the first vector
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test haskey(stats, (16, "MPIAIJ_", Float64))
-    @test stats[(16, "MPIAIJ_", Float64)] == 1
+    @test haskey(stats, (16, Float64))
+    @test stats[(16, Float64)] == 1
 end
 
 # Re-enable pooling
@@ -191,7 +186,7 @@ dr3 = SafePETSc.Vec_uniform(v)
 # Pool should be empty
 stats = SafePETSc.get_vec_pool_stats()
 if rank == 0
-    @test !haskey(stats, (16, "MPIAIJ_", Float64)) || stats[(16, "MPIAIJ_", Float64)] == 0
+    @test !haskey(stats, (16, Float64)) || stats[(16, Float64)] == 0
 end
 
 SafeMPI.check_and_destroy!()
@@ -205,7 +200,7 @@ end
 
 SafePETSc.clear_vec_pool!()
 
-# Add vectors with different prefixes and sizes
+# Add vectors with different sizes
 v1 = ones(8)
 v2 = ones(16)
 

@@ -182,19 +182,16 @@ PETSc.@for_libpetsc begin
 end
 
 """
-    Base.:\\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) -> Vec{T,PrefixB}
+    Base.:\\(A::Mat{T,Prefix}, b::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
-Solve the linear system Ax = b using PETSc's KSP solver, with mixed prefixes.
-
-This method handles the case where A and b have different prefixes (e.g., MPIAIJ matrix
-with MPIDENSE vector). The result vector x will have the same prefix as b.
+Solve the linear system Ax = b using PETSc's KSP solver.
 
 Creates a KSP solver internally and returns the solution vector x.
 For repeated solves with the same matrix, use `KSP` explicitly for better performance.
 """
-function Base.:\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) where {T,PrefixA,PrefixB}
+function Base.:\(A::Mat{T,Prefix}, b::Vec{T}) where {T,Prefix}
     # Check dimensions and partitioning - coalesced into single MPI synchronization
     m, n = size(A)
     vec_length = size(b)[1]
@@ -203,7 +200,7 @@ function Base.:\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) where {T,PrefixA,PrefixB}
     # Create KSP solver
     ksp_obj = KSP(A)
 
-    # Create result vector with same prefix as b
+    # Create result vector
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
@@ -211,20 +208,20 @@ function Base.:\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) where {T,PrefixA,PrefixB}
     row_hi = A.obj.row_partition[rank+2] - 1
     nlocal = row_hi - row_lo + 1
 
-    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, PrefixB, A.obj.row_partition)
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, A.obj.row_partition)
 
     # Solve
     _ksp_solve_vec!(ksp_obj.obj.ksp, x_petsc, b.obj.v)
 
     PETSc.assemble(x_petsc)
 
-    # Wrap in DRef with same prefix as b
-    obj = _Vec{T,PrefixB}(x_petsc, A.obj.row_partition)
+    # Wrap in DRef
+    obj = _Vec{T}(x_petsc, A.obj.row_partition)
     return SafeMPI.DRef(obj)
 end
 
 """
-    LinearAlgebra.ldiv!(x::Vec{T,Prefix}, A::Mat{T,Prefix}, b::Vec{T,Prefix}) -> Vec{T,Prefix}
+    LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T,Prefix}, b::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -232,7 +229,7 @@ In-place solve of Ax = b, storing the result in the pre-allocated vector x.
 
 Creates a KSP solver internally. For repeated solves, use the `ldiv!(ksp, x, b)` variant with a reusable KSP object.
 """
-function LinearAlgebra.ldiv!(x::Vec{T,PrefixX}, A::Mat{T,PrefixA}, b::Vec{T,PrefixB}) where {T,PrefixX,PrefixA,PrefixB}
+function LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T,Prefix}, b::Vec{T}) where {T,Prefix}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(A)
     b_length = size(b)[1]
@@ -254,7 +251,7 @@ function LinearAlgebra.ldiv!(x::Vec{T,PrefixX}, A::Mat{T,PrefixA}, b::Vec{T,Pref
 end
 
 """
-    LinearAlgebra.ldiv!(ksp::KSP{T,Prefix}, x::Vec{T,Prefix}, b::Vec{T,Prefix}) -> Vec{T,Prefix}
+    LinearAlgebra.ldiv!(ksp::KSP{T,Prefix}, x::Vec{T}, b::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -262,7 +259,7 @@ In-place solve using a pre-existing KSP solver, storing the result in x.
 
 Reuses the solver and the result vector for maximum efficiency in repeated solves.
 """
-function LinearAlgebra.ldiv!(ksp::KSP{T,PrefixKSP}, x::Vec{T,PrefixX}, b::Vec{T,PrefixB}) where {T,PrefixKSP,PrefixX,PrefixB}
+function LinearAlgebra.ldiv!(ksp::KSP{T,Prefix}, x::Vec{T}, b::Vec{T}) where {T,Prefix}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(ksp)
     b_length = size(b)[1]
@@ -382,7 +379,7 @@ function LinearAlgebra.ldiv!(ksp::KSP{T,PrefixKSP}, X::Mat{T,PrefixX}, B::Mat{T,
 end
 
 """
-    Base.:\\(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}, b::Vec{T,Prefix}) -> Vec{T,Prefix}
+    Base.:\\(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}, b::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -390,7 +387,7 @@ Solve the transposed system A'x = b using PETSc's KSPSolveTranspose.
 
 Returns the solution vector x. Creates a KSP solver internally.
 """
-function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}, b::Vec{T,Prefix}) where {T,Prefix}
+function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}, b::Vec{T}) where {T,Prefix}
     A = parent(At)
 
     # Check dimensions and partitioning - coalesced into single MPI synchronization
@@ -409,7 +406,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}, b::Vec{T,Prefix}
     col_hi = A.obj.col_partition[rank+2] - 1
     nlocal = col_hi - col_lo + 1
 
-    x_petsc = _vec_create_mpi_for_T(T, nlocal, n, Prefix, A.obj.col_partition)
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, n, A.obj.col_partition)
 
     # Solve transpose
     _ksp_solve_transpose_vec!(ksp_obj.obj.ksp, x_petsc, b.obj.v)
@@ -417,7 +414,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}, b::Vec{T,Prefix}
     PETSc.assemble(x_petsc)
 
     # Wrap in DRef
-    obj = _Vec{T,Prefix}(x_petsc, A.obj.col_partition)
+    obj = _Vec{T}(x_petsc, A.obj.col_partition)
     return SafeMPI.DRef(obj)
 end
 
@@ -467,7 +464,7 @@ function Base.:\(At::LinearAlgebra.Adjoint{T, <:Mat{T,PrefixA}}, B::Mat{T,Prefix
 end
 
 """
-    Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}) -> Adjoint{T, Vec{T,Prefix}}
+    Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T,Prefix}) -> Adjoint{T, Vec{T}}
 
 **MPI Collective**
 
@@ -475,7 +472,7 @@ Right division b'/A, which solves x^T A = b^T (equivalent to A^T x = b).
 
 Returns the solution as an adjoint vector x'.
 """
-function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}) where {T,Prefix}
+function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, A::Mat{T,Prefix}) where {T,Prefix}
     b = parent(bt)
 
     # Check dimensions and partitioning - coalesced into single MPI synchronization
@@ -494,7 +491,7 @@ function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}
     row_hi = A.obj.row_partition[rank+2] - 1
     nlocal = row_hi - row_lo + 1
 
-    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, Prefix, A.obj.row_partition)
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, A.obj.row_partition)
 
     # Solve transpose (b'/A is equivalent to A'\b)
     _ksp_solve_transpose_vec!(ksp_obj.obj.ksp, x_petsc, b.obj.v)
@@ -502,7 +499,7 @@ function Base.:/(bt::LinearAlgebra.Adjoint{T, <:Vec{T,Prefix}}, A::Mat{T,Prefix}
     PETSc.assemble(x_petsc)
 
     # Wrap in DRef and return as adjoint
-    obj = _Vec{T,Prefix}(x_petsc, A.obj.row_partition)
+    obj = _Vec{T}(x_petsc, A.obj.row_partition)
     x = SafeMPI.DRef(obj)
     return LinearAlgebra.Adjoint(x)
 end

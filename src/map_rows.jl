@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 """
-    map_rows(f::Function, A::Union{Vec{T,Prefix},Mat{T,Prefix}}...; col_partition=nothing) -> Union{Vec{T,MPIDENSE},Mat{T,MPIDENSE}}
+    map_rows(f::Function, A::Union{Vec{T},Mat{T,Prefix}}...; col_partition=nothing) -> Union{Vec{T},Mat{T,MPIDENSE}}
 
 **MPI Collective**
 
@@ -15,12 +15,12 @@ results are concatenated into a new distributed vector or matrix.
 
 # Arguments
 - `f::Function`: Function to apply to each row. Should accept as many arguments as there are inputs.
-- `A...::Union{Vec{T,Prefix},Mat{T,Prefix}}`: One or more distributed vectors or matrices. All inputs must have the same number of rows and compatible row partitions.
+- `A...::Union{Vec{T},Mat{T,Prefix}}`: One or more distributed vectors or matrices. All inputs must have the same number of rows and compatible row partitions.
 - `col_partition::Union{Vector{Int},Nothing}`: Column partition for result matrix (default: use default_row_partition). Only used when `f` returns an adjoint vector (creating a matrix).
 
 # Return value
-Always returns `Vec{T,MPIDENSE}` or `Mat{T,MPIDENSE}` (dense format). The return type depends on what `f` returns:
-- If `f` returns a scalar or Julia Vector → returns a `Vec{T,MPIDENSE}`
+Returns `Vec{T}` or `Mat{T,MPIDENSE}`. The return type depends on what `f` returns:
+- If `f` returns a scalar or Julia Vector → returns a `Vec{T}`
 - If `f` returns an adjoint Julia Vector (row vector) → returns a `Mat{T,MPIDENSE}`
 
 # Size behavior
@@ -32,7 +32,7 @@ If inputs have `m` rows and `f` returns:
 ```julia
 # Example 1: Sum rows of a matrix
 B = Mat_uniform(randn(5, 3))
-sums = map_rows(sum, B)  # Returns Vec{Float64,MPIDENSE} with 5 elements
+sums = map_rows(sum, B)  # Returns Vec{Float64} with 5 elements
 
 # Example 2: Compute [sum, product] for each row (returns matrix)
 stats = map_rows(x -> [sum(x), prod(x)]', B)  # Returns 5×2 Mat{Float64,MPIDENSE}
@@ -47,7 +47,7 @@ combined = map_rows((x, y) -> [sum(x), prod(x), y[1]]', B, C)  # Returns 5×3 Ma
 - The function `f` is assumed to be homogeneous (always returns the same type of output)
 - For vectors, `f` receives a scalar value per row
 - For matrices, `f` receives a view of the row (similar to eachrow)
-- The result always uses MPIDENSE prefix regardless of input prefix
+- Matrix results always use MPIDENSE prefix
 """
 function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
                   col_partition::Union{Vector{Int},Nothing}=nothing) where {T}
@@ -196,7 +196,7 @@ function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
         end
 
         # Create result vector
-        result_petsc = _vec_create_mpi_for_T(T, local_output_size, output_rows, Prefix, output_row_partition)
+        result_petsc = _vec_create_mpi_for_T(T, local_output_size, output_rows, output_row_partition)
         result_local = PETSc.unsafe_localarray(result_petsc; read=true, write=true)
 
     else  # :mat
@@ -297,7 +297,7 @@ function map_rows(f::Function, A::Union{DRef{<:_Vec{T}},DRef{<:_Mat{T}}}...;
     if output_type == :vec_scalar || output_type == :vec_vector
         Base.finalize(result_local)
         PETSc.assemble(result_petsc)
-        obj = _Vec{T,Prefix}(result_petsc, output_row_partition)
+        obj = _Vec{T}(result_petsc, output_row_partition)
         result = SafeMPI.DRef(obj)
         return result
     else  # :mat

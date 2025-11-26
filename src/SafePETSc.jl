@@ -152,17 +152,17 @@ PETSc.@for_petsc function petsc_options_insert_string(
     return nothing
 end
 
-struct _Vec{T,Prefix}
+struct _Vec{T}
     v::PETSc.Vec{T}
     row_partition::Vector{Int}
 end
 
 """
-    Vec{T,Prefix}
+    Vec{T}
 
-A distributed PETSc vector with element type `T` and prefix type `Prefix`, managed by SafePETSc's reference counting system.
+A distributed PETSc vector with element type `T`, managed by SafePETSc's reference counting system.
 
-`Vec{T,Prefix}` is a type alias for `DRef{_Vec{T,Prefix}}` and is released collectively when all ranks release their references. By default, released PETSc vectors are returned to an internal pool for reuse rather than destroyed immediately. To force destruction instead of pooling, set `ENABLE_VEC_POOL[] = false`, or call `clear_vec_pool!()` to free pooled vectors.
+`Vec{T}` is a type alias for `DRef{_Vec{T}}` and is released collectively when all ranks release their references. By default, released PETSc vectors are returned to an internal pool for reuse rather than destroyed immediately. To force destruction instead of pooling, set `ENABLE_VEC_POOL[] = false`, or call `clear_vec_pool!()` to free pooled vectors.
 
 # Construction
 
@@ -194,7 +194,7 @@ LinearAlgebra.mul!(y, A, x)  # In-place version
 
 See also: [`Vec_uniform`](@ref), [`Vec_sum`](@ref), [`Mat`](@ref), [`zeros_like`](@ref), [`ENABLE_VEC_POOL`](@ref), [`clear_vec_pool!`](@ref)
 """
-const Vec{T,Prefix} = SafeMPI.DRef{_Vec{T,Prefix}}
+const Vec{T} = SafeMPI.DRef{_Vec{T}}
 
 struct _Mat{T,Prefix}
     A::PETSc.Mat{T}
@@ -375,12 +375,12 @@ include("blockproduct.jl")
 include("map_rows.jl")
 
 # Opt-in internal _Vec to DRef-managed destruction
-SafeMPI.destroy_trait(::Type{_Vec{T,Prefix}}) where {T,Prefix} = SafeMPI.CanDestroy()
+SafeMPI.destroy_trait(::Type{_Vec{T}}) where {T} = SafeMPI.CanDestroy()
 
-function SafeMPI.destroy_obj!(x::_Vec{T,Prefix}) where {T,Prefix}
+function SafeMPI.destroy_obj!(x::_Vec{T}) where {T}
     # Try to return to pool, otherwise destroy
     if ENABLE_VEC_POOL[]
-        _return_vec_to_pool!(x.v, x.row_partition, Prefix)
+        _return_vec_to_pool!(x.v, x.row_partition)
     else
         # Collective destroy of the underlying PETSc Vec on MPI.COMM_WORLD
         _destroy_petsc_vec!(x.v)
@@ -420,14 +420,15 @@ function Init()
     end
 
     # Setup options for prefix types
+    # Vectors always use MPIDENSE prefix, so we only set vec_type for MPIDENSE
     petsc_options_insert_string("-MPIDENSE_mat_type mpidense -MPIDENSE_vec_type mpi")
-    petsc_options_insert_string("-MPIAIJ_mat_type mpiaij -MPIAIJ_vec_type mpi")
+    petsc_options_insert_string("-MPIAIJ_mat_type mpiaij")
 
     # Exercise the options by creating dummy objects to prevent PETSc from
     # complaining about unused options. These go out of scope immediately.
+    # Vectors always use MPIDENSE prefix, matrices use the specified prefix.
     let
-        _ = Vec_uniform([1.0], Prefix=MPIDENSE)
-        _ = Vec_uniform([1.0], Prefix=MPIAIJ)
+        _ = Vec_uniform([1.0])
         _ = Mat_uniform([1.0;;], Prefix=MPIDENSE)
         _ = Mat_uniform([1.0;;], Prefix=MPIAIJ)
     end

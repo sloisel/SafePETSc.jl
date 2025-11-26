@@ -111,16 +111,15 @@ A = spdiagm(-1 => lower_vec, 0 => diag_vec, 1 => upper_vec)
 # Explicit dimensions
 A = spdiagm(100, 100, 0 => diag_vec, 1 => upper_vec)
 
-# Control output prefix type
-v_dense = Vec_uniform(data; Prefix=MPIDENSE)
-A_sparse = spdiagm(0 => v_dense; prefix=MPIAIJ)  # Create sparse from dense
+# Control output matrix prefix type
+v = Vec_uniform(data)  # Vectors always use MPIDENSE prefix internally
+A_sparse = spdiagm(0 => v; prefix=MPIAIJ)  # Create sparse matrix from vector
 ```
 
-!!! note "Prefix Parameter"
-    The `prefix` keyword argument allows you to override the output matrix prefix type.
-    By default, `spdiagm` returns a matrix with the same prefix as the input vectors,
-    but you can specify a different prefix to convert between dense and sparse formats.
-    This is useful when you need a sparse diagonal matrix from dense vectors, or vice versa.
+!!! note "Matrix Prefix Parameter"
+    The `prefix` keyword argument allows you to specify the output matrix prefix type.
+    By default, `spdiagm` returns an MPIAIJ (sparse) matrix. Use `prefix=MPIDENSE` to
+    create a dense matrix instead.
 
 ## Transpose Operations
 

@@ -499,9 +499,9 @@ end
 A_data = Matrix{Float64}(I, 4, 4) * 2.0  # 2*I
 b_data = Float64.(1:4)
 drA = SafePETSc.Mat_uniform(A_data; Prefix=MPIAIJ)  # MPIAIJ matrix
-drb = SafePETSc.Vec_uniform(b_data; Prefix=MPIDENSE)  # MPIDENSE vector
+drb = SafePETSc.Vec_uniform(b_data)  # Vec (no Prefix parameter)
 
-# Solve with different prefixes - exercises Base.:\(A::Mat{T,PrefixA}, b::Vec{T,PrefixB})
+# Solve matrix-vector system - exercises Base.:\(A::Mat{T,Prefix}, b::Vec{T})
 drx = drA \ drb
 @test drx isa SafeMPI.DRef
 @test size(drx) == (4,)
