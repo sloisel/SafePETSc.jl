@@ -55,8 +55,8 @@ jobs:
           echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | \
             sudo tee /etc/apt/preferences.d/rocm-pin-600
           sudo apt-get update
-          # Install HIP runtime and compiler (hipcc)
-          sudo apt-get install -y rocm-hip-runtime-dev hip-base
+          # Install full ROCm development meta-package (includes all HIP development tools)
+          sudo apt-get install -y rocm-dev
           # Add ROCm to PATH (persists to subsequent steps)
           echo "/opt/rocm/bin" >> $GITHUB_PATH
           # Verify installation
@@ -117,21 +117,6 @@ jobs:
             @assert SafePETSc.petsc_strumpack_available() "STRUMPACK build not found!"
             println("✓ STRUMPACK library found at: ", SafePETSc.petsc_strumpack_library_path())
           '
-
-      - name: Configure MPI.jl to use system MPICH
-        run: |
-          # PETSc was built with system MPICH, so MPI.jl must use system MPICH too
-          # Add MPIPreferences explicitly since it's not a direct dependency
-          julia --project=. -e '
-            using Pkg
-            Pkg.add("MPIPreferences")
-            using MPIPreferences
-            MPIPreferences.use_system_binary()
-          '
-          # Delete compiled caches to force recompilation with new MPI
-          rm -rf ~/.julia/compiled/v1.*/MPI
-          rm -rf ~/.julia/compiled/v1.*/PETSc
-          rm -rf ~/.julia/compiled/v1.*/SafePETSc
 
       - name: Run basic tests with GPU-enabled STRUMPACK
         run: |

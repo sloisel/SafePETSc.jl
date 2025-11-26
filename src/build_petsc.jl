@@ -393,13 +393,13 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
             "--prefix=$install_dir",
             "--with-cc=icx",
             "--with-cxx=icpx",
-            "--with-fc=ifx",
+            "--with-fc=0",  # Intel Fortran (ifx) often not installed; disable Fortran
             "--download-mpich",
             "--with-debugging=$(with_debugging ? 1 : 0)",
             "--with-shared-libraries=1",
         ]
         if verbose
-            @info "SYCL build: using Intel compilers (icx/icpx/ifx) and downloading MPICH"
+            @info "SYCL build: using Intel compilers (icx/icpx) and downloading MPICH"
         end
     else
         configure_flags = [
