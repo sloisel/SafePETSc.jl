@@ -160,6 +160,34 @@ print the Vec or Mat once on rank 0.
 - **Trait System**: Prevents accidental misuse by requiring explicit opt-in for destruction support
 - **No advertisement**: Putting advertisements for Claude in commit messages or anywhere else is forbidden. Claude is not a co-author. Sebastien Loisel is the one and only author.
 
+### STRUMPACK Support
+
+SafePETSc supports both MUMPS (default via PETSc_jll) and STRUMPACK as sparse direct solvers.
+
+**Default (MUMPS)**: Works out of the box, no setup required.
+
+**STRUMPACK**: Offers GPU acceleration (CUDA, HIP, SYCL) and better MPI scalability. Requires one-time build:
+
+```julia
+SafePETSc.build_petsc_strumpack()  # ~30-60 min build, cached
+# Follow prompts to configure startup.jl, restart Julia
+```
+
+The build system:
+- Downloads PETSc source and builds with STRUMPACK
+- Caches build in Julia's Scratch.jl managed directory
+- Offers to configure `~/.julia/config/startup.jl` automatically
+- Sets `JULIA_PETSC_LIBRARY` environment variable
+
+Key files:
+- `src/build_petsc.jl`: Build system implementation
+- `docs/src/guide/strumpack.md`: User documentation
+
+STRUMPACK options are passed via `petsc_options_insert_string()`:
+- `-mat_strumpack_compression BLR` - Enable BLR compression
+- `-mat_strumpack_gpu` - Enable GPU acceleration
+- `-mat_strumpack_verbose` - Verbose output
+
 ## SafePETSc Module
 
 The main module (`src/SafePETSc.jl`) wraps PETSc functionality with safe distributed reference management, using SafeMPI as the foundation.

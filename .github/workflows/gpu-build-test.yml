@@ -1,0 +1,116 @@
+name: GPU Build Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      gpu_backend:
+        description: 'GPU backend to test (or "all")'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - cuda
+          - hip
+          - sycl
+
+jobs:
+  test-gpu-build:
+    name: Test ${{ matrix.gpu }} build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    strategy:
+      fail-fast: false
+      matrix:
+        gpu: ${{ github.event.inputs.gpu_backend == 'all' && fromJSON('["cuda", "hip", "sycl"]') || fromJSON(format('["{0}"]', github.event.inputs.gpu_backend)) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mpich libmpich-dev gfortran cmake python3 bison
+
+      # CUDA installation
+      - name: Install CUDA toolkit
+        if: matrix.gpu == 'cuda'
+        run: |
+          sudo apt-get install -y nvidia-cuda-toolkit
+          nvcc --version
+
+      # ROCm/HIP installation
+      - name: Install ROCm/HIP
+        if: matrix.gpu == 'hip'
+        run: |
+          # Add ROCm repository
+          sudo mkdir -p --mode=0755 /etc/apt/keyrings
+          wget https://repo.radeon.com/rocm/rocm.gpg.key -O - | \
+            gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.0.2 jammy main" | \
+            sudo tee /etc/apt/sources.list.d/rocm.list
+          sudo apt-get update
+          # Install minimal HIP compiler (not full ROCm stack)
+          sudo apt-get install -y hip-dev
+          hipcc --version
+
+      # oneAPI/SYCL installation
+      - name: Install Intel oneAPI
+        if: matrix.gpu == 'sycl'
+        run: |
+          # Add Intel repository
+          wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
+            gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
+            sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          # Install DPC++ compiler
+          sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp
+          # Source environment and verify
+          source /opt/intel/oneapi/setvars.sh
+          icpx --version
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+          arch: x64
+
+      - uses: julia-actions/cache@v2
+
+      - name: Build package
+        uses: julia-actions/julia-buildpkg@v1
+
+      - name: Build PETSc with STRUMPACK + ${{ matrix.gpu }}
+        env:
+          GPU_BACKEND: ${{ matrix.gpu }}
+        run: |
+          # Source oneAPI environment if needed
+          if [ "${{ matrix.gpu }}" = "sycl" ]; then
+            source /opt/intel/oneapi/setvars.sh
+          fi
+
+          julia --project=. -e '
+            using SafePETSc
+            gpu = ENV["GPU_BACKEND"]
+            println("Building PETSc with STRUMPACK + $gpu support...")
+            SafePETSc.build_petsc_strumpack(;
+              with_cuda = gpu == "cuda",
+              with_hip = gpu == "hip",
+              with_sycl = gpu == "sycl",
+              verbose = true
+            )
+          ' < /dev/null
+
+      - name: Verify build
+        run: |
+          julia --project=. -e '
+            using SafePETSc
+            @assert SafePETSc.petsc_strumpack_available() "STRUMPACK build not found!"
+            println("✓ STRUMPACK library found at: ", SafePETSc.petsc_strumpack_library_path())
+          '
+
+      - name: Run basic tests with GPU-enabled STRUMPACK
+        run: |
+          LIB_PATH=$(julia --project=. -e 'using SafePETSc; print(SafePETSc.petsc_strumpack_library_path())')
+          JULIA_PETSC_LIBRARY="$LIB_PATH" julia --project=. -e 'using Pkg; Pkg.test()'

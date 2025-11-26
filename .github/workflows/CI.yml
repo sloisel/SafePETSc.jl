@@ -59,3 +59,54 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  test-strumpack:
+    name: Test with STRUMPACK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # PETSc build takes time
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mpich libmpich-dev gfortran cmake python3 bison
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+          arch: x64
+
+      - uses: julia-actions/cache@v2
+
+      - name: Cache PETSc STRUMPACK build
+        uses: actions/cache@v4
+        id: petsc-cache
+        with:
+          path: ~/.julia/scratchspaces
+          key: petsc-strumpack-${{ runner.os }}-v2
+
+      - name: Build package (initial)
+        uses: julia-actions/julia-buildpkg@v1
+
+      - name: Build PETSc with STRUMPACK
+        if: steps.petsc-cache.outputs.cache-hit != 'true'
+        run: |
+          julia --project=. -e '
+            using SafePETSc
+            # Build without interactive prompt
+            SafePETSc.build_petsc_strumpack(verbose=true)
+          ' < /dev/null
+
+      - name: Get STRUMPACK library path
+        id: strumpack-path
+        run: |
+          LIB_PATH=$(julia --project=. -e 'using SafePETSc; print(SafePETSc.petsc_strumpack_library_path())')
+          echo "lib_path=$LIB_PATH" >> $GITHUB_OUTPUT
+
+      - name: Run tests with STRUMPACK
+        env:
+          JULIA_PETSC_LIBRARY: ${{ steps.strumpack-path.outputs.lib_path }}
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.test()'

@@ -267,6 +267,7 @@ export BlockProduct, calculate!
 export io0
 export map_rows
 export own_row
+export build_petsc_strumpack, petsc_strumpack_library_path, petsc_strumpack_available, has_strumpack
 
 """
     io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)
@@ -373,6 +374,7 @@ include("mat.jl")
 include("ksp.jl")
 include("blockproduct.jl")
 include("map_rows.jl")
+include("build_petsc.jl")
 
 # Opt-in internal _Vec to DRef-managed destruction
 SafeMPI.destroy_trait(::Type{_Vec{T}}) where {T} = SafeMPI.CanDestroy()
@@ -409,7 +411,15 @@ Ensure MPI and PETSc are initialized in the recommended order (MPI first, then P
 Safe to call multiple times. Does not register custom finalizers; rely on library
 defaults for shutdown (MPI.jl finalizes at exit; PETSc may remain initialized).
 
-Sets up PETSc options for prefix types (MPIDENSE and MPIAIJ).
+Sets up PETSc options for prefix types:
+- `MPIDENSE`: Dense matrices with `-MPIDENSE_mat_type mpidense -MPIDENSE_vec_type mpi`
+- `MPIAIJ`: Sparse matrices with `-MPIAIJ_mat_type mpiaij`
+
+If STRUMPACK is available (detected via [`has_strumpack`](@ref)), it is automatically
+configured as the default direct solver for sparse matrices:
+`-MPIAIJ_pc_type lu -MPIAIJ_pc_factor_mat_solver_type strumpack`
+
+See also: [`has_strumpack`](@ref), [`build_petsc_strumpack`](@ref)
 """
 function Init()
     if !MPI.Initialized()
@@ -423,6 +433,12 @@ function Init()
     # Vectors always use MPIDENSE prefix, so we only set vec_type for MPIDENSE
     petsc_options_insert_string("-MPIDENSE_mat_type mpidense -MPIDENSE_vec_type mpi")
     petsc_options_insert_string("-MPIAIJ_mat_type mpiaij")
+
+    # If STRUMPACK is available, configure it as the default direct solver for sparse matrices
+    # STRUMPACK is designed for sparse systems; dense matrices use different solvers
+    if has_strumpack()
+        petsc_options_insert_string("-MPIAIJ_pc_type lu -MPIAIJ_pc_factor_mat_solver_type strumpack")
+    end
 
     # Exercise the options by creating dummy objects to prevent PETSc from
     # complaining about unused options. These go out of scope immediately.
