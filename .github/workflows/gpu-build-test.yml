@@ -121,7 +121,10 @@ jobs:
       - name: Configure MPI.jl to use system MPICH
         run: |
           # PETSc was built with system MPICH, so MPI.jl must use system MPICH too
+          # Add MPIPreferences explicitly since it's not a direct dependency
           julia --project=. -e '
+            using Pkg
+            Pkg.add("MPIPreferences")
             using MPIPreferences
             MPIPreferences.use_system_binary()
           '
