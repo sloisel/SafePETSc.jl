@@ -379,10 +379,6 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
         """)
     end
 
-    if verbose
-        @info "Using system MPI compilers (mpicc, mpicxx)"
-    end
-
     # Check for Fortran MPI wrapper
     has_mpif90 = try
         success(`which mpif90`)
@@ -391,13 +387,36 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
     end
 
     # Build configuration flags - includes both STRUMPACK and MUMPS
-    configure_flags = [
-        "--prefix=$install_dir",
-        "--with-cc=mpicc",
-        "--with-cxx=mpicxx",
-        has_mpif90 ? "--with-fc=mpif90" : "--with-fc=0",
-        "--with-debugging=$(with_debugging ? 1 : 0)",
-        "--with-shared-libraries=1",
+    # SYCL requires Intel compilers and must download MPICH (can't use system MPI wrappers)
+    if with_sycl
+        configure_flags = [
+            "--prefix=$install_dir",
+            "--with-cc=icx",
+            "--with-cxx=icpx",
+            "--with-fc=ifx",
+            "--download-mpich",
+            "--with-debugging=$(with_debugging ? 1 : 0)",
+            "--with-shared-libraries=1",
+        ]
+        if verbose
+            @info "SYCL build: using Intel compilers (icx/icpx/ifx) and downloading MPICH"
+        end
+    else
+        configure_flags = [
+            "--prefix=$install_dir",
+            "--with-cc=mpicc",
+            "--with-cxx=mpicxx",
+            has_mpif90 ? "--with-fc=mpif90" : "--with-fc=0",
+            "--with-debugging=$(with_debugging ? 1 : 0)",
+            "--with-shared-libraries=1",
+        ]
+        if verbose
+            @info "Using system MPI compilers (mpicc, mpicxx)"
+        end
+    end
+
+    # Add common dependencies
+    append!(configure_flags, [
         # Solvers
         "--download-strumpack",
         "--download-mumps",
@@ -413,7 +432,7 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
         "--with-hdf5=0",
         "--with-curl=0",
         "--with-x=0",
-    ]
+    ])
 
     # Add GPU backend flags
     if with_cuda
@@ -423,10 +442,10 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
         end
     end
     if with_hip
-        # Explicitly specify hipcc as the HIP compiler (must be in PATH)
-        push!(configure_flags, "--with-hip", "--with-hipc=hipcc")
+        # Explicitly specify hipcc and HIP directory (ROCm installation)
+        push!(configure_flags, "--with-hip", "--with-hipc=hipcc", "--with-hip-dir=/opt/rocm")
         if verbose
-            @info "Enabling HIP support for AMD GPUs (using hipcc)"
+            @info "Enabling HIP support for AMD GPUs (using hipcc from /opt/rocm)"
         end
     end
     if with_sycl
