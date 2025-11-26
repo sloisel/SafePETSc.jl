@@ -74,9 +74,15 @@ jobs:
           sudo apt-get update
           # Install DPC++ compiler
           sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp
-          # Source environment and verify
-          source /opt/intel/oneapi/setvars.sh
-          icpx --version
+          # Add oneAPI compiler to PATH (persists to subsequent steps)
+          # Find the actual compiler version directory
+          ONEAPI_COMPILER_DIR=$(ls -d /opt/intel/oneapi/compiler/*/bin | head -1)
+          echo "$ONEAPI_COMPILER_DIR" >> $GITHUB_PATH
+          # Also set LD_LIBRARY_PATH for runtime libraries
+          ONEAPI_LIB_DIR=$(ls -d /opt/intel/oneapi/compiler/*/lib | head -1)
+          echo "LD_LIBRARY_PATH=$ONEAPI_LIB_DIR:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          # Verify installation
+          $ONEAPI_COMPILER_DIR/icpx --version
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -91,13 +97,7 @@ jobs:
       - name: Build PETSc with STRUMPACK + ${{ matrix.gpu }}
         env:
           GPU_BACKEND: ${{ matrix.gpu }}
-        shell: bash
         run: |
-          # Source oneAPI environment if needed (sets many env vars for SYCL)
-          if [ "${{ matrix.gpu }}" = "sycl" ]; then
-            source /opt/intel/oneapi/setvars.sh
-          fi
-
           julia --project=. -e '
             using SafePETSc
             gpu = ENV["GPU_BACKEND"]
@@ -117,6 +117,18 @@ jobs:
             @assert SafePETSc.petsc_strumpack_available() "STRUMPACK build not found!"
             println("✓ STRUMPACK library found at: ", SafePETSc.petsc_strumpack_library_path())
           '
+
+      - name: Configure MPI.jl to use system MPICH
+        run: |
+          # PETSc was built with system MPICH, so MPI.jl must use system MPICH too
+          julia --project=. -e '
+            using MPIPreferences
+            MPIPreferences.use_system_binary()
+          '
+          # Delete compiled caches to force recompilation with new MPI
+          rm -rf ~/.julia/compiled/v1.*/MPI
+          rm -rf ~/.julia/compiled/v1.*/PETSc
+          rm -rf ~/.julia/compiled/v1.*/SafePETSc
 
       - name: Run basic tests with GPU-enabled STRUMPACK
         run: |

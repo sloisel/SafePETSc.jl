@@ -423,15 +423,25 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
         end
     end
     if with_hip
-        push!(configure_flags, "--with-hip")
+        # Explicitly specify hipcc as the HIP compiler (must be in PATH)
+        push!(configure_flags, "--with-hip", "--with-hipc=hipcc")
         if verbose
-            @info "Enabling HIP support for AMD GPUs"
+            @info "Enabling HIP support for AMD GPUs (using hipcc)"
         end
     end
     if with_sycl
-        push!(configure_flags, "--with-sycl")
+        # Explicitly specify icpx as the SYCL compiler (must be in PATH)
+        push!(configure_flags, "--with-sycl", "--with-syclc=icpx")
         if verbose
-            @info "Enabling SYCL support for Intel GPUs"
+            @info "Enabling SYCL support for Intel GPUs (using icpx)"
+        end
+    end
+
+    # SLATE is required for GPU-accelerated STRUMPACK (GPU-enabled ScaLAPACK alternative)
+    if with_cuda || with_hip || with_sycl
+        push!(configure_flags, "--download-slate")
+        if verbose
+            @info "Adding SLATE for GPU-accelerated ScaLAPACK"
         end
     end
 
