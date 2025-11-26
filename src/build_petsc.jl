@@ -438,10 +438,11 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
     end
 
     # SLATE is required for GPU-accelerated STRUMPACK (GPU-enabled ScaLAPACK alternative)
+    # SLATE requires OpenMP support
     if with_cuda || with_hip || with_sycl
-        push!(configure_flags, "--download-slate")
+        push!(configure_flags, "--with-openmp", "--download-slate")
         if verbose
-            @info "Adding SLATE for GPU-accelerated ScaLAPACK"
+            @info "Adding OpenMP and SLATE for GPU-accelerated ScaLAPACK"
         end
     end
 
