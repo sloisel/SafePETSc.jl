@@ -105,7 +105,10 @@ jobs:
             using Pkg
             Pkg.add("MPIPreferences")
             using MPIPreferences
-            MPIPreferences.use_system_binary(library_names=["libmpich"])
+            MPIPreferences.use_system_binary(
+              library_names=["libmpich"],
+              mpiexec="/usr/bin/mpiexec"
+            )
             # Force MPI to rebuild with new preferences
             Pkg.build("MPI"; verbose=true)
           '
@@ -115,6 +118,8 @@ jobs:
             println("MPI library: ", MPI.libmpi)
             println("mpiexec: ", MPI.mpiexec())
           '
+          # Show LocalPreferences.toml
+          cat LocalPreferences.toml || true
 
       - name: Build package
         uses: julia-actions/julia-buildpkg@v1
