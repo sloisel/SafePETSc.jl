@@ -122,8 +122,14 @@ jobs:
         id: find-mpi
         run: |
           # Find the actual libmpi.so path for MPICH
-          MPI_LIB=$(ldconfig -p | grep libmpi.so.12 | head -1 | awk '{print $NF}')
-          echo "MPI library: $MPI_LIB"
+          echo "Available MPI libraries:"
+          ldconfig -p | grep -i mpi
+          # MPICH uses libmpi.so without version number, or libmpi.so.0
+          MPI_LIB=$(ldconfig -p | grep "libmpi.so " | head -1 | awk '{print $NF}')
+          if [ -z "$MPI_LIB" ]; then
+            MPI_LIB=$(ldconfig -p | grep "libmpi.so.0" | head -1 | awk '{print $NF}')
+          fi
+          echo "Selected MPI library: $MPI_LIB"
           echo "mpi_lib=$MPI_LIB" >> $GITHUB_OUTPUT
 
       - name: Run tests with STRUMPACK
