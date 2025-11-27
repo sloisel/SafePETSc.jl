@@ -114,5 +114,6 @@ jobs:
         env:
           JULIA_PETSC_LIBRARY: /tmp/petsc_strumpack/lib/libpetsc.so
           LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
+          MPIEXEC_PATH: /usr/bin/mpiexec
         run: |
           julia --project=. -e 'using Pkg; Pkg.test()'
