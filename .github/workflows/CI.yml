@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 30
 
     env:
-      PETSC_RELEASE_TAG: petsc-3.22.0-cuda-20251127
+      PETSC_RELEASE_TAG: petsc-strumpack
 
     steps:
       - uses: actions/checkout@v4

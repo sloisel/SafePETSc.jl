@@ -59,13 +59,18 @@ jobs:
           echo "install_dir=$INSTALL_DIR" >> $GITHUB_OUTPUT
           echo "lib_path=$LIB_PATH" >> $GITHUB_OUTPUT
 
-          # Create version tag
+          # Use stable tag name (no date) so CI doesn't need updating
           PETSC_VERSION=$(grep 'PETSC_VERSION' src/build_petsc.jl | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          DATE=$(date +%Y%m%d)
-          CUDA_SUFFIX=${{ inputs.with_cuda && '-cuda' || '' }}
-          TAG="petsc-${PETSC_VERSION}${CUDA_SUFFIX}-${DATE}"
+          TAG="petsc-strumpack"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "petsc_version=$PETSC_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Delete existing release
+        run: |
+          gh release delete petsc-strumpack --yes || true
+          git push origin :refs/tags/petsc-strumpack || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package build
         run: |
