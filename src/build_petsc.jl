@@ -98,11 +98,14 @@ end
         verbose::Bool=true
     ) -> String
 
-Download and build PETSc with both STRUMPACK and MUMPS solvers.
+Download and build PETSc with STRUMPACK solver.
+This function downloads PETSc source code and compiles it with STRUMPACK enabled
+for GPU acceleration and better MPI scalability. The build is cached, so subsequent
+calls will skip the build if the library already exists (unless `rebuild=true`).
 
-This function downloads PETSc source code and compiles it with both solvers enabled,
-giving users the choice of direct solver. The build is cached, so subsequent calls
-will skip the build if the library already exists (unless `rebuild=true`).
+Note: SafePETSc also supports MUMPS via the default PETSc_jll (zero setup required).
+This build function is only needed if you want STRUMPACK's GPU acceleration or
+compression features.
 
 # Prerequisites
 **System MPI is required.** The JLL-provided MPI wrappers have broken paths.
@@ -153,16 +156,11 @@ SafePETSc.build_petsc_strumpack(with_cuda=true)
 # Follow the prompts to configure your startup.jl, then restart Julia
 ```
 
-# Solver Selection
-After setup, choose your solver via PETSc options:
+# STRUMPACK Options
+Configure STRUMPACK via PETSc options:
 ```julia
-# STRUMPACK (GPU acceleration, better MPI scalability)
-petsc_options_insert_string("-pc_factor_mat_solver_type strumpack")
-petsc_options_insert_string("-mat_strumpack_compression BLR")
-petsc_options_insert_string("-mat_strumpack_gpu")  # Enable GPU if built with GPU support
-
-# MUMPS (proven direct solver)
-petsc_options_insert_string("-pc_factor_mat_solver_type mumps")
+petsc_options_insert_string("-mat_strumpack_compression BLR")  # Enable BLR compression
+petsc_options_insert_string("-mat_strumpack_gpu")  # Enable GPU if built with CUDA
 ```
 
 # HPC Clusters
@@ -351,9 +349,8 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
 
     # Add common dependencies
     append!(configure_flags, [
-        # Solvers
+        # Solver
         "--download-strumpack",
-        "--download-mumps",
         # Dependencies
         "--download-metis",
         "--download-parmetis",
@@ -456,7 +453,7 @@ end
 function _print_success_message(lib_path::String)
     @info """
     ╔══════════════════════════════════════════════════════════════════╗
-    ║  PETSc with STRUMPACK + MUMPS is ready!                          ║
+    ║  PETSc with STRUMPACK is ready!                                  ║
     ╚══════════════════════════════════════════════════════════════════╝
 
     Library path: $lib_path
@@ -472,14 +469,11 @@ function _print_success_message(lib_path::String)
         export JULIA_PETSC_LIBRARY="$lib_path"
     ─────────────────────────────────────────────────────────────────────
 
-    Solver Selection (after restart):
+    STRUMPACK Options (after restart):
 
-      STRUMPACK (GPU acceleration, better MPI scalability):
-        petsc_options_insert_string("-pc_factor_mat_solver_type strumpack")
         petsc_options_insert_string("-mat_strumpack_compression BLR")
-        petsc_options_insert_string("-mat_strumpack_gpu")
+        petsc_options_insert_string("-mat_strumpack_gpu")  # if built with CUDA
 
-      MUMPS (proven direct solver):
-        petsc_options_insert_string("-pc_factor_mat_solver_type mumps")
+    To use MUMPS instead, unset JULIA_PETSC_LIBRARY to use the default PETSc_jll.
     """)
 end

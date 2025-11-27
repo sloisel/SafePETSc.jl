@@ -8,7 +8,7 @@ SafePETSc supports both MUMPS (default) and STRUMPACK as sparse direct solvers. 
 |---------|-----------------|-----------|
 | Included in PETSc_jll | Yes | No (requires build) |
 | GPU Acceleration | Limited | CUDA |
-| MPI Scalability | Good | Better |
+| MPI Scalability | Good | Excellent |
 | Compression | BLR | BLR, HSS, HODLR |
 | Setup | None | One-time build |
 
@@ -61,7 +61,7 @@ MPIPreferences.use_system_binary()
 
 ### One-Time Build
 
-STRUMPACK requires building PETSc from source with both STRUMPACK and MUMPS enabled:
+STRUMPACK requires building PETSc from source:
 
 ```julia
 using SafePETSc
