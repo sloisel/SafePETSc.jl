@@ -88,7 +88,8 @@ jobs:
           echo "Downloading $PETSC_RELEASE_TAG..."
           gh release download $PETSC_RELEASE_TAG --pattern "*.tar.gz" --dir /tmp
           echo "Extracting..."
-          cd /tmp && tar -xzf ${PETSC_RELEASE_TAG}.tar.gz
+          mkdir -p /tmp/petsc_strumpack
+          cd /tmp/petsc_strumpack && tar -xzf /tmp/${PETSC_RELEASE_TAG}.tar.gz
           echo "Done. Library at /tmp/petsc_strumpack/lib/libpetsc.so"
           ls -la /tmp/petsc_strumpack/lib/
         env:

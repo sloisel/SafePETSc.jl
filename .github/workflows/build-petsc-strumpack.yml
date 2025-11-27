@@ -72,9 +72,13 @@ jobs:
           INSTALL_DIR="${{ steps.build-info.outputs.install_dir }}"
           TAG="${{ steps.build-info.outputs.tag }}"
 
-          # Create tarball of the entire install directory
-          cd $(dirname $INSTALL_DIR)
-          tar -czvf ${TAG}.tar.gz $(basename $INSTALL_DIR)
+          # Only package lib/ directory (runtime libraries only, skip headers/docs/source)
+          cd $INSTALL_DIR
+          echo "Contents of lib/:"
+          ls -lh lib/
+          echo ""
+          echo "Creating tarball of lib/ only..."
+          tar -czvf ${TAG}.tar.gz lib/
           mv ${TAG}.tar.gz $GITHUB_WORKSPACE/
 
           echo "Created: ${TAG}.tar.gz"
