@@ -101,17 +101,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Configure MPI to use bundled MPICH
+      - name: Configure MPI to use bundled Open MPI
         run: |
-          # Configure MPI.jl to use the bundled MPICH from the tarball
+          # Configure MPI.jl to use the bundled Open MPI from the tarball
           # This ensures ABI compatibility with the pre-built PETSc
           julia --project=. -e "
             using Pkg
             Pkg.add(\"MPIPreferences\")
             using MPIPreferences
-            # Use bundled libmpi from tarball
+            # Use bundled libmpi from tarball - must provide extra_paths
             MPIPreferences.use_system_binary(
               library_names=[\"libmpi\"],
+              extra_paths=[\"/tmp/petsc_strumpack/lib\"],
               mpiexec=\"/tmp/petsc_strumpack/bin/mpiexec\"
             )
             # Force MPI to rebuild with new preferences
