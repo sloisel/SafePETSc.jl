@@ -47,7 +47,8 @@ jobs:
             using SafePETSc
             with_cuda = ENV["WITH_CUDA"] == "true"
             println("Building PETSc with STRUMPACK", with_cuda ? " + CUDA" : "", "...")
-            SafePETSc.build_petsc_strumpack(with_cuda=with_cuda, verbose=true)
+            # Always rebuild to ensure fresh build with current code
+            SafePETSc.build_petsc_strumpack(with_cuda=with_cuda, verbose=true, rebuild=true)
           ' < /dev/null
 
       - name: Get build info
