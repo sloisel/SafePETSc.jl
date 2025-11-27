@@ -311,7 +311,7 @@ function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_
     configure_flags = [
         "--prefix=$install_dir",
         "--download-mpich",  # Bundle MPICH for ABI compatibility across systems
-        "--with-fc=0",       # Disable Fortran (not needed for basic STRUMPACK)
+        "--with-fc=gfortran", # Fortran needed for fblaslapack
         "--with-debugging=$(with_debugging ? 1 : 0)",
         "--with-shared-libraries=1",
     ]
