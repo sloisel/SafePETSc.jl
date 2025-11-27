@@ -307,15 +307,17 @@ end
 function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_debugging::Bool,
                                      with_cuda::Bool, verbose::Bool)
     # Build configuration flags - includes both STRUMPACK and MUMPS
-    # Use system MPI (requires: apt install mpich libmpich-dev OR brew install mpich)
+    # Use system MPI via compiler wrappers (requires: apt install mpich libmpich-dev OR brew install mpich)
     configure_flags = [
         "--prefix=$install_dir",
-        "--with-fc=gfortran", # Fortran needed for fblaslapack
+        "--with-cc=mpicc",      # Use MPI C compiler wrapper
+        "--with-cxx=mpicxx",    # Use MPI C++ compiler wrapper
+        "--with-fc=mpif90",     # Use MPI Fortran compiler wrapper (needed for fblaslapack)
         "--with-debugging=$(with_debugging ? 1 : 0)",
         "--with-shared-libraries=1",
     ]
     if verbose
-        @info "Building with system MPI"
+        @info "Building with system MPI (using mpicc/mpicxx/mpif90 wrappers)"
     end
 
     # Add common dependencies
