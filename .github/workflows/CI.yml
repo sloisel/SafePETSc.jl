@@ -99,6 +99,8 @@ jobs:
         run: |
           # PETSc STRUMPACK was built with system MPICH, so MPI.jl must use it too
           julia --project=. -e '
+            using Pkg
+            Pkg.add("MPIPreferences")
             using MPIPreferences
             MPIPreferences.use_system_binary()
           '
