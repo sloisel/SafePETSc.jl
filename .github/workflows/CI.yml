@@ -98,12 +98,16 @@ jobs:
       - name: Configure MPI to use system MPICH
         run: |
           # PETSc STRUMPACK was built with system MPICH, so MPI.jl must use it too
+          # Clear MPI cache to force recompilation with new preferences
           julia --project=. -e '
             using Pkg
             Pkg.add("MPIPreferences")
             using MPIPreferences
             MPIPreferences.use_system_binary()
           '
+          # Remove cached MPI compilation to force recompile with system MPI
+          rm -rf ~/.julia/compiled/v1.*/MPI
+          rm -rf ~/.julia/compiled/v1.*/MPIPreferences
 
       - name: Build package
         uses: julia-actions/julia-buildpkg@v1
