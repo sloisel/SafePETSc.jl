@@ -71,10 +71,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install MPI and CUDA runtime
+      - name: Install CUDA runtime
         run: |
           sudo apt-get update
-          sudo apt-get install -y mpich libmpich-dev nvidia-cuda-toolkit
+          # Note: MPI is bundled with PETSc STRUMPACK tarball, no system MPI needed
+          sudo apt-get install -y nvidia-cuda-toolkit
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -97,21 +98,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Configure MPI to use system MPICH
+      - name: Configure MPI to use bundled MPICH
         run: |
-          # PETSc STRUMPACK was built with system MPICH, so MPI.jl must use it too
-          # IMPORTANT: MPICH uses libmpich.so, NOT libmpi.so (that's OpenMPI)
-          julia --project=. -e '
+          # PETSc STRUMPACK tarball includes bundled MPICH (from --download-mpich)
+          # Configure MPI.jl to use the bundled libmpi and mpiexec
+          PETSC_DIR=/tmp/petsc_strumpack
+
+          # Find the bundled libmpi (MPICH names it libmpi when downloaded by PETSc)
+          echo "Looking for bundled MPI libraries..."
+          ls -la $PETSC_DIR/lib/libmpi* || echo "No libmpi* found"
+          ls -la $PETSC_DIR/lib/libmpich* || echo "No libmpich* found"
+
+          echo "Looking for bundled mpiexec..."
+          ls -la $PETSC_DIR/bin/mpiexec* || echo "No mpiexec found"
+
+          julia --project=. -e "
             using Pkg
-            Pkg.add("MPIPreferences")
+            Pkg.add(\"MPIPreferences\")
             using MPIPreferences
             MPIPreferences.use_system_binary(
-              library_names=["libmpich"],
-              mpiexec="/usr/bin/mpiexec"
+              library_names=[\"libmpi\"],
+              mpiexec=\"/tmp/petsc_strumpack/bin/mpiexec\"
             )
             # Force MPI to rebuild with new preferences
-            Pkg.build("MPI"; verbose=true)
-          '
+            Pkg.build(\"MPI\"; verbose=true)
+          "
           # Verify MPI configuration
           julia --project=. -e '
             using MPI
@@ -128,7 +139,7 @@ jobs:
         env:
           JULIA_PETSC_LIBRARY: /tmp/petsc_strumpack/lib/libpetsc.so
           LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
-          MPIEXEC_PATH: /usr/bin/mpiexec
+          MPIEXEC_PATH: /tmp/petsc_strumpack/bin/mpiexec
         run: |
           # Run tests directly instead of Pkg.test() to preserve LocalPreferences.toml
           # (Pkg.test() creates a fresh temp environment that loses MPI preferences)

@@ -306,45 +306,17 @@ end
 
 function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_debugging::Bool,
                                      with_cuda::Bool, verbose::Bool)
-    # Check for system MPI (required)
-    if !_check_system_mpi()
-        error("""
-        No working system MPI found!
-
-        The JLL-provided MPI wrappers have broken paths and cannot be used for building.
-        You must install a system MPI first:
-
-          macOS:  brew install open-mpi
-          Ubuntu: sudo apt-get install libopenmpi-dev
-
-        Then configure MPI.jl to use system MPI:
-
-          julia> using MPIPreferences
-          julia> MPIPreferences.use_system_binary()
-          # Restart Julia
-
-        After that, run build_petsc_strumpack() again.
-        """)
-    end
-
-    # Check for Fortran MPI wrapper
-    has_mpif90 = try
-        success(`which mpif90`)
-    catch
-        false
-    end
-
     # Build configuration flags - includes both STRUMPACK and MUMPS
+    # Use --download-mpich to bundle MPI with PETSc (ensures ABI compatibility)
     configure_flags = [
         "--prefix=$install_dir",
-        "--with-cc=mpicc",
-        "--with-cxx=mpicxx",
-        has_mpif90 ? "--with-fc=mpif90" : "--with-fc=0",
+        "--download-mpich",  # Bundle MPICH for ABI compatibility across systems
+        "--with-fc=0",       # Disable Fortran (not needed for basic STRUMPACK)
         "--with-debugging=$(with_debugging ? 1 : 0)",
         "--with-shared-libraries=1",
     ]
     if verbose
-        @info "Using system MPI compilers (mpicc, mpicxx)"
+        @info "Building with bundled MPICH (--download-mpich)"
     end
 
     # Add common dependencies

@@ -21,7 +21,8 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y mpich libmpich-dev gfortran cmake python3 bison
+          # Note: No system MPI needed - PETSc will download its own MPICH
+          sudo apt-get install -y gfortran cmake python3 bison
 
       - name: Install CUDA toolkit
         if: inputs.with_cuda
@@ -78,13 +79,17 @@ jobs:
           INSTALL_DIR="${{ steps.build-info.outputs.install_dir }}"
           TAG="${{ steps.build-info.outputs.tag }}"
 
-          # Only package lib/ directory (runtime libraries only, skip headers/docs/source)
+          # Package lib/ and bin/ directories (libraries + mpiexec)
+          # With --download-mpich, PETSc bundles MPICH which includes mpiexec in bin/
           cd $INSTALL_DIR
           echo "Contents of lib/:"
           ls -lh lib/
           echo ""
-          echo "Creating tarball of lib/ only..."
-          tar -czvf ${TAG}.tar.gz lib/
+          echo "Contents of bin/:"
+          ls -lh bin/ || echo "No bin/ directory"
+          echo ""
+          echo "Creating tarball of lib/ and bin/..."
+          tar -czvf ${TAG}.tar.gz lib/ bin/
           mv ${TAG}.tar.gz $GITHUB_WORKSPACE/
 
           echo "Created: ${TAG}.tar.gz"
