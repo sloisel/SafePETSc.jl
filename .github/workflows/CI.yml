@@ -111,5 +111,6 @@ jobs:
       - name: Run tests with STRUMPACK
         env:
           JULIA_PETSC_LIBRARY: /tmp/petsc_strumpack/lib/libpetsc.so
+          LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
         run: |
           julia --project=. -e 'using Pkg; Pkg.test()'
