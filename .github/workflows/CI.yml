@@ -89,8 +89,7 @@ jobs:
           gh release download $PETSC_RELEASE_TAG --pattern "*.tar.gz" --dir /tmp
           echo "Extracting..."
           mkdir -p /tmp/petsc_strumpack
-          # Use --strip-components=1 to remove petsc_strumpack/ prefix from tarball
-          tar -xzf /tmp/${PETSC_RELEASE_TAG}.tar.gz -C /tmp/petsc_strumpack --strip-components=1
+          tar -xzf /tmp/${PETSC_RELEASE_TAG}.tar.gz -C /tmp/petsc_strumpack
           echo "Done. Library at /tmp/petsc_strumpack/lib/libpetsc.so"
           ls -la /tmp/petsc_strumpack/lib/
         env:
