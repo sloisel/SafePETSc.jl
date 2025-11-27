@@ -79,13 +79,16 @@ jobs:
           INSTALL_DIR="${{ steps.build-info.outputs.install_dir }}"
           TAG="${{ steps.build-info.outputs.tag }}"
 
-          # Package lib/ directory only (uses system MPI, no bundled mpiexec)
+          # Package lib/ and bin/ directories (bundled MPICH includes mpiexec)
           cd $INSTALL_DIR
           echo "Contents of lib/:"
           ls -lh lib/
           echo ""
-          echo "Creating tarball of lib/..."
-          tar -czvf ${TAG}.tar.gz lib/
+          echo "Contents of bin/:"
+          ls -lh bin/
+          echo ""
+          echo "Creating tarball of lib/ and bin/..."
+          tar -czvf ${TAG}.tar.gz lib/ bin/
           mv ${TAG}.tar.gz $GITHUB_WORKSPACE/
 
           echo "Created: ${TAG}.tar.gz"
@@ -97,26 +100,25 @@ jobs:
           tag_name: ${{ steps.build-info.outputs.tag }}
           name: PETSc ${{ steps.build-info.outputs.petsc_version }} with STRUMPACK${{ inputs.with_cuda && ' + CUDA' || '' }}
           body: |
-            Pre-built PETSc library with STRUMPACK solver.
+            Pre-built PETSc library with STRUMPACK solver and bundled MPICH.
 
             **Build Configuration:**
             - PETSc version: ${{ steps.build-info.outputs.petsc_version }}
             - STRUMPACK: enabled
             - CUDA: ${{ inputs.with_cuda && 'enabled' || 'disabled' }}
             - Platform: Linux x86_64 (Ubuntu)
-            - MPI: System MPICH (requires `apt install mpich libmpich-dev`)
+            - MPI: Bundled MPICH (self-contained, no system MPI required)
 
             **Usage:**
             ```bash
-            # Install system MPICH (required)
-            sudo apt install mpich libmpich-dev
-
             # Download and extract
             wget https://github.com/${{ github.repository }}/releases/download/${{ steps.build-info.outputs.tag }}/${{ steps.build-info.outputs.tag }}.tar.gz
             tar -xzf ${{ steps.build-info.outputs.tag }}.tar.gz
 
-            # Set environment variable before starting Julia
-            export JULIA_PETSC_LIBRARY=/path/to/petsc_strumpack/lib/libpetsc.so
+            # Set environment variables before starting Julia
+            export JULIA_PETSC_LIBRARY=/path/to/lib/libpetsc.so
+            export LD_LIBRARY_PATH=/path/to/lib:$LD_LIBRARY_PATH
+            export MPIEXEC_PATH=/path/to/bin/mpiexec
             ```
           files: ${{ steps.build-info.outputs.tag }}.tar.gz
           draft: false
