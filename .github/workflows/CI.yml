@@ -95,6 +95,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Configure MPI to use system MPICH
+        run: |
+          # PETSc STRUMPACK was built with system MPICH, so MPI.jl must use it too
+          julia --project=. -e '
+            using MPIPreferences
+            MPIPreferences.use_system_binary()
+          '
+
       - name: Build package
         uses: julia-actions/julia-buildpkg@v1
 
