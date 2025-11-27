@@ -100,11 +100,12 @@ jobs:
       - name: Configure MPI to use system MPICH
         run: |
           # PETSc STRUMPACK was built with system MPICH, so MPI.jl must use it too
+          # IMPORTANT: MPICH uses libmpich.so, NOT libmpi.so (that's OpenMPI)
           julia --project=. -e '
             using Pkg
             Pkg.add("MPIPreferences")
             using MPIPreferences
-            MPIPreferences.use_system_binary()
+            MPIPreferences.use_system_binary(library_names=["libmpich"])
             # Force MPI to rebuild with new preferences
             Pkg.build("MPI"; verbose=true)
           '
@@ -118,25 +119,10 @@ jobs:
       - name: Build package
         uses: julia-actions/julia-buildpkg@v1
 
-      - name: Find system MPI library
-        id: find-mpi
-        run: |
-          # Find the actual libmpich.so path (MPICH uses libmpich, not libmpi)
-          echo "Available MPI libraries:"
-          ldconfig -p | grep -i mpi
-          # MPICH uses libmpich.so, not libmpi.so
-          MPI_LIB=$(ldconfig -p | grep "libmpich.so " | head -1 | awk '{print $NF}')
-          if [ -z "$MPI_LIB" ]; then
-            MPI_LIB=$(ldconfig -p | grep "libmpich.so.12" | head -1 | awk '{print $NF}')
-          fi
-          echo "Selected MPI library: $MPI_LIB"
-          echo "mpi_lib=$MPI_LIB" >> $GITHUB_OUTPUT
-
       - name: Run tests with STRUMPACK
         env:
           JULIA_PETSC_LIBRARY: /tmp/petsc_strumpack/lib/libpetsc.so
           LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
           MPIEXEC_PATH: /usr/bin/mpiexec
-          LD_PRELOAD: ${{ steps.find-mpi.outputs.mpi_lib }}
         run: |
           julia --project=. -e 'using Pkg; Pkg.test()'
