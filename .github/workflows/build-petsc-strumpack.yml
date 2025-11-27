@@ -100,14 +100,14 @@ jobs:
           tag_name: ${{ steps.build-info.outputs.tag }}
           name: PETSc ${{ steps.build-info.outputs.petsc_version }} with STRUMPACK${{ inputs.with_cuda && ' + CUDA' || '' }}
           body: |
-            Pre-built PETSc library with STRUMPACK solver and bundled MPICH.
+            Pre-built PETSc library with STRUMPACK solver and bundled Open MPI.
 
             **Build Configuration:**
             - PETSc version: ${{ steps.build-info.outputs.petsc_version }}
             - STRUMPACK: enabled
             - CUDA: ${{ inputs.with_cuda && 'enabled' || 'disabled' }}
             - Platform: Linux x86_64 (Ubuntu)
-            - MPI: Bundled MPICH (self-contained, no system MPI required)
+            - MPI: Bundled Open MPI (self-contained, no system MPI required)
 
             **Usage:**
             ```bash

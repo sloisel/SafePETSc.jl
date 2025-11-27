@@ -307,16 +307,16 @@ end
 function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_debugging::Bool,
                                      with_cuda::Bool, verbose::Bool)
     # Build configuration flags - includes both STRUMPACK and MUMPS
-    # Bundle MPICH with PETSc for ABI compatibility (avoids mismatch between build/test environments)
+    # Bundle Open MPI with PETSc for ABI compatibility (avoids mismatch between build/test environments)
     configure_flags = [
         "--prefix=$install_dir",
-        "--download-mpich",     # Bundle MPICH for guaranteed ABI compatibility
+        "--download-openmpi",   # Bundle Open MPI for guaranteed ABI compatibility
         "--with-fc=gfortran",   # Fortran needed for fblaslapack
         "--with-debugging=$(with_debugging ? 1 : 0)",
         "--with-shared-libraries=1",
     ]
     if verbose
-        @info "Building with bundled MPICH (for ABI compatibility)"
+        @info "Building with bundled Open MPI (for ABI compatibility)"
     end
 
     # Add common dependencies
