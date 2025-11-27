@@ -105,6 +105,14 @@ jobs:
             Pkg.add("MPIPreferences")
             using MPIPreferences
             MPIPreferences.use_system_binary()
+            # Force MPI to rebuild with new preferences
+            Pkg.build("MPI"; verbose=true)
+          '
+          # Verify MPI configuration
+          julia --project=. -e '
+            using MPI
+            println("MPI library: ", MPI.libmpi)
+            println("mpiexec: ", MPI.mpiexec())
           '
 
       - name: Build package
