@@ -125,4 +125,6 @@ jobs:
           LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
           MPIEXEC_PATH: /usr/bin/mpiexec
         run: |
-          julia --project=. -e 'using Pkg; Pkg.test()'
+          # Run tests directly instead of Pkg.test() to preserve LocalPreferences.toml
+          # (Pkg.test() creates a fresh temp environment that loses MPI preferences)
+          julia --project=. test/runtests.jl
