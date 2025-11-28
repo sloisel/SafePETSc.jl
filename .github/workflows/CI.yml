@@ -102,6 +102,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Configure MPI to use bundled Open MPI
+        env:
+          LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
         run: |
           # Write LocalPreferences.toml directly to configure MPI.jl
           # This avoids MPIPreferences validation issues
