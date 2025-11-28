@@ -102,11 +102,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Configure MPI to use bundled Open MPI
-        env:
-          LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
         run: |
           # Write LocalPreferences.toml directly to configure MPI.jl
-          # This avoids MPIPreferences validation issues
+          # This will be picked up by julia-buildpkg
           cat > LocalPreferences.toml << 'EOF'
           [MPIPreferences]
           _format = "1.0"
@@ -119,20 +117,21 @@ jobs:
           sed -i 's/^[[:space:]]*//' LocalPreferences.toml
           echo "LocalPreferences.toml:"
           cat LocalPreferences.toml
-          # Build MPI with new preferences
-          julia --project=. -e '
-            using Pkg
-            Pkg.build("MPI"; verbose=true)
-          '
-          # Verify MPI configuration
+
+      - name: Build package
+        env:
+          LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
+        uses: julia-actions/julia-buildpkg@v1
+
+      - name: Verify MPI configuration
+        env:
+          LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
+        run: |
           julia --project=. -e '
             using MPI
             println("MPI library: ", MPI.libmpi)
             println("mpiexec: ", MPI.mpiexec())
           '
-
-      - name: Build package
-        uses: julia-actions/julia-buildpkg@v1
 
       - name: Run tests with STRUMPACK
         env:
