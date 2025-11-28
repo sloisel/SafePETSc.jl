@@ -113,6 +113,8 @@ jobs:
           libmpi = "/tmp/petsc_strumpack/lib/libmpi.so"
           mpiexec = "/tmp/petsc_strumpack/bin/mpiexec"
           EOF
+          # Remove leading whitespace from TOML (heredoc includes YAML indentation)
+          sed -i 's/^[[:space:]]*//' LocalPreferences.toml
           echo "LocalPreferences.toml:"
           cat LocalPreferences.toml
           # Build MPI with new preferences
