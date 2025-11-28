@@ -138,6 +138,7 @@ jobs:
           JULIA_PETSC_LIBRARY: /tmp/petsc_strumpack/lib/libpetsc.so
           LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
           MPIEXEC_PATH: /tmp/petsc_strumpack/bin/mpiexec
+          OPAL_PREFIX: /tmp/petsc_strumpack
         run: |
           # Run tests directly instead of Pkg.test() to preserve LocalPreferences.toml
           # (Pkg.test() creates a fresh temp environment that loses MPI preferences)
