@@ -79,7 +79,7 @@ jobs:
           INSTALL_DIR="${{ steps.build-info.outputs.install_dir }}"
           TAG="${{ steps.build-info.outputs.tag }}"
 
-          # Package lib/ and bin/ directories (bundled MPICH includes mpiexec)
+          # Package lib/, bin/, and share/ directories (Open MPI needs share/ for runtime)
           cd $INSTALL_DIR
           echo "Contents of lib/:"
           ls -lh lib/
@@ -87,8 +87,11 @@ jobs:
           echo "Contents of bin/:"
           ls -lh bin/
           echo ""
-          echo "Creating tarball of lib/ and bin/..."
-          tar -czvf ${TAG}.tar.gz lib/ bin/
+          echo "Contents of share/:"
+          ls -lh share/ || echo "No share directory"
+          echo ""
+          echo "Creating tarball of lib/, bin/, and share/..."
+          tar -czvf ${TAG}.tar.gz lib/ bin/ share/
           mv ${TAG}.tar.gz $GITHUB_WORKSPACE/
 
           echo "Created: ${TAG}.tar.gz"
