@@ -139,6 +139,10 @@ jobs:
           LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
           MPIEXEC_PATH: /tmp/petsc_strumpack/bin/mpiexec
           OPAL_PREFIX: /tmp/petsc_strumpack
+          # Open MPI 5.x MCA parameters for CI environment
+          OMPI_MCA_plm: fork
+          OMPI_MCA_btl: tcp,self
+          PRTE_MCA_plm: fork
         run: |
           # Run tests directly instead of Pkg.test() to preserve LocalPreferences.toml
           # (Pkg.test() creates a fresh temp environment that loses MPI preferences)
