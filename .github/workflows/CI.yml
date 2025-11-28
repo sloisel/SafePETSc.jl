@@ -109,10 +109,9 @@ jobs:
             using Pkg
             Pkg.add(\"MPIPreferences\")
             using MPIPreferences
-            # Use bundled libmpi from tarball - must provide extra_paths
+            # Use bundled libmpi from tarball - use full path to library
             MPIPreferences.use_system_binary(
-              library_names=[\"libmpi\"],
-              extra_paths=[\"/tmp/petsc_strumpack/lib\"],
+              library_names=[\"/tmp/petsc_strumpack/lib/libmpi.so\"],
               mpiexec=\"/tmp/petsc_strumpack/bin/mpiexec\"
             )
             # Force MPI to rebuild with new preferences
