@@ -101,14 +101,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Configure MPI to use bundled Open MPI
+      - name: Configure MPI to use bundled MPICH
         run: |
           # Write LocalPreferences.toml directly to configure MPI.jl
           # This will be picked up by julia-buildpkg
           cat > LocalPreferences.toml << 'EOF'
           [MPIPreferences]
           _format = "1.0"
-          abi = "OpenMPI"
+          abi = "MPICH"
           binary = "system"
           libmpi = "/tmp/petsc_strumpack/lib/libmpi.so"
           mpiexec = "/tmp/petsc_strumpack/bin/mpiexec"
@@ -138,11 +138,6 @@ jobs:
           JULIA_PETSC_LIBRARY: /tmp/petsc_strumpack/lib/libpetsc.so
           LD_LIBRARY_PATH: /tmp/petsc_strumpack/lib
           MPIEXEC_PATH: /tmp/petsc_strumpack/bin/mpiexec
-          OPAL_PREFIX: /tmp/petsc_strumpack
-          # Open MPI 5.x MCA parameters for CI environment
-          OMPI_MCA_plm: fork
-          OMPI_MCA_btl: tcp,self
-          PRTE_MCA_plm: fork
         run: |
           # Run tests directly instead of Pkg.test() to preserve LocalPreferences.toml
           # (Pkg.test() creates a fresh temp environment that loses MPI preferences)
