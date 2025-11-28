@@ -103,28 +103,29 @@ jobs:
 
       - name: Configure MPI to use bundled Open MPI
         run: |
-          # Configure MPI.jl to use the bundled Open MPI from the tarball
-          # This ensures ABI compatibility with the pre-built PETSc
-          julia --project=. -e "
+          # Write LocalPreferences.toml directly to configure MPI.jl
+          # This avoids MPIPreferences validation issues
+          cat > LocalPreferences.toml << 'EOF'
+          [MPIPreferences]
+          _format = "1.0"
+          abi = "OpenMPI"
+          binary = "system"
+          libmpi = "/tmp/petsc_strumpack/lib/libmpi.so"
+          mpiexec = "/tmp/petsc_strumpack/bin/mpiexec"
+          EOF
+          echo "LocalPreferences.toml:"
+          cat LocalPreferences.toml
+          # Build MPI with new preferences
+          julia --project=. -e '
             using Pkg
-            Pkg.add(\"MPIPreferences\")
-            using MPIPreferences
-            # Use bundled libmpi from tarball - use full path to library
-            MPIPreferences.use_system_binary(
-              library_names=[\"/tmp/petsc_strumpack/lib/libmpi.so\"],
-              mpiexec=\"/tmp/petsc_strumpack/bin/mpiexec\"
-            )
-            # Force MPI to rebuild with new preferences
-            Pkg.build(\"MPI\"; verbose=true)
-          "
+            Pkg.build("MPI"; verbose=true)
+          '
           # Verify MPI configuration
           julia --project=. -e '
             using MPI
             println("MPI library: ", MPI.libmpi)
             println("mpiexec: ", MPI.mpiexec())
           '
-          # Show LocalPreferences.toml
-          cat LocalPreferences.toml || true
 
       - name: Build package
         uses: julia-actions/julia-buildpkg@v1
