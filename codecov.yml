@@ -1,0 +1,5 @@
+# Codecov configuration
+# https://docs.codecov.com/docs/codecovyml-reference
+
+ignore:
+  - "tools/**"

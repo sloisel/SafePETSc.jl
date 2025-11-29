@@ -267,7 +267,7 @@ export BlockProduct, calculate!
 export io0
 export map_rows
 export own_row
-export build_petsc_strumpack, petsc_strumpack_library_path, petsc_strumpack_available, has_strumpack
+export has_strumpack
 
 """
     io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)
@@ -374,7 +374,36 @@ include("mat.jl")
 include("ksp.jl")
 include("blockproduct.jl")
 include("map_rows.jl")
-include("build_petsc.jl")
+
+# -----------------------------------------------------------------------------
+# STRUMPACK Detection (build script moved to tools/)
+# -----------------------------------------------------------------------------
+
+"""
+    has_strumpack() -> Bool
+
+**MPI Non-Collective**
+
+Check if the currently loaded PETSc library has STRUMPACK support.
+
+This function checks if `JULIA_PETSC_LIBRARY` points to a STRUMPACK-enabled build.
+It is used by `Init()` to automatically configure STRUMPACK as the default direct solver
+when available.
+
+# Example
+```julia
+if has_strumpack()
+    println("STRUMPACK is available in the current PETSc library")
+end
+```
+
+See also: [`Init`](@ref)
+"""
+function has_strumpack()
+    lib_env = get(ENV, "JULIA_PETSC_LIBRARY", "")
+    # Check if the environment variable points to our STRUMPACK build
+    !isempty(lib_env) && occursin("petsc_strumpack", lib_env)
+end
 
 # Opt-in internal _Vec to DRef-managed destruction
 SafeMPI.destroy_trait(::Type{_Vec{T}}) where {T} = SafeMPI.CanDestroy()
