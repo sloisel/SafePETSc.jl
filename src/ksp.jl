@@ -636,3 +636,368 @@ PETSc.@for_libpetsc begin
         return nothing
     end
 end
+
+# =============================================================================
+# inv(A) interface - returns KSP for efficient reuse
+# =============================================================================
+
+"""
+    Base.inv(A::Mat{T,Prefix}) -> KSP{T,Prefix}
+
+**MPI Collective**
+
+Return a KSP solver representing the inverse of matrix A.
+
+The returned KSP can be multiplied by vectors or matrices to solve linear systems.
+The factorization/preconditioner setup happens once at construction, and subsequent
+solves reuse this work.
+
+# Example
+```julia
+Ainv = inv(A)        # Factorization happens here
+x1 = Ainv * b1       # Solve A*x1 = b1 (reuses factorization)
+x2 = Ainv * b2       # Solve A*x2 = b2 (reuses factorization)
+
+# For transpose solves:
+Aitinv = inv(A')     # Same factorization, marked for transpose
+y = Aitinv * c       # Solve A'*y = c
+```
+
+See also: [`KSP`](@ref), [`\\`](@ref)
+"""
+Base.inv(A::Mat{T,Prefix}) where {T,Prefix} = KSP(A)
+
+"""
+    Base.inv(At::Adjoint{T, <:Mat{T,Prefix}}) -> Adjoint{T, KSP{T,Prefix}}
+
+**MPI Collective**
+
+Return an adjoint KSP solver representing the inverse of A'.
+
+When multiplied by a vector, uses `KSPSolveTranspose` internally.
+
+See also: [`inv(::Mat)`](@ref), [`KSP`](@ref)
+"""
+Base.inv(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}) where {T,Prefix} = adjoint(KSP(parent(At)))
+
+# =============================================================================
+# KSP * Vec - solve Ax = b, return x
+# =============================================================================
+
+"""
+    Base.:*(ksp::KSP{T,Prefix}, b::Vec{T}) -> Vec{T}
+
+**MPI Collective**
+
+Solve the linear system Ax = b using a pre-existing KSP solver.
+
+Allocates and returns a new solution vector x. The KSP's factorization is reused,
+making this efficient for repeated solves with different right-hand sides.
+
+# Example
+```julia
+Ainv = inv(A)
+x1 = Ainv * b1   # First solve
+x2 = Ainv * b2   # Second solve (reuses factorization)
+```
+"""
+function Base.:*(ksp::KSP{T,Prefix}, b::Vec{T}) where {T,Prefix}
+    # Validate dimensions
+    m, n = size(ksp)
+    b_length = size(b)[1]
+    @mpiassert (m == n && m == b_length &&
+                ksp.obj.row_partition == b.obj.row_partition) "KSP's matrix must be square (got $(m)×$(n)), and KSP matrix rows must match vector length (b has length $(b_length))"
+
+    # Create result vector
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    row_lo = ksp.obj.row_partition[rank+1]
+    row_hi = ksp.obj.row_partition[rank+2] - 1
+    nlocal = row_hi - row_lo + 1
+
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, ksp.obj.row_partition)
+
+    # Solve
+    _ksp_solve_vec!(ksp.obj.ksp, x_petsc, b.obj.v)
+    PETSc.assemble(x_petsc)
+
+    # Wrap in DRef
+    obj = _Vec{T}(x_petsc, ksp.obj.row_partition)
+    return SafeMPI.DRef(obj)
+end
+
+# =============================================================================
+# KSP * Mat - solve AX = B, return X (multiple RHS)
+# =============================================================================
+
+"""
+    Base.:*(ksp::KSP{T,Prefix}, B::Mat{T,PrefixB}) -> Mat{T,PrefixB}
+
+**MPI Collective**
+
+Solve the linear system AX = B for multiple right-hand sides.
+
+B must be a dense matrix. Allocates and returns the solution matrix X.
+"""
+function Base.:*(ksp::KSP{T,PrefixKSP}, B::Mat{T,PrefixB}) where {T,PrefixKSP,PrefixB}
+    # Validate dimensions
+    m, n = size(ksp)
+    p, q = size(B)
+    @mpiassert (m == n && m == p &&
+                ksp.obj.row_partition == B.obj.row_partition) "KSP's matrix must be square (got $(m)×$(n)), and KSP matrix rows must match B rows (B is $(p)×$(q))"
+
+    # Create result matrix
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    row_lo = ksp.obj.row_partition[rank+1]
+    row_hi = ksp.obj.row_partition[rank+2] - 1
+    nlocal_rows = row_hi - row_lo + 1
+
+    col_lo = B.obj.col_partition[rank+1]
+    col_hi = B.obj.col_partition[rank+2] - 1
+    nlocal_cols = col_hi - col_lo + 1
+
+    X_petsc = _mat_create_mpidense_for_T(T, nlocal_rows, nlocal_cols, m, q, PrefixB)
+
+    # Solve
+    _ksp_mat_solve!(ksp.obj.ksp, X_petsc, B.obj.A)
+    PETSc.assemble(X_petsc)
+
+    # Wrap in DRef
+    obj = _Mat{T,PrefixB}(X_petsc, ksp.obj.row_partition, B.obj.col_partition)
+    return SafeMPI.DRef(obj)
+end
+
+# =============================================================================
+# Adjoint{KSP} * Vec - solve A'x = b, return x
+# =============================================================================
+
+"""
+    Base.:*(kspt::Adjoint{<:Any, KSP{T,Prefix}}, b::Vec{T}) -> Vec{T}
+
+**MPI Collective**
+
+Solve the transposed linear system A'x = b using `KSPSolveTranspose`.
+
+# Example
+```julia
+Aitinv = inv(A')
+y = Aitinv * c    # Solve A'*y = c
+```
+"""
+function Base.:*(kspt::LinearAlgebra.Adjoint{<:Any, <:KSP{T,Prefix}}, b::Vec{T}) where {T,Prefix}
+    ksp = parent(kspt)
+
+    # Validate dimensions
+    m, n = size(ksp)
+    b_length = size(b)[1]
+    @mpiassert (m == n && n == b_length &&
+                ksp.obj.col_partition == b.obj.row_partition) "KSP's matrix must be square (got $(m)×$(n)), and KSP matrix columns must match vector length (b has length $(b_length))"
+
+    # Create result vector
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    col_lo = ksp.obj.col_partition[rank+1]
+    col_hi = ksp.obj.col_partition[rank+2] - 1
+    nlocal = col_hi - col_lo + 1
+
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, n, ksp.obj.col_partition)
+
+    # Solve transpose
+    _ksp_solve_transpose_vec!(ksp.obj.ksp, x_petsc, b.obj.v)
+    PETSc.assemble(x_petsc)
+
+    # Wrap in DRef
+    obj = _Vec{T}(x_petsc, ksp.obj.col_partition)
+    return SafeMPI.DRef(obj)
+end
+
+# =============================================================================
+# Adjoint{KSP} * Mat - solve A'X = B, return X (multiple RHS)
+# =============================================================================
+
+"""
+    Base.:*(kspt::Adjoint{<:Any, KSP{T,Prefix}}, B::Mat{T,PrefixB}) -> Mat{T,PrefixB}
+
+**MPI Collective**
+
+Solve the transposed linear system A'X = B for multiple right-hand sides.
+
+B must be a dense matrix. Uses `KSPMatSolveTranspose` internally.
+"""
+function Base.:*(kspt::LinearAlgebra.Adjoint{<:Any, <:KSP{T,PrefixKSP}}, B::Mat{T,PrefixB}) where {T,PrefixKSP,PrefixB}
+    ksp = parent(kspt)
+
+    # Validate dimensions
+    m, n = size(ksp)
+    p, q = size(B)
+    @mpiassert (m == n && n == p &&
+                ksp.obj.col_partition == B.obj.row_partition) "KSP's matrix must be square (got $(m)×$(n)), and KSP matrix columns must match B rows (B is $(p)×$(q))"
+
+    # Create result matrix
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    col_lo = ksp.obj.col_partition[rank+1]
+    col_hi = ksp.obj.col_partition[rank+2] - 1
+    nlocal_rows = col_hi - col_lo + 1
+
+    col_lo_B = B.obj.col_partition[rank+1]
+    col_hi_B = B.obj.col_partition[rank+2] - 1
+    nlocal_cols = col_hi_B - col_lo_B + 1
+
+    X_petsc = _mat_create_mpidense_for_T(T, nlocal_rows, nlocal_cols, n, q, PrefixB)
+
+    # Solve transpose
+    _ksp_mat_solve_transpose!(ksp.obj.ksp, X_petsc, B.obj.A)
+    PETSc.assemble(X_petsc)
+
+    # Wrap in DRef
+    obj = _Mat{T,PrefixB}(X_petsc, ksp.obj.col_partition, B.obj.col_partition)
+    return SafeMPI.DRef(obj)
+end
+
+# =============================================================================
+# Right multiplication: b' * inv(A), B * inv(A), B' * inv(A)
+# =============================================================================
+
+"""
+    Base.:*(bt::Adjoint{T, Vec{T}}, ksp::KSP{T,Prefix}) -> Adjoint{T, Vec{T}}
+
+**MPI Collective**
+
+Right multiply: compute b' * inv(A), which solves x' * A = b' (i.e., A' * x = b).
+
+Returns the solution as an adjoint vector x'.
+
+# Example
+```julia
+Ainv = inv(A)
+xt = b' * Ainv    # Solve x' * A = b'
+```
+"""
+function Base.:*(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, ksp::KSP{T,Prefix}) where {T,Prefix}
+    b = parent(bt)
+
+    # b' * inv(A) = (inv(A') * b)'
+    # Validate dimensions
+    m, n = size(ksp)
+    b_length = size(b)[1]
+    @mpiassert (m == n && m == b_length &&
+                ksp.obj.row_partition == b.obj.row_partition) "KSP's matrix must be square (got $(m)×$(n)), and KSP matrix rows must match vector length (b has length $(b_length))"
+
+    # Create result vector
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    row_lo = ksp.obj.row_partition[rank+1]
+    row_hi = ksp.obj.row_partition[rank+2] - 1
+    nlocal = row_hi - row_lo + 1
+
+    x_petsc = _vec_create_mpi_for_T(T, nlocal, m, ksp.obj.row_partition)
+
+    # Solve transpose: A' * x = b
+    _ksp_solve_transpose_vec!(ksp.obj.ksp, x_petsc, b.obj.v)
+    PETSc.assemble(x_petsc)
+
+    # Wrap in DRef and return as adjoint
+    obj = _Vec{T}(x_petsc, ksp.obj.row_partition)
+    x = SafeMPI.DRef(obj)
+    return LinearAlgebra.Adjoint(x)
+end
+
+"""
+    Base.:*(B::Mat{T,PrefixB}, ksp::KSP{T,Prefix}) -> Mat{T,PrefixB}
+
+**MPI Collective**
+
+Right multiply: compute B * inv(A), which solves X * A = B.
+
+B must be a dense matrix. Returns the solution matrix X.
+
+# Example
+```julia
+Ainv = inv(A)
+X = B * Ainv    # Solve X * A = B
+```
+"""
+function Base.:*(B::Mat{T,PrefixB}, ksp::KSP{T,PrefixKSP}) where {T,PrefixB,PrefixKSP}
+    # B * inv(A) solves X * A = B
+    # Taking transposes: A' * X' = B', so X' = inv(A') * B', X = (inv(A') * B')'
+    m, n = size(ksp)
+    p, q = size(B)
+    @mpiassert (m == n && q == m &&
+                B.obj.col_partition == ksp.obj.row_partition) "KSP's matrix must be square (got $(m)×$(n)), and B columns must match KSP rows (B is $(p)×$(q))"
+
+    # Step 1: Transpose B
+    B_T = _mat_transpose(B.obj.A, PrefixB)
+
+    # Step 2: Solve A' * X' = B' using KSPSolveTranspose
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    col_lo = ksp.obj.col_partition[rank+1]
+    col_hi = ksp.obj.col_partition[rank+2] - 1
+    nlocal_rows = col_hi - col_lo + 1
+
+    row_lo = B.obj.row_partition[rank+1]
+    row_hi = B.obj.row_partition[rank+2] - 1
+    nlocal_cols = row_hi - row_lo + 1
+
+    Xt_petsc = _mat_create_mpidense_for_T(T, nlocal_rows, nlocal_cols, n, p, PrefixB)
+
+    # Solve A' * X' = B'
+    _ksp_mat_solve_transpose!(ksp.obj.ksp, Xt_petsc, B_T)
+    PETSc.assemble(Xt_petsc)
+
+    # Step 3: Transpose X' to get X
+    X_petsc = _mat_transpose(Xt_petsc, PrefixB)
+
+    # Clean up intermediate matrices
+    _destroy_petsc_mat!(B_T)
+    _destroy_petsc_mat!(Xt_petsc)
+
+    PETSc.assemble(X_petsc)
+
+    # Wrap in DRef
+    obj = _Mat{T,PrefixB}(X_petsc, B.obj.row_partition, ksp.obj.col_partition)
+    return SafeMPI.DRef(obj)
+end
+
+"""
+    Base.:*(Bt::Adjoint{T, Mat{T,PrefixB}}, ksp::KSP{T,Prefix}) -> Mat{T,PrefixB}
+
+**MPI Collective**
+
+Right multiply: compute B' * inv(A), which solves X * A = B'.
+
+B must be a dense matrix. Returns the solution matrix X.
+"""
+function Base.:*(Bt::LinearAlgebra.Adjoint{T, <:Mat{T,PrefixB}}, ksp::KSP{T,PrefixKSP}) where {T,PrefixB,PrefixKSP}
+    B = parent(Bt)
+    # B' * inv(A) solves X * A = B'
+    # Taking transposes: A' * X' = B, so X' = inv(A') * B, X = (inv(A') * B)'
+    m, n = size(ksp)
+    p, q = size(B)
+    @mpiassert (m == n && p == m &&
+                B.obj.row_partition == ksp.obj.row_partition) "KSP's matrix must be square (got $(m)×$(n)), and B' columns (B rows) must match KSP rows (B is $(p)×$(q))"
+
+    # Step 1: Solve A' * X' = B using KSPSolveTranspose
+    rank = MPI.Comm_rank(MPI.COMM_WORLD)
+    col_lo = ksp.obj.col_partition[rank+1]
+    col_hi = ksp.obj.col_partition[rank+2] - 1
+    nlocal_rows = col_hi - col_lo + 1
+
+    col_lo_B = B.obj.col_partition[rank+1]
+    col_hi_B = B.obj.col_partition[rank+2] - 1
+    nlocal_cols = col_hi_B - col_lo_B + 1
+
+    Xt_petsc = _mat_create_mpidense_for_T(T, nlocal_rows, nlocal_cols, n, q, PrefixB)
+
+    # Solve A' * X' = B
+    _ksp_mat_solve_transpose!(ksp.obj.ksp, Xt_petsc, B.obj.A)
+    PETSc.assemble(Xt_petsc)
+
+    # Step 2: Transpose X' to get X
+    X_petsc = _mat_transpose(Xt_petsc, PrefixB)
+
+    # Clean up intermediate matrix
+    _destroy_petsc_mat!(Xt_petsc)
+
+    PETSc.assemble(X_petsc)
+
+    # Wrap in DRef - X has dimensions q×n (B' is q×p, inv(A) is p×n where p=n=m)
+    obj = _Mat{T,PrefixB}(X_petsc, B.obj.col_partition, ksp.obj.col_partition)
+    return SafeMPI.DRef(obj)
+end

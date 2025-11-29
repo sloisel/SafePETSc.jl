@@ -510,6 +510,147 @@ drx = drA \ drb
 SafeMPI.check_and_destroy!()
 MPI.Barrier(comm)
 
+# Test 21: inv(A) * b (reusable KSP solve)
+if rank == 0
+    println("[DEBUG] Test 21: inv(A) * b")
+    flush(stdout)
+end
+
+A_data = Matrix{Float64}(I, 4, 4) * 2.0  # 2*I
+b1_data = Float64.(1:4)
+b2_data = Float64.(5:8)
+drA = SafePETSc.Mat_uniform(A_data)
+drb1 = SafePETSc.Vec_uniform(b1_data)
+drb2 = SafePETSc.Vec_uniform(b2_data)
+
+# Create factorization once, solve twice
+Ainv = inv(drA)
+@test Ainv isa SafePETSc.KSP
+drx1 = Ainv * drb1
+drx2 = Ainv * drb2
+@test drx1 isa SafeMPI.DRef
+@test drx2 isa SafeMPI.DRef
+@test size(drx1) == (4,)
+@test size(drx2) == (4,)
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 22: inv(A') * b (transpose solve with reusable KSP)
+if rank == 0
+    println("[DEBUG] Test 22: inv(A') * b")
+    flush(stdout)
+end
+
+A_data = Matrix{Float64}(I, 4, 4) * 2.0
+b_data = Float64.(1:4)
+drA = SafePETSc.Mat_uniform(A_data)
+drb = SafePETSc.Vec_uniform(b_data)
+
+Aitinv = inv(drA')
+@test Aitinv isa LinearAlgebra.Adjoint
+drx = Aitinv * drb
+@test drx isa SafeMPI.DRef
+@test size(drx) == (4,)
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 23: inv(A) * B (multiple RHS with reusable KSP)
+if rank == 0
+    println("[DEBUG] Test 23: inv(A) * B")
+    flush(stdout)
+end
+
+A_data = Matrix{Float64}(I, 4, 4) * 2.0
+B_data = reshape(Float64.(1:8), 4, 2)
+drA = SafePETSc.Mat_uniform(A_data)
+drB = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
+
+Ainv = inv(drA)
+drX = Ainv * drB
+@test drX isa SafeMPI.DRef
+@test size(drX) == (4, 2)
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 24: inv(A') * B (transpose solve, multiple RHS)
+if rank == 0
+    println("[DEBUG] Test 24: inv(A') * B")
+    flush(stdout)
+end
+
+A_data = Matrix{Float64}(I, 4, 4) * 2.0
+B_data = reshape(Float64.(1:8), 4, 2)
+drA = SafePETSc.Mat_uniform(A_data)
+drB = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
+
+Aitinv = inv(drA')
+drX = Aitinv * drB
+@test drX isa SafeMPI.DRef
+@test size(drX) == (4, 2)
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 25: b' * inv(A) (right multiply vector)
+if rank == 0
+    println("[DEBUG] Test 25: b' * inv(A)")
+    flush(stdout)
+end
+
+A_data = Matrix{Float64}(I, 4, 4) * 2.0
+b_data = Float64.(1:4)
+drA = SafePETSc.Mat_uniform(A_data)
+drb = SafePETSc.Vec_uniform(b_data)
+
+Ainv = inv(drA)
+drxt = drb' * Ainv
+@test drxt isa LinearAlgebra.Adjoint
+@test size(parent(drxt)) == (4,)
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 26: B * inv(A) (right multiply matrix)
+if rank == 0
+    println("[DEBUG] Test 26: B * inv(A)")
+    flush(stdout)
+end
+
+A_data = Matrix{Float64}(I, 4, 4) * 2.0
+B_data = reshape(Float64.(1:8), 2, 4)  # 2×4 matrix
+drA = SafePETSc.Mat_uniform(A_data)
+drB = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
+
+Ainv = inv(drA)
+drX = drB * Ainv
+@test drX isa SafeMPI.DRef
+@test size(drX) == (2, 4)
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
+# Test 27: B' * inv(A) (right multiply adjoint matrix)
+if rank == 0
+    println("[DEBUG] Test 27: B' * inv(A)")
+    flush(stdout)
+end
+
+A_data = Matrix{Float64}(I, 4, 4) * 2.0
+B_data = reshape(Float64.(1:8), 4, 2)  # 4×2 matrix, B' is 2×4
+drA = SafePETSc.Mat_uniform(A_data)
+drB = SafePETSc.Mat_uniform(B_data; Prefix=MPIDENSE)
+
+Ainv = inv(drA)
+drX = drB' * Ainv
+@test drX isa SafeMPI.DRef
+@test size(drX) == (2, 4)
+
+SafeMPI.check_and_destroy!()
+MPI.Barrier(comm)
+
 if rank == 0
     println("[DEBUG] All tests completed")
     flush(stdout)
