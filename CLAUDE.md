@@ -54,10 +54,11 @@ This pattern allows `Pkg.test()` to work correctly by having `runtests.jl` call 
 ## User-Facing Features
 
 SafePETSc implements a Julia-native interface for PETSc, allowing natural mathematical expressions. Users will
-use Vec{T}, Mat{T,Prefix} and KSP{T,Prefix} objects to interface with PETSc. These are aliases to DRef{T}
+use Vec{T}, Mat{T,Prefix} and KSP{T} objects to interface with PETSc. These are aliases to DRef{T}
 objects in the SafeMPI sub-module, which enables collective garbage collection across the MPI cluster. For matrices,
 the Prefix type parameter will typically be either MPIAIJ or MPIDENSE. Vectors always use the MPIDENSE prefix
-internally and do not expose a Prefix type parameter.
+internally and do not expose a Prefix type parameter. KSP solver objects also do not expose a Prefix type parameter
+since they only work with sparse matrices (MPIAIJ) - the KSP internally uses the MPIAIJ prefix.
 
 ### Vector Operations
 

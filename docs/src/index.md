@@ -54,11 +54,11 @@ SafePETSc provides three main types for distributed linear algebra:
 
 - **`Vec{T}`**: Distributed vectors with Julia array-like operations (broadcasting, arithmetic, etc.) and automatic pooling for efficiency
 - **`Mat{T,Prefix}`**: Distributed matrices with arithmetic operators (`+`, `-`, `*`, `\`), broadcasting, transpose (`A'`), and GPU-friendly operations
-- **`KSP{T,Prefix}`**: Linear solver objects that can be reused for multiple solves with the same matrix
+- **`KSP{T}`**: Linear solver objects that can be reused for multiple solves with the same matrix (uses MPIAIJ prefix internally since solvers only work with sparse matrices)
 
 ### The Prefix Type Parameter
 
-Matrices and KSP objects take a `Prefix` type parameter that controls PETSc object configuration. Vectors always use the MPIDENSE prefix internally and do not expose this parameter. SafePETSc provides two built-in prefix types:
+Matrices take a `Prefix` type parameter that controls PETSc object configuration. Vectors and KSP objects always use specific prefixes internally (MPIDENSE for vectors, MPIAIJ for KSP) and do not expose this parameter. SafePETSc provides two built-in prefix types:
 
 - **`MPIAIJ`** (default): For sparse matrices
   - String prefix: `"MPIAIJ_"`

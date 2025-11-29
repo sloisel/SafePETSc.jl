@@ -2,6 +2,9 @@
 
 SafePETSc provides linear solver functionality through PETSc's KSP (Krylov Subspace) interface, wrapped with automatic memory management.
 
+!!! note "Sparse Matrices"
+    The default direct solvers (MUMPS/STRUMPACK) are designed for **sparse matrices**. The coefficient matrix `A` should be sparse (MPIAIJ). Dense coefficient matrices are not supported by the sparse direct solvers.
+
 ## Basic Usage
 
 ### Direct Solve
@@ -28,7 +31,8 @@ X = A \ B
 X = A' \ B
 ```
 
-Note: `B` and `X` must be dense matrices (`MATMPIDENSE`).
+!!! warning "Dense RHS Required"
+    For matrix right-hand sides, `B` must be a dense matrix (created with `Prefix=MPIDENSE`). The coefficient matrix `A` should be sparse (default MPIAIJ).
 
 ## Reusable Solvers with inv(A)
 

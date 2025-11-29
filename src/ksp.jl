@@ -1,21 +1,28 @@
 # Internal struct for KSP solver
-struct _KSP{T,Prefix}
+# Note: KSP only works with sparse matrices (MPIAIJ), so no Prefix parameter is needed.
+# The KSP always uses the MPIAIJ prefix internally.
+struct _KSP{T}
     ksp::PETSc.KSP{T}
     row_partition::Vector{Int}
     col_partition::Vector{Int}
 end
 
 """
-    KSP{T,Prefix}
+    KSP{T}
 
-A PETSc KSP (Krylov Subspace) linear solver with element type `T` and prefix type `Prefix`,
+A PETSc KSP (Krylov Subspace) linear solver with element type `T`,
 managed by SafePETSc's reference counting system.
 
-`KSP{T,Prefix}` is actually a type alias for `DRef{_KSP{T,Prefix}}`, meaning solvers are automatically
+`KSP{T}` is actually a type alias for `DRef{_KSP{T}}`, meaning solvers are automatically
 tracked across MPI ranks and destroyed collectively when all ranks release their references.
 
 KSP objects can be reused for multiple linear systems with the same matrix, avoiding the cost
 of repeated factorization or preconditioner setup.
+
+!!! note "Sparse Matrices Only"
+    KSP solvers only work with sparse coefficient matrices (MPIAIJ). The KSP always uses
+    the MPIAIJ prefix internally. For matrix right-hand sides (solving AX = B), the RHS
+    matrix B must be dense (MPIDENSE).
 
 # Construction
 
@@ -39,30 +46,32 @@ LinearAlgebra.ldiv!(ksp, x2, b2)  # Second solve with same matrix
 
 See also: [`Mat`](@ref), [`Vec`](@ref), the `KSP` constructor
 """
-const KSP{T,Prefix} = SafeMPI.DRef{_KSP{T,Prefix}}
+const KSP{T} = SafeMPI.DRef{_KSP{T}}
 
 # Sizes for KSP reflect the operator dimensions recorded at construction
 Base.size(r::SafeMPI.DRef{<:_KSP}) = (r.obj.row_partition[end] - 1, r.obj.col_partition[end] - 1)
 Base.size(r::SafeMPI.DRef{<:_KSP}, d::Integer) = d == 1 ? (r.obj.row_partition[end] - 1) : (d == 2 ? (r.obj.col_partition[end] - 1) : 1)
 
 """
-    KSP(A::Mat{T,Prefix}) -> KSP{T,Prefix}
+    KSP(A::Mat{T,Prefix}) -> KSP{T}
 
 **MPI Collective**
 
 Create a PETSc KSP (Krylov Subspace) linear solver for the matrix A.
 
-- `A::Mat{T,Prefix}` is the matrix for which to create the solver.
+- `A::Mat{T,Prefix}` is the matrix for which to create the solver (should be sparse MPIAIJ).
 - Returns a KSP that will destroy the PETSc KSP collectively when all ranks release their reference.
 
-The KSP object inherits the prefix from the matrix A and can be used to solve linear systems via backslash (\\) and forward-slash (/) operators.
+The KSP always uses the MPIAIJ prefix internally (for sparse direct solvers like MUMPS/STRUMPACK).
+The input matrix can have any prefix, but dense matrices (MPIDENSE) are not supported by
+the sparse direct solvers.
 """
 function KSP(A::Mat{T,Prefix}) where {T,Prefix}
     nranks = MPI.Comm_size(MPI.COMM_WORLD)
     rank = MPI.Comm_rank(MPI.COMM_WORLD)
 
-    # Create PETSc KSP
-    petsc_ksp = _ksp_create_for_T(T, Prefix)
+    # Create PETSc KSP - always use MPIAIJ prefix for sparse solvers
+    petsc_ksp = _ksp_create_for_T(T)
 
     # Set the operator
     _ksp_set_operators!(petsc_ksp, A.obj.A)
@@ -70,30 +79,32 @@ function KSP(A::Mat{T,Prefix}) where {T,Prefix}
     # Set up the KSP
     _ksp_setup!(petsc_ksp)
 
-    # Wrap and DRef-manage
-    obj = _KSP{T,Prefix}(petsc_ksp, A.obj.row_partition, A.obj.col_partition)
+    # Wrap and DRef-manage (no Prefix parameter - KSP always uses MPIAIJ)
+    obj = _KSP{T}(petsc_ksp, A.obj.row_partition, A.obj.col_partition)
     return SafeMPI.DRef(obj)
 end
 
 # Opt-in internal _KSP to DRef-managed destruction
-SafeMPI.destroy_trait(::Type{_KSP{T,Prefix}}) where {T,Prefix} = SafeMPI.CanDestroy()
+SafeMPI.destroy_trait(::Type{_KSP{T}}) where {T} = SafeMPI.CanDestroy()
 
-function SafeMPI.destroy_obj!(x::_KSP{T,Prefix}) where {T,Prefix}
+function SafeMPI.destroy_obj!(x::_KSP{T}) where {T}
     # Collective destroy of the underlying PETSc KSP on MPI.COMM_WORLD
     _destroy_petsc_ksp!(x.ksp)
     return nothing
 end
 
 # Create a distributed PETSc KSP for a given element type T
-function _ksp_create_for_T(::Type{T}, Prefix::Type) where {T}
-    return _ksp_create_impl(T, Prefix)
+# Always uses MPIAIJ prefix since KSP only works with sparse matrices
+function _ksp_create_for_T(::Type{T}) where {T}
+    return _ksp_create_impl(T)
 end
 
 PETSc.@for_libpetsc begin
-    function _ksp_create_impl(::Type{$PetscScalar}, Prefix::Type)
+    function _ksp_create_impl(::Type{$PetscScalar})
         # Construct KSP via PETSc.jl API so internal fields are initialized correctly
         ksp = PETSc.KSP{$PetscScalar}(MPI.COMM_WORLD)
-        prefix_str = SafePETSc.prefix(Prefix)
+        # Always use MPIAIJ prefix for sparse solvers
+        prefix_str = SafePETSc.prefix(MPIAIJ)
         if !isempty(prefix_str)
             PETSc.@chk ccall((:KSPSetOptionsPrefix, $libpetsc), PETSc.PetscErrorCode,
                              (CKSP, Cstring), ksp, prefix_str)
@@ -251,7 +262,7 @@ function LinearAlgebra.ldiv!(x::Vec{T}, A::Mat{T,Prefix}, b::Vec{T}) where {T,Pr
 end
 
 """
-    LinearAlgebra.ldiv!(ksp::KSP{T,Prefix}, x::Vec{T}, b::Vec{T}) -> Vec{T}
+    LinearAlgebra.ldiv!(ksp::KSP{T}, x::Vec{T}, b::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -259,7 +270,7 @@ In-place solve using a pre-existing KSP solver, storing the result in x.
 
 Reuses the solver and the result vector for maximum efficiency in repeated solves.
 """
-function LinearAlgebra.ldiv!(ksp::KSP{T,Prefix}, x::Vec{T}, b::Vec{T}) where {T,Prefix}
+function LinearAlgebra.ldiv!(ksp::KSP{T}, x::Vec{T}, b::Vec{T}) where {T}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(ksp)
     b_length = size(b)[1]
@@ -352,7 +363,7 @@ function LinearAlgebra.ldiv!(X::Mat{T,PrefixX}, A::Mat{T,PrefixA}, B::Mat{T,Pref
 end
 
 """
-    LinearAlgebra.ldiv!(ksp::KSP{T,Prefix}, X::Mat{T,Prefix}, B::Mat{T,Prefix}) -> Mat{T,Prefix}
+    LinearAlgebra.ldiv!(ksp::KSP{T}, X::Mat{T,PrefixX}, B::Mat{T,PrefixB}) -> Mat{T,PrefixX}
 
 **MPI Collective**
 
@@ -360,7 +371,7 @@ In-place solve using a pre-existing KSP solver for multiple right-hand sides.
 
 Reuses the solver and result matrix for maximum efficiency. B and X must be dense matrices.
 """
-function LinearAlgebra.ldiv!(ksp::KSP{T,PrefixKSP}, X::Mat{T,PrefixX}, B::Mat{T,PrefixB}) where {T,PrefixKSP,PrefixX,PrefixB}
+function LinearAlgebra.ldiv!(ksp::KSP{T}, X::Mat{T,PrefixX}, B::Mat{T,PrefixB}) where {T,PrefixX,PrefixB}
     # Validate dimensions and partitioning - single @mpiassert for efficiency
     m, n = size(ksp)
     p, q = size(B)
@@ -642,7 +653,7 @@ end
 # =============================================================================
 
 """
-    Base.inv(A::Mat{T,Prefix}) -> KSP{T,Prefix}
+    Base.inv(A::Mat{T,Prefix}) -> KSP{T}
 
 **MPI Collective**
 
@@ -651,6 +662,8 @@ Return a KSP solver representing the inverse of matrix A.
 The returned KSP can be multiplied by vectors or matrices to solve linear systems.
 The factorization/preconditioner setup happens once at construction, and subsequent
 solves reuse this work.
+
+The matrix A should be sparse (MPIAIJ). The KSP always uses the MPIAIJ prefix internally.
 
 # Example
 ```julia
@@ -668,7 +681,7 @@ See also: [`KSP`](@ref), [`\\`](@ref)
 Base.inv(A::Mat{T,Prefix}) where {T,Prefix} = KSP(A)
 
 """
-    Base.inv(At::Adjoint{T, <:Mat{T,Prefix}}) -> Adjoint{T, KSP{T,Prefix}}
+    Base.inv(At::Adjoint{T, <:Mat{T,Prefix}}) -> Adjoint{T, KSP{T}}
 
 **MPI Collective**
 
@@ -685,7 +698,7 @@ Base.inv(At::LinearAlgebra.Adjoint{T, <:Mat{T,Prefix}}) where {T,Prefix} = adjoi
 # =============================================================================
 
 """
-    Base.:*(ksp::KSP{T,Prefix}, b::Vec{T}) -> Vec{T}
+    Base.:*(ksp::KSP{T}, b::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -701,7 +714,7 @@ x1 = Ainv * b1   # First solve
 x2 = Ainv * b2   # Second solve (reuses factorization)
 ```
 """
-function Base.:*(ksp::KSP{T,Prefix}, b::Vec{T}) where {T,Prefix}
+function Base.:*(ksp::KSP{T}, b::Vec{T}) where {T}
     # Validate dimensions
     m, n = size(ksp)
     b_length = size(b)[1]
@@ -730,7 +743,7 @@ end
 # =============================================================================
 
 """
-    Base.:*(ksp::KSP{T,Prefix}, B::Mat{T,PrefixB}) -> Mat{T,PrefixB}
+    Base.:*(ksp::KSP{T}, B::Mat{T,PrefixB}) -> Mat{T,PrefixB}
 
 **MPI Collective**
 
@@ -738,7 +751,7 @@ Solve the linear system AX = B for multiple right-hand sides.
 
 B must be a dense matrix. Allocates and returns the solution matrix X.
 """
-function Base.:*(ksp::KSP{T,PrefixKSP}, B::Mat{T,PrefixB}) where {T,PrefixKSP,PrefixB}
+function Base.:*(ksp::KSP{T}, B::Mat{T,PrefixB}) where {T,PrefixB}
     # Validate dimensions
     m, n = size(ksp)
     p, q = size(B)
@@ -771,7 +784,7 @@ end
 # =============================================================================
 
 """
-    Base.:*(kspt::Adjoint{<:Any, KSP{T,Prefix}}, b::Vec{T}) -> Vec{T}
+    Base.:*(kspt::Adjoint{<:Any, KSP{T}}, b::Vec{T}) -> Vec{T}
 
 **MPI Collective**
 
@@ -783,7 +796,7 @@ Aitinv = inv(A')
 y = Aitinv * c    # Solve A'*y = c
 ```
 """
-function Base.:*(kspt::LinearAlgebra.Adjoint{<:Any, <:KSP{T,Prefix}}, b::Vec{T}) where {T,Prefix}
+function Base.:*(kspt::LinearAlgebra.Adjoint{<:Any, <:KSP{T}}, b::Vec{T}) where {T}
     ksp = parent(kspt)
 
     # Validate dimensions
@@ -814,7 +827,7 @@ end
 # =============================================================================
 
 """
-    Base.:*(kspt::Adjoint{<:Any, KSP{T,Prefix}}, B::Mat{T,PrefixB}) -> Mat{T,PrefixB}
+    Base.:*(kspt::Adjoint{<:Any, KSP{T}}, B::Mat{T,PrefixB}) -> Mat{T,PrefixB}
 
 **MPI Collective**
 
@@ -822,7 +835,7 @@ Solve the transposed linear system A'X = B for multiple right-hand sides.
 
 B must be a dense matrix. Uses `KSPMatSolveTranspose` internally.
 """
-function Base.:*(kspt::LinearAlgebra.Adjoint{<:Any, <:KSP{T,PrefixKSP}}, B::Mat{T,PrefixB}) where {T,PrefixKSP,PrefixB}
+function Base.:*(kspt::LinearAlgebra.Adjoint{<:Any, <:KSP{T}}, B::Mat{T,PrefixB}) where {T,PrefixB}
     ksp = parent(kspt)
 
     # Validate dimensions
@@ -857,7 +870,7 @@ end
 # =============================================================================
 
 """
-    Base.:*(bt::Adjoint{T, Vec{T}}, ksp::KSP{T,Prefix}) -> Adjoint{T, Vec{T}}
+    Base.:*(bt::Adjoint{T, Vec{T}}, ksp::KSP{T}) -> Adjoint{T, Vec{T}}
 
 **MPI Collective**
 
@@ -871,7 +884,7 @@ Ainv = inv(A)
 xt = b' * Ainv    # Solve x' * A = b'
 ```
 """
-function Base.:*(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, ksp::KSP{T,Prefix}) where {T,Prefix}
+function Base.:*(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, ksp::KSP{T}) where {T}
     b = parent(bt)
 
     # b' * inv(A) = (inv(A') * b)'
@@ -900,7 +913,7 @@ function Base.:*(bt::LinearAlgebra.Adjoint{T, <:Vec{T}}, ksp::KSP{T,Prefix}) whe
 end
 
 """
-    Base.:*(B::Mat{T,PrefixB}, ksp::KSP{T,Prefix}) -> Mat{T,PrefixB}
+    Base.:*(B::Mat{T,PrefixB}, ksp::KSP{T}) -> Mat{T,PrefixB}
 
 **MPI Collective**
 
@@ -914,7 +927,7 @@ Ainv = inv(A)
 X = B * Ainv    # Solve X * A = B
 ```
 """
-function Base.:*(B::Mat{T,PrefixB}, ksp::KSP{T,PrefixKSP}) where {T,PrefixB,PrefixKSP}
+function Base.:*(B::Mat{T,PrefixB}, ksp::KSP{T}) where {T,PrefixB}
     # B * inv(A) solves X * A = B
     # Taking transposes: A' * X' = B', so X' = inv(A') * B', X = (inv(A') * B')'
     m, n = size(ksp)
@@ -956,7 +969,7 @@ function Base.:*(B::Mat{T,PrefixB}, ksp::KSP{T,PrefixKSP}) where {T,PrefixB,Pref
 end
 
 """
-    Base.:*(Bt::Adjoint{T, Mat{T,PrefixB}}, ksp::KSP{T,Prefix}) -> Mat{T,PrefixB}
+    Base.:*(Bt::Adjoint{T, Mat{T,PrefixB}}, ksp::KSP{T}) -> Mat{T,PrefixB}
 
 **MPI Collective**
 
@@ -964,7 +977,7 @@ Right multiply: compute B' * inv(A), which solves X * A = B'.
 
 B must be a dense matrix. Returns the solution matrix X.
 """
-function Base.:*(Bt::LinearAlgebra.Adjoint{T, <:Mat{T,PrefixB}}, ksp::KSP{T,PrefixKSP}) where {T,PrefixB,PrefixKSP}
+function Base.:*(Bt::LinearAlgebra.Adjoint{T, <:Mat{T,PrefixB}}, ksp::KSP{T}) where {T,PrefixB}
     B = parent(Bt)
     # B' * inv(A) solves X * A = B'
     # Taking transposes: A' * X' = B, so X' = inv(A') * B, X = (inv(A') * B)'
