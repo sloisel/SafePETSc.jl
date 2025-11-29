@@ -2,8 +2,9 @@
 # This module provides functions to download, build, and configure PETSc with
 # both STRUMPACK (for GPU acceleration and MPI scalability) and MUMPS (proven direct solver).
 #
-# IMPORTANT: Requires system MPI (brew install open-mpi or apt-get install libopenmpi-dev)
+# IMPORTANT: Requires system MPI (brew install mpich or apt-get install mpich libmpich-dev)
 # The JLL-provided MPI wrappers have broken paths and cannot be used for building.
+# MPI.jl must also be configured to use system MPI: MPIPreferences.use_system_binary()
 
 using Scratch
 using Downloads
@@ -109,20 +110,21 @@ compression features.
 
 # Prerequisites
 **System MPI is required.** The JLL-provided MPI wrappers have broken paths.
+MPI.jl must be configured to use the same system MPI before building.
 
 ```bash
 # macOS
-brew install open-mpi
+brew install mpich
 
 # Ubuntu/Debian
-sudo apt-get install libopenmpi-dev
+sudo apt-get install mpich libmpich-dev
 ```
 
 Then configure MPI.jl to use system MPI:
 ```julia
 using MPIPreferences
 MPIPreferences.use_system_binary()
-# Restart Julia
+# Restart Julia before building
 ```
 
 # Arguments
@@ -306,18 +308,35 @@ end
 
 function _build_petsc_with_strumpack(src_dir::String, install_dir::String, with_debugging::Bool,
                                      with_cuda::Bool, verbose::Bool)
-    # Build configuration flags - includes both STRUMPACK and MUMPS
-    # Bundle MPICH with PETSc for ABI compatibility (avoids mismatch between build/test environments)
-    # Note: We use MPICH instead of Open MPI because Open MPI 5.x requires PMIx server setup
+    # Check that system MPI is available
+    if !_check_system_mpi()
+        error("""
+        System MPI not found! STRUMPACK build requires system MPI (not Julia's MPI JLL).
+
+        Install system MPI first:
+            macOS:  brew install mpich
+            Linux:  sudo apt-get install mpich libmpich-dev
+
+        Then configure MPI.jl to use system MPI:
+            using MPIPreferences
+            MPIPreferences.use_system_binary()
+            # Restart Julia before building
+        """)
+    end
+
+    # Build configuration flags - uses system MPI via wrapper compilers
+    # System MPI is required for proper mpiexec functionality in containers/CI environments
     configure_flags = [
         "--prefix=$install_dir",
-        "--download-mpich",   # Bundle MPICH for guaranteed ABI compatibility
-        "--with-fc=gfortran",   # Fortran needed for fblaslapack
+        # Use MPI wrapper compilers directly - PETSc will detect MPI from these
+        "--with-cc=mpicc",
+        "--with-cxx=mpicxx",
+        "--with-fc=mpif90",   # Fortran needed for fblaslapack (use MPI wrapper)
         "--with-debugging=$(with_debugging ? 1 : 0)",
         "--with-shared-libraries=1",
     ]
     if verbose
-        @info "Building with bundled MPICH (for ABI compatibility)"
+        @info "Using system MPI via wrapper compilers (mpicc, mpicxx, mpif90)"
     end
 
     # Add common dependencies

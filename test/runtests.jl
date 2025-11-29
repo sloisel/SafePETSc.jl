@@ -1,12 +1,51 @@
 using Test
 using MPI
 
+# Check if PETSc is loading the expected library when JULIA_PETSC_LIBRARY is set.
+# PETSc.jl uses @static to check the env var at precompile time, so if the cache
+# was compiled without JULIA_PETSC_LIBRARY, it uses PETSc_jll even if the env var
+# is now set.
+#
+# IMPORTANT: Pkg.test() runs with --startup-file=no by default, so startup.jl
+# settings don't apply during precompilation. For STRUMPACK testing, run tests
+# directly: JULIA_PETSC_LIBRARY="..." julia --project=. test/runtests.jl
+function check_petsc_library()
+    lib_env = get(ENV, "JULIA_PETSC_LIBRARY", "")
+    if isempty(lib_env)
+        return  # Using default JLL, no check needed
+    end
+
+    # Load PETSc and check the loaded library
+    @eval using PETSc
+    libs_str = string(PETSc.libs)
+
+    if occursin(lib_env, libs_str) || occursin("petsc_strumpack", libs_str)
+        println("[runtests.jl] PETSc library OK: using custom build")
+    else
+        @warn """
+        PETSc library mismatch!
+
+        JULIA_PETSC_LIBRARY is set but PETSc loaded the default JLL library.
+
+        This happens because PETSc.jl checks JULIA_PETSC_LIBRARY at precompile time.
+        If running via Pkg.test(), the env var isn't visible during precompilation.
+
+        For STRUMPACK testing, run tests directly instead:
+            JULIA_PETSC_LIBRARY="$lib_env" julia --project=. test/runtests.jl
+
+        Tests will continue with the default PETSc library (no STRUMPACK).
+        """ expected=lib_env loaded=libs_str
+    end
+end
+
 # Precompile all dependencies once before any mpiexec to avoid concurrent compilation
 # This significantly reduces hangs due to pidfile contention and MPI initialization conflicts
 try
-    # Force precompilation of all test dependencies
+    # Check PETSc library - warns if JULIA_PETSC_LIBRARY is set but not loaded
+    check_petsc_library()
+
+    # Force precompilation of all test dependencies (PETSc already loaded in check_petsc_library)
     @eval using SafePETSc
-    @eval using PETSc
     @eval using LinearAlgebra
     @eval using SparseArrays
     println("Precompilation complete for test environment")
@@ -28,6 +67,10 @@ function run_mpi_test(test_file::AbstractString; nprocs::Integer=4, expect_succe
     # This ensures LocalPreferences.toml is honored and avoids recompilation under mpiexec
     test_proj = Base.active_project()
     cmd = `$mpiexec_cmd -n $nprocs $(Base.julia_cmd()) --project=$test_proj $test_file`
+    # Pass through JULIA_PETSC_LIBRARY for custom PETSc builds (e.g., STRUMPACK)
+    if haskey(ENV, "JULIA_PETSC_LIBRARY")
+        cmd = addenv(cmd, "JULIA_PETSC_LIBRARY" => ENV["JULIA_PETSC_LIBRARY"])
+    end
     proc = run(ignorestatus(cmd))
     ok = success(proc)
     if ok != expect_success

@@ -29,35 +29,25 @@ Stick with MUMPS when:
 
 ### Prerequisites
 
-**System MPI is required.** The JLL-provided MPI wrappers have broken paths and cannot be used for building PETSc from source.
+**System MPI is required.** The JLL-provided MPI wrappers have broken paths and cannot be used for building PETSc from source. MPI.jl must be configured to use the same system MPI before building.
 
 ```bash
 # macOS
-brew install open-mpi
+brew install mpich
 
 # Ubuntu/Debian
-sudo apt-get install libopenmpi-dev
+sudo apt-get install mpich libmpich-dev
 ```
 
 Then configure MPI.jl to use system MPI:
 
 ```julia
 using MPIPreferences
-
-# On macOS (Open MPI from Homebrew)
-MPIPreferences.use_system_binary(;
-    library_names=["libmpi"],
-    extra_paths=["/opt/homebrew/Cellar/open-mpi/5.0.8/lib"],  # Adjust version as needed
-    mpiexec="/opt/homebrew/bin/mpiexec"
-)
-
-# On Linux (usually auto-detects)
 MPIPreferences.use_system_binary()
-
 # Restart Julia after configuring
 ```
 
-**Important**: MPI.jl must use the **same MPI implementation** as the PETSc build. If PETSc is built with Open MPI, MPI.jl must also use Open MPI. Mixing Open MPI and MPICH causes crashes.
+**Important**: MPI.jl must use the **same MPI implementation** as the PETSc build. Since we build with system MPI (detected from `mpicc` in PATH), MPI.jl must also use system MPI. Mixing different MPI implementations causes crashes.
 
 ### One-Time Build
 
@@ -267,10 +257,10 @@ sudo apt-get install build-essential gfortran cmake
 **Missing MPI**: The build requires system MPI (not the JLL wrappers). Install it and configure MPI.jl:
 ```bash
 # macOS
-brew install open-mpi
+brew install mpich
 
 # Ubuntu/Debian
-sudo apt-get install libopenmpi-dev
+sudo apt-get install mpich libmpich-dev
 ```
 
 ```julia
@@ -292,15 +282,10 @@ using MPI
 MPI.identify_implementation()  # Should match what PETSc was built with
 ```
 
-The STRUMPACK build uses system MPI (usually Open MPI from Homebrew). Configure MPI.jl to match:
+The STRUMPACK build uses system MPI (detected from `mpicc` in PATH). Configure MPI.jl to use the same system MPI:
 ```julia
 using MPIPreferences
-# On macOS with Homebrew Open MPI:
-MPIPreferences.use_system_binary(;
-    library_names=["libmpi"],
-    extra_paths=["/opt/homebrew/Cellar/open-mpi/5.0.8/lib"],
-    mpiexec="/opt/homebrew/bin/mpiexec"
-)
+MPIPreferences.use_system_binary()
 # Then restart Julia and delete compiled caches
 ```
 
