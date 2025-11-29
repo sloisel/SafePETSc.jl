@@ -1,6 +1,6 @@
 # Matrices
 
-SafePETSc provides distributed matrices through the `Mat{T,Prefix}` type, which wraps PETSc's distributed matrix functionality with GPU-friendly operations and automatic memory management.
+SafePETSc provides distributed matrices through the `Mat{T,Prefix}` type, which wraps PETSc's distributed matrix functionality with automatic memory management.
 
 ## Creating Matrices
 
@@ -488,9 +488,8 @@ x = A \ b
 
 1. **Use Native Operations**: Prefer PETSc operations over element access
 2. **Batch Assembly**: Build sparse matrices locally, then sum once
-3. **Appropriate Matrix Type**: Use dense vs. sparse based on structure
-4. **Reuse KSP Objects**: Create `KSP` once, reuse for multiple solves
-5. **GPU Configuration**: Set PETSc options for GPU matrices
+3. **Appropriate Matrix Type**: Use sparse (default) for systems with few nonzeros per row; dense for full matrices
+4. **Reuse Factorizations**: Use `inv(A)` or `KSP(A)` once, reuse for multiple solves with the same matrix
 
 ```julia
 # Good: bulk assembly

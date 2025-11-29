@@ -1,9 +1,13 @@
 # Linear Solvers
 
-SafePETSc provides linear solver functionality through PETSc's KSP (Krylov Subspace) interface, wrapped with automatic memory management.
+SafePETSc provides linear solver functionality through PETSc's KSP interface, using direct (sparse LU factorization) solvers.
 
-!!! note "Sparse Matrices"
-    The default direct solvers (MUMPS/STRUMPACK) are designed for **sparse matrices**. The coefficient matrix `A` should be sparse (MPIAIJ). Dense coefficient matrices are not supported by the sparse direct solvers.
+!!! note "Direct Solvers"
+    SafePETSc uses **direct solvers** (sparse LU factorization), not iterative methods. This means:
+    - No convergence parameters to tune
+    - No preconditioner selection needed
+    - Exact solutions (up to floating-point precision)
+    - The coefficient matrix `A` should be sparse (MPIAIJ prefix, which is the default)
 
 ## Basic Usage
 
@@ -128,68 +132,6 @@ X = B / A'
 
 Note: `B` and `X` must be dense matrices.
 
-## Configuring Solvers
-
-### PETSc Options
-
-Control solver behavior via PETSc options:
-
-```julia
-# Global configuration
-petsc_options_insert_string("-ksp_type gmres")
-petsc_options_insert_string("-ksp_rtol 1e-8")
-petsc_options_insert_string("-pc_type bjacobi")
-
-# With prefix for specific solvers
-# First define a custom prefix type (advanced)
-struct MyPrefix end
-SafePETSc.prefix(::Type{MyPrefix}) = "my_"
-
-petsc_options_insert_string("-my_ksp_type cg")
-A = Mat_uniform(data; Prefix=MyPrefix)
-ksp = KSP(A)  # Will use CG
-```
-
-Common KSP options:
-- `-ksp_type`: KSP type (cg, gmres, bcgs, etc.)
-- `-ksp_rtol`: Relative tolerance
-- `-ksp_atol`: Absolute tolerance
-- `-ksp_max_it`: Maximum iterations
-- `-pc_type`: Preconditioner (jacobi, bjacobi, ilu, etc.)
-
-### Monitoring Convergence
-
-```julia
-petsc_options_insert_string("-ksp_monitor")
-petsc_options_insert_string("-ksp_converged_reason")
-
-x = A \ b
-# PETSc will print convergence information
-```
-
-## KSP Types
-
-SafePETSc supports all PETSc KSP types. Common choices:
-
-### Direct Methods
-```julia
-# For small to medium problems
-petsc_options_insert_string("-ksp_type preonly -pc_type lu")
-x = A \ b
-```
-
-### Iterative Methods
-```julia
-# Conjugate Gradient (symmetric positive definite)
-petsc_options_insert_string("-ksp_type cg -pc_type jacobi")
-
-# GMRES (general nonsymmetric)
-petsc_options_insert_string("-ksp_type gmres -ksp_gmres_restart 30")
-
-# BiCGStab
-petsc_options_insert_string("-ksp_type bcgs")
-```
-
 ## Examples
 
 ### Basic Linear System
@@ -222,31 +164,6 @@ x = A \ b
 # Check residual
 r = b - A * x
 # (In practice, use PETSc's built-in convergence monitoring)
-```
-
-### Iterative KSP with Monitoring
-
-```julia
-using SafePETSc
-
-SafePETSc.Init()
-
-# Configure solver
-petsc_options_insert_string("-ksp_type cg")
-petsc_options_insert_string("-ksp_rtol 1e-10")
-petsc_options_insert_string("-ksp_monitor")
-petsc_options_insert_string("-pc_type jacobi")
-
-# Build system (e.g., Laplacian)
-n = 1000
-diag = Vec_uniform(2.0 * ones(n))
-off = Vec_uniform(-1.0 * ones(n-1))
-A = spdiagm(-1 => off, 0 => diag, 1 => off)
-
-b = Vec_uniform(ones(n))
-
-# Solve (will print iteration info)
-x = A \ b
 ```
 
 ### Multiple Solves
@@ -294,17 +211,9 @@ X = A \ B
 
 ## Performance Tips
 
-1. **Reuse KSP Objects**: Create `KSP` once for multiple solves
-2. **Choose Appropriate Method**: Direct for small problems, iterative for large
-3. **Tune Preconditioner**: Can dramatically affect convergence
-4. **Monitor Convergence**: Use `-ksp_monitor` to tune parameters
-5. **GPU Acceleration**: Set PETSc options for GPU execution
+1. **Reuse Factorizations**: Use `inv(A)` or `KSP(A)` when solving multiple systems with the same matrix. The expensive factorization happens once and is reused for each solve.
 
-```julia
-# GPU configuration example
-petsc_options_insert_string("-mat_type aijcusparse")
-petsc_options_insert_string("-vec_type cuda")
-```
+2. **Use Sparse Matrices**: Direct solvers are designed for sparse matrices. Dense coefficient matrices will be slow and memory-intensive.
 
 ## KSP Properties
 
@@ -320,38 +229,19 @@ n = size(ksp, 2)  # Columns
 
 ## Troubleshooting
 
-### Convergence Issues
+### Singular Matrix
 
-```julia
-# Increase iterations
-petsc_options_insert_string("-ksp_max_it 10000")
+If the direct solver fails, the matrix may be singular or nearly singular. Check:
+- Matrix has full rank
+- No zero rows or columns
+- Appropriate scaling
 
-# Relax tolerance
-petsc_options_insert_string("-ksp_rtol 1e-6")
-
-# Try different solver/preconditioner
-petsc_options_insert_string("-ksp_type gmres -pc_type asm")
-
-# View solver details
-petsc_options_insert_string("-ksp_view")
-```
-
-### Memory Issues
-
-```julia
-# Use iterative method instead of direct
-petsc_options_insert_string("-ksp_type cg")
-
-# Reduce GMRES restart
-petsc_options_insert_string("-ksp_gmres_restart 10")
-```
-
-### Assertion Failures
+### Dimension Mismatch
 
 Ensure:
-- Matrix is square for `\` operator
-- Partitions match (A.row_partition == b.row_partition)
-- Same prefix on all objects
+- Matrix `A` is square for `\` operator
+- Vector `b` has same row partition as `A`
+- For `inv(A) * B`, columns of `B` match rows of `A`
 
 ## See Also
 

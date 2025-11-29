@@ -23,7 +23,6 @@ makedocs(;
             "Vectors" => "guide/vectors.md",
             "Matrices" => "guide/matrices.md",
             "Linear Solvers" => "guide/solvers.md",
-            "STRUMPACK Support" => "guide/strumpack.md",
             "Input/Output and Display" => "guide/io.md",
             "MPI Programming" => "guide/mpi_programming.md",
             "Distributed Reference Management" => "guide/distributed_refs.md",

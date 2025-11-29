@@ -361,8 +361,7 @@ v = Vec_sum(sparsevec(indices, values, n); own_rank_only=true)
 
 1. **Use Broadcasting**: In-place broadcasting (`y .= ...`) avoids allocations
 2. **Batch Operations**: Combine multiple operations in one broadcast
-3. **Avoid Extraction**: Keep data in distributed vectors; don't extract to Julia arrays
-4. **GPU-Aware**: Set PETSc options for GPU execution
+3. **Avoid Extraction**: Keep data in distributed vectors; don't extract to Julia arrays unless necessary
 
 ```julia
 # Good: in-place, batched
