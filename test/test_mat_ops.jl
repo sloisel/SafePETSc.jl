@@ -25,6 +25,7 @@ nranks = MPI.Comm_size(comm)
 
 if rank == 0
     println("[DEBUG] Mat operations test starting")
+    println("[DEBUG] has_strumpack() = ", SafePETSc.has_strumpack())
     flush(stdout)
 end
 
