@@ -65,35 +65,15 @@ end
 ref = DRef(MyDistributedObject(...))
 ```
 
-## Controlling Cleanup
+## Automatic Cleanup
 
-### Automatic Cleanup and Pooling
+Cleanup is handled automatically by SafePETSc. At every object creation, the library internally calls `check_and_destroy!` which:
+- Periodically triggers partial garbage collection (`GC.gc(false)`) to run finalizers
+- Processes pending releases via MPI communication
 
-Cleanup is triggered automatically at object creation. Every `SafePETSc.default_check[]` object creations (default: 10), a partial garbage collection (`GC.gc(false)`) runs to trigger finalizers, and pending releases are processed via MPI communication. This throttling reduces cleanup overhead.
+This means users don't need to call `check_and_destroy!()` explicitly in normal code. The throttle frequency is controlled by `SafePETSc.default_check[]` (default: 10).
 
 For PETSc vectors, the default behavior is to return released vectors to a reuse pool instead of destroying them. Disable pooling with `ENABLE_VEC_POOL[] = false` or call `clear_vec_pool!()` to free pooled vectors.
-
-To guarantee all objects are destroyed (not just those finalized by partial GC), call `GC.gc(true)` followed by `SafeMPI.check_and_destroy!()`:
-
-```julia
-# Force complete cleanup
-GC.gc(true)  # Full garbage collection
-SafeMPI.check_and_destroy!()  # Process all finalizers
-```
-
-### Explicit Cleanup
-
-You can manually trigger cleanup:
-
-```julia
-# Trigger cleanup (does partial GC if throttle count reached)
-SafeMPI.check_and_destroy!()
-
-# With custom throttle count
-SafeMPI.check_and_destroy!(max_check_count=10)
-```
-
-The `max_check_count` parameter controls how often partial GC runs: `check_and_destroy!` only calls `GC.gc(false)` every `max_check_count` invocations, but MPI communication to process pending releases happens on every call.
 
 ### Disabling Assertions
 
@@ -105,7 +85,7 @@ SafeMPI.set_assert(false)  # Disable @mpiassert checks
 
 ## Best Practices
 
-### 1. Let Scoping Work for You
+### Let Scoping Work for You
 
 ```julia
 function compute_something()
@@ -117,19 +97,7 @@ function compute_something()
 end
 ```
 
-### 2. Explicit Cleanup in Long-Running Loops
-
-```julia
-for i in 1:1000000
-    v = Vec_uniform(data[i])
-    result[i] = compute(v)
-
-    # Periodic cleanup to avoid accumulation
-    if i % 100 == 0
-        SafeMPI.check_and_destroy!()
-    end
-end
-```
+In long-running loops, cleanup happens automatically when new objects are created, so no explicit calls are needed.
 
 ## Debugging
 
@@ -156,11 +124,10 @@ SafeMPI.enable_assert[]  # true
 
 ## Performance Considerations
 
-- **Cleanup Cost**: `check_and_destroy!` uses collective `Allgather/Allgatherv` operations and periodically triggers partial garbage collection
-- **Throttling**: Adjust `SafePETSc.default_check[]` to control how often partial garbage collection (`GC.gc(false)`) is triggered in `check_and_destroy!()` (default: 10). Higher values reduce GC overhead but may delay object finalization
+- **Cleanup Cost**: The internal cleanup mechanism uses collective `Allgather/Allgatherv` operations and periodically triggers partial garbage collection
+- **Throttling**: Adjust `SafePETSc.default_check[]` to control how often partial garbage collection is triggered (default: 10). Higher values reduce GC overhead but may delay object finalization
 
 ## See Also
 
 - [`SafePETSc.SafeMPI.DRef`](@ref)
 - [`SafePETSc.SafeMPI.DistributedRefManager`](@ref)
-- [`SafePETSc.SafeMPI.check_and_destroy!`](@ref)

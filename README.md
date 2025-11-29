@@ -107,12 +107,7 @@ The `io0()` function returns the provided IO stream (default `stdout`) if the cu
 
 ### Memory Management
 
-PETSc objects are automatically cleaned up when they go out of scope. To accelerate resource recovery, you can manually trigger cleanup:
-
-```julia
-GC.gc()                              # Trigger garbage collection
-SafePETSc.SafeMPI.check_and_destroy!()  # Perform collective cleanup
-```
+PETSc objects are automatically cleaned up when they go out of scope through distributed garbage collection. No explicit cleanup is required.
 
 ## Testing
 

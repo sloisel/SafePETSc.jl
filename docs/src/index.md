@@ -85,12 +85,7 @@ A = Mat_uniform(data; Prefix=MPIDENSE)
 
 ### Memory Management
 
-Objects are automatically cleaned up when they go out of scope through distributed garbage collection. For faster cleanup in memory-intensive applications, you can manually trigger cleanup:
-
-```julia
-GC.gc()                          # Run Julia's garbage collector
-SafeMPI.check_and_destroy!()     # Perform distributed cleanup
-```
+Objects are automatically cleaned up when they go out of scope through distributed garbage collection. No explicit cleanup is required.
 
 ## Installation
 

@@ -30,9 +30,50 @@ X = A' \ B
 
 Note: `B` and `X` must be dense matrices (`MATMPIDENSE`).
 
-## Reusable Solvers
+## Reusable Solvers with inv(A)
 
-For multiple solves with the same matrix, create a `KSP` object:
+For multiple solves with the same matrix, use `inv(A)` to get a reusable solver:
+
+```julia
+# Create solver with factorization
+Ainv = inv(A)            # Factorization happens here
+
+# Solve multiple systems efficiently
+x1 = Ainv * b1           # Solve A*x1 = b1 (reuses factorization)
+x2 = Ainv * b2           # Solve A*x2 = b2 (reuses factorization)
+
+# Transpose solves
+Aitinv = inv(A')         # Solver for transpose
+y = Aitinv * c           # Solve A'*y = c
+
+# Right-hand side multiplication
+xt = b' * Ainv           # Solve x'*A = b' (returns row vector)
+X = B * Ainv             # Solve X*A = B
+```
+
+The `inv(A)` function returns a `KSP` solver object that represents the "inverse" of `A`. The expensive factorization or preconditioner setup happens once when `inv(A)` is called, and all subsequent multiplications reuse this work.
+
+### Supported Operations
+
+| Operation | Solves | Returns |
+|-----------|--------|---------|
+| `inv(A) * b` | Ax = b | Vec x |
+| `inv(A) * B` | AX = B | Mat X |
+| `inv(A') * b` | A'x = b | Vec x |
+| `inv(A') * B` | A'X = B | Mat X |
+| `b' * inv(A)` | x'A = b' | Adjoint Vec |
+| `B * inv(A)` | XA = B | Mat X |
+| `B' * inv(A)` | XA = B' | Mat X |
+
+### Benefits of Reuse
+
+- **Performance**: Avoids repeated factorization/preconditioner setup
+- **Memory**: Single solver object instead of multiple temporary solvers
+- **Configuration**: Set PETSc options once
+
+### Alternative: KSP Constructor
+
+You can also create a reusable solver directly with the `KSP` constructor:
 
 ```julia
 # Create solver once
@@ -47,12 +88,6 @@ ldiv!(ksp, x2, b2)
 
 # KSP is cleaned up automatically when ksp goes out of scope
 ```
-
-### Benefits of Reuse
-
-- **Performance**: Avoids repeated factorization/preconditioner setup
-- **Memory**: Single solver object instead of multiple temporary solvers
-- **Configuration**: Set PETSc options once
 
 ## In-Place Operations
 

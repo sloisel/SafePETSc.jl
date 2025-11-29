@@ -14,6 +14,7 @@ SafePETSc.KSP
 SafePETSc.Init
 SafePETSc.Initialized
 SafePETSc.petsc_options_insert_string
+SafePETSc.has_strumpack
 ```
 
 ## Linear Solves
@@ -28,6 +29,27 @@ x = A' \ b                             # Solve A^T x = b
 # Matrix RHS (must be dense)
 X = A \ B                              # Solve AX = B
 X = A' \ B                             # Solve A^T X = B
+```
+
+### Reusable Solver with inv(A)
+
+```julia
+# Create reusable solver (factorization happens here)
+Ainv = inv(A)                          # Returns KSP object
+
+# Left multiplication (solve Ax = b)
+x = Ainv * b                           # Solve Ax = b
+X = Ainv * B                           # Solve AX = B
+
+# Transpose solver
+Aitinv = inv(A')                       # Returns Adjoint{KSP}
+x = Aitinv * b                         # Solve A'x = b
+X = Aitinv * B                         # Solve A'X = B
+
+# Right multiplication (solve xA = b)
+xt = b' * Ainv                         # Solve x'A = b' (returns adjoint)
+X = B * Ainv                           # Solve XA = B
+X = B' * Ainv                          # Solve XA = B'
 ```
 
 ### In-Place Solve

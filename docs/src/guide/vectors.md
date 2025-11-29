@@ -409,4 +409,4 @@ By default, released PETSc vectors are returned to an internal pool for reuse in
 
 - Disable pooling: `ENABLE_VEC_POOL[] = false`
 - Manually free pooled vectors: `clear_vec_pool!()`
-- Cleanup points: `SafeMPI.check_and_destroy!()` performs partial GC and collective release processing; vectors in use remain valid, pooled vectors remain available for reuse
+- Cleanup is automatic: vectors in use remain valid, pooled vectors remain available for reuse
