@@ -472,10 +472,13 @@ function Init()
     # Exercise the options by creating dummy objects to prevent PETSc from
     # complaining about unused options. These go out of scope immediately.
     # Vectors always use MPIDENSE prefix, matrices use the specified prefix.
+    # Include a solve to exercise KSP/solver options (e.g., STRUMPACK).
+    # Use a 2x2 non-diagonal matrix to avoid STRUMPACK's "diagonal matrix" warning.
     let
-        _ = Vec_uniform([1.0])
-        _ = Mat_uniform([1.0;;], Prefix=MPIDENSE)
-        _ = Mat_uniform([1.0;;], Prefix=MPIAIJ)
+        v = Vec_uniform([1.0, 1.0])
+        _ = Mat_uniform([1.0 0.0; 0.0 1.0], Prefix=MPIDENSE)
+        A = Mat_uniform([2.0 1.0; 1.0 2.0], Prefix=MPIAIJ)  # Non-diagonal SPD matrix
+        _ = A \ v  # Exercise KSP options
     end
 
     return nothing
