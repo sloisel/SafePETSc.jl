@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Input/Output and Display · SafePETSc.jl 0.1.17</title><meta name="title" content="Input/Output and Display · SafePETSc.jl 0.1.17"/><meta property="og:title" content="Input/Output and Display · SafePETSc.jl 0.1.17"/><meta property="twitter:title" content="Input/Output and Display · SafePETSc.jl 0.1.17"/><meta name="description" content="Documentation for SafePETSc.jl 0.1.17."/><meta property="og:description" content="Documentation for SafePETSc.jl 0.1.17."/><meta property="twitter:description" content="Documentation for SafePETSc.jl 0.1.17."/><meta property="og:url" content="https://sloisel.github.io/SafePETSc.jl/guide/io/"/><meta property="twitter:url" content="https://sloisel.github.io/SafePETSc.jl/guide/io/"/><link rel="canonical" href="https://sloisel.github.io/SafePETSc.jl/guide/io/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">SafePETSc.jl 0.1.17</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../vectors/">Vectors</a></li><li><a class="tocitem" href="../matrices/">Matrices</a></li><li><a class="tocitem" href="../solvers/">Linear Solvers</a></li><li><a class="tocitem" href="../strumpack/">STRUMPACK Support</a></li><li class="is-active"><a class="tocitem" href>Input/Output and Display</a><ul class="internal"><li><a class="tocitem" href="#The-Challenge-with-MPI-Output"><span>The Challenge with MPI Output</span></a></li><li><a class="tocitem" href="#The-io0()-Helper"><span>The io0() Helper</span></a></li><li><a class="tocitem" href="#Display-Methods-and-show()"><span>Display Methods and show()</span></a></li><li><a class="tocitem" href="#Converting-to-Native-Julia-Arrays"><span>Converting to Native Julia Arrays</span></a></li><li><a class="tocitem" href="#Advanced-IO-Patterns"><span>Advanced IO Patterns</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li><li><a class="tocitem" href="#Example:-Complete-IO-Pattern"><span>Example: Complete IO Pattern</span></a></li></ul></li><li><a class="tocitem" href="../mpi_programming/">MPI Programming</a></li><li><a class="tocitem" href="../distributed_refs/">Distributed Reference Management</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/safempi/">SafeMPI</a></li><li><a class="tocitem" href="../../api/vectors/">Vectors</a></li><li><a class="tocitem" href="../../api/matrices/">Matrices</a></li><li><a class="tocitem" href="../../api/solvers/">Solvers</a></li></ul></li><li><a class="tocitem" href="../../developer/">Developer Guide</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">User Guide</a></li><li class="is-active"><a href>Input/Output and Display</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Input/Output and Display</a></li></ul></nav><div class="docs-right"><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Input/Output-and-Display"><a class="docs-heading-anchor" href="#Input/Output-and-Display">Input/Output and Display</a><a id="Input/Output-and-Display-1"></a><a class="docs-heading-anchor-permalink" href="#Input/Output-and-Display" title="Permalink"></a></h1><p>When working with distributed MPI applications, managing output can be challenging. SafePETSc provides tools to handle display and IO operations effectively across multiple ranks.</p><h2 id="The-Challenge-with-MPI-Output"><a class="docs-heading-anchor" href="#The-Challenge-with-MPI-Output">The Challenge with MPI Output</a><a id="The-Challenge-with-MPI-Output-1"></a><a class="docs-heading-anchor-permalink" href="#The-Challenge-with-MPI-Output" title="Permalink"></a></h2><p>In MPI applications, each rank executes the same code. Without careful handling, printing operations can produce duplicate output:</p><pre><code class="language-julia hljs"># ❌ Bad: This prints from every rank
+println(&quot;Solution: &quot;, x)  # Prints 4 times with 4 ranks!</code></pre><h2 id="The-io0()-Helper"><a class="docs-heading-anchor" href="#The-io0()-Helper">The io0() Helper</a><a id="The-io0()-Helper-1"></a><a class="docs-heading-anchor-permalink" href="#The-io0()-Helper" title="Permalink"></a></h2><p>SafePETSc provides the <code>io0()</code> function to easily control which ranks produce output:</p><pre><code class="language-julia hljs"># ✓ Good: Prints only on rank 0
+println(io0(), &quot;Solution: &quot;, x)</code></pre><h3 id="How-io0()-Works"><a class="docs-heading-anchor" href="#How-io0()-Works">How io0() Works</a><a id="How-io0()-Works-1"></a><a class="docs-heading-anchor-permalink" href="#How-io0()-Works" title="Permalink"></a></h3><p><code>io0()</code> returns the provided IO stream if the current rank is in the set of selected ranks, and <code>devnull</code> on all other ranks:</p><pre><code class="language-julia hljs">io0(io=stdout; r::Set{Int}=Set{Int}([0]), dn=devnull)</code></pre><p><strong>Parameters:</strong></p><ul><li><code>io</code>: The IO stream to use (default: <code>stdout</code>)</li><li><code>r</code>: Set of ranks that should produce output (default: <code>Set{Int}([0])</code>)</li><li><code>dn</code>: The IO stream to return for non-selected ranks (default: <code>devnull</code>)</li></ul><p><strong>Return value:</strong></p><ul><li>Returns <code>io</code> if the current rank is in <code>r</code></li><li>Returns <code>dn</code> otherwise</li></ul><p>This allows all ranks to execute the same code, but only the selected ranks actually write output.</p><h3 id="Basic-Usage"><a class="docs-heading-anchor" href="#Basic-Usage">Basic Usage</a><a id="Basic-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SafePETSc
+using MPI
+
+SafePETSc.Init()
+
+# Create and solve system
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+b = Vec_uniform([1.0, 2.0])
+x = A \ b
+
+# Print only on rank 0 (default)
+println(io0(), &quot;Solution computed&quot;)
+println(io0(), x)  # Displays the vector</code></pre><h3 id="Selecting-Different-Ranks"><a class="docs-heading-anchor" href="#Selecting-Different-Ranks">Selecting Different Ranks</a><a id="Selecting-Different-Ranks-1"></a><a class="docs-heading-anchor-permalink" href="#Selecting-Different-Ranks" title="Permalink"></a></h3><p>You can specify which ranks should produce output:</p><pre><code class="language-julia hljs">comm = MPI.COMM_WORLD
+rank = MPI.Comm_rank(comm)
+nranks = MPI.Comm_size(comm)
+
+# Print from rank 0 (default)
+println(io0(), &quot;This is from rank 0&quot;)
+
+# Print from rank 1
+println(io0(r=Set([1])), &quot;This is from rank 1&quot;)
+
+# Print from the last rank
+println(io0(r=Set([nranks-1])), &quot;This is from the last rank&quot;)
+
+# Print from multiple ranks (e.g., ranks 0 and 2)
+println(io0(r=Set([0, 2])), &quot;This is from ranks 0 and 2&quot;)</code></pre><h3 id="Writing-to-Files"><a class="docs-heading-anchor" href="#Writing-to-Files">Writing to Files</a><a id="Writing-to-Files-1"></a><a class="docs-heading-anchor-permalink" href="#Writing-to-Files" title="Permalink"></a></h3><p><code>io0()</code> works with any IO stream, including files:</p><pre><code class="language-julia hljs">using LinearAlgebra  # For norm()
+
+# Write to file only on rank 0 (assumes x, A, b from previous example)
+open(&quot;results.txt&quot;, &quot;w&quot;) do f
+    println(io0(f), &quot;Results:&quot;)
+    println(io0(f), &quot;Solution: &quot;, x)
+    println(io0(f), &quot;Residual norm: &quot;, norm(A*x - b))
+end</code></pre><h2 id="Display-Methods-and-show()"><a class="docs-heading-anchor" href="#Display-Methods-and-show()">Display Methods and show()</a><a id="Display-Methods-and-show()-1"></a><a class="docs-heading-anchor-permalink" href="#Display-Methods-and-show()" title="Permalink"></a></h2><p>SafePETSc implements Julia&#39;s <code>show()</code> interface for vectors and matrices, allowing them to be displayed naturally.</p><h3 id="Automatic-Conversion"><a class="docs-heading-anchor" href="#Automatic-Conversion">Automatic Conversion</a><a id="Automatic-Conversion-1"></a><a class="docs-heading-anchor-permalink" href="#Automatic-Conversion" title="Permalink"></a></h3><p>When you display a <code>Vec</code> or <code>Mat</code>, it is automatically converted to a Julia array for display:</p><pre><code class="language-julia hljs">v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+
+# All of these work and trigger conversion:
+println(io0(), v)           # Uses show(io, v)
+display(v)                  # Uses show(io, MIME&quot;text/plain&quot;(), v)
+@show v                     # Macro uses show()</code></pre><h3 id="How-show()-Works"><a class="docs-heading-anchor" href="#How-show()-Works">How show() Works</a><a id="How-show()-Works-1"></a><a class="docs-heading-anchor-permalink" href="#How-show()-Works" title="Permalink"></a></h3><p>The <code>show()</code> methods are <strong>collective operations</strong> - all ranks participate:</p><ol><li>All ranks call the conversion function (e.g., <code>Vector(v)</code> or <code>Matrix(A)</code>)</li><li>Data is gathered from all ranks to all ranks</li><li>Each rank has the complete array</li><li><code>show()</code> displays it on each rank&#39;s IO stream</li></ol><p>When combined with <code>io0()</code>, only one rank actually displays:</p><pre><code class="language-julia hljs"># All ranks execute this, but only rank 0 prints
+println(io0(), v)
+
+# Behind the scenes:
+# 1. All ranks: v_julia = Vector(v)  (collective)
+# 2. All ranks: show(io0(), v_julia)  (rank 0 shows, others write to devnull)</code></pre><p><strong>⚠️ WARNING: Never Wrap show() in Rank-Dependent Conditionals!</strong></p><p>Because <code>show()</code> is collective, wrapping it in a rank-dependent conditional will desynchronize the MPI cluster and cause it to hang:</p><pre><code class="language-julia hljs"># ❌ WRONG - This will hang MPI!
+if rank == 0
+    println(v)  # Only rank 0 calls Vector(v), others wait forever
+end
+
+# ❌ WRONG - This will also hang!
+if rank == 0
+    @show v  # Only rank 0 participates in collective operations
+end
+
+# ✓ CORRECT - All ranks participate, only rank 0 prints
+println(io0(), v)  # All ranks call Vector(v), rank 0 displays</code></pre><p>If you want rank-specific output, <strong>always use <code>io0()</code></strong> - it ensures all ranks participate in the collective operations while controlling which ranks produce the output.</p><h3 id="Dense-vs-Sparse-Display"><a class="docs-heading-anchor" href="#Dense-vs-Sparse-Display">Dense vs Sparse Display</a><a id="Dense-vs-Sparse-Display-1"></a><a class="docs-heading-anchor-permalink" href="#Dense-vs-Sparse-Display" title="Permalink"></a></h3><p>Matrices automatically choose the appropriate display format:</p><pre><code class="language-julia hljs"># Dense matrix - displays as Matrix
+A_dense = Mat_uniform([1.0 2.0; 3.0 4.0])
+println(io0(), A_dense)  # Shows dense format
+
+# Sparse matrix - displays using sparse() format
+using SparseArrays
+A_sparse = Mat_uniform(sparse([1, 2], [1, 2], [1.0, 4.0], 10, 10))
+println(io0(), A_sparse)  # Shows sparse format with (i, j, value) triples</code></pre><h3 id="MIME-Type-Support"><a class="docs-heading-anchor" href="#MIME-Type-Support">MIME Type Support</a><a id="MIME-Type-Support-1"></a><a class="docs-heading-anchor-permalink" href="#MIME-Type-Support" title="Permalink"></a></h3><p>SafePETSc supports MIME type display for rich output in notebooks and other environments:</p><pre><code class="language-julia hljs"># In Jupyter notebooks, Pluto, etc.
+display(v)  # Uses MIME&quot;text/plain&quot;
+display(A)  # Uses MIME&quot;text/plain&quot;
+
+# The three-argument show method is called:
+# show(io, MIME&quot;text/plain&quot;(), v)</code></pre><h2 id="Converting-to-Native-Julia-Arrays"><a class="docs-heading-anchor" href="#Converting-to-Native-Julia-Arrays">Converting to Native Julia Arrays</a><a id="Converting-to-Native-Julia-Arrays-1"></a><a class="docs-heading-anchor-permalink" href="#Converting-to-Native-Julia-Arrays" title="Permalink"></a></h2><p>SafePETSc provides constructors to explicitly convert distributed PETSc objects to native Julia arrays. This is useful for interoperability with other Julia packages, data export, or small-scale analysis.</p><h3 id="Available-Conversions"><a class="docs-heading-anchor" href="#Available-Conversions">Available Conversions</a><a id="Available-Conversions-1"></a><a class="docs-heading-anchor-permalink" href="#Available-Conversions" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Vector: Convert Vec to Julia Vector
+v = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+v_julia = Vector(v)  # Returns Vector{Float64}
+
+# Matrix: Convert Mat to Julia Matrix (dense)
+A = Mat_uniform([1.0 2.0; 3.0 4.0])
+A_dense = Matrix(A)  # Returns Matrix{Float64}
+
+# Sparse: Convert Mat to SparseMatrixCSC
+using SparseArrays
+A_sparse = Mat_uniform(sparse([1, 2], [1, 2], [1.0, 4.0], 10, 10))
+A_csc = sparse(A_sparse)  # Returns SparseMatrixCSC{Float64, Int}</code></pre><h3 id="Universal-Conversion-with-J()"><a class="docs-heading-anchor" href="#Universal-Conversion-with-J()">Universal Conversion with J()</a><a id="Universal-Conversion-with-J()-1"></a><a class="docs-heading-anchor-permalink" href="#Universal-Conversion-with-J()" title="Permalink"></a></h3><p>The <code>J()</code> function provides a uniform interface for converting any SafePETSc object to its native Julia equivalent. It automatically chooses the appropriate conversion based on the input type:</p><pre><code class="language-julia hljs"># J() automatically selects the right conversion
+v = Vec_uniform([1.0, 2.0, 3.0])
+v_julia = J(v)  # Vector{Float64} (same as Vector(v))
+
+A_dense = Mat_uniform([1.0 2.0; 3.0 4.0])
+A_julia = J(A_dense)  # Matrix{Float64} (same as Matrix(A))
+
+A_sparse = Mat_uniform(sparse([1.0 0.0; 0.0 2.0]))
+A_julia = J(A_sparse)  # SparseMatrixCSC (same as sparse(A))
+
+# Scalars and other types pass through unchanged
+x = J(3.14)  # 3.14</code></pre><p><code>J()</code> is particularly useful in generic code where you want to convert multiple PETSc objects without knowing their specific types:</p><pre><code class="language-julia hljs"># Convert all arguments at once using broadcasting
+args_julia = J.((A, b, x))  # Converts each to its Julia equivalent</code></pre><p><strong>Conversion rules:</strong></p><ul><li><code>Vec{T}</code> → <code>Vector{T}</code></li><li><code>Mat{T}</code> (dense) → <code>Matrix{T}</code></li><li><code>Mat{T}</code> (sparse) → <code>SparseMatrixCSC{T,Int}</code></li><li>Adjoint types preserve the adjoint wrapper</li><li>Non-PETSc types pass through unchanged</li></ul><h3 id="Important:-Collective-Operations"><a class="docs-heading-anchor" href="#Important:-Collective-Operations">Important: Collective Operations</a><a id="Important:-Collective-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Important:-Collective-Operations" title="Permalink"></a></h3><p><strong>All conversion functions are collective operations</strong> - every rank must call them:</p><pre><code class="language-julia hljs"># ✓ CORRECT - All ranks participate
+v_julia = Vector(v)  # All ranks get the complete vector
+
+# ❌ WRONG - Will hang MPI!
+if rank == 0
+    v_julia = Vector(v)  # Only rank 0 calls, others wait forever
+end</code></pre><p>After conversion, <strong>all ranks receive the complete array</strong>. This is necessary because the conversion gathers distributed data from all ranks.</p><h3 id="When-to-Use-Conversions"><a class="docs-heading-anchor" href="#When-to-Use-Conversions">When to Use Conversions</a><a id="When-to-Use-Conversions-1"></a><a class="docs-heading-anchor-permalink" href="#When-to-Use-Conversions" title="Permalink"></a></h3><p><strong>Good use cases:</strong></p><ol><li><strong>Interoperability</strong>: Pass data to packages that don&#39;t support PETSc</li><li><strong>Small-scale analysis</strong>: Compute properties on small matrices/vectors</li><li><strong>Data export</strong>: Save results to files in native Julia formats</li><li><strong>Visualization</strong>: Convert for plotting libraries</li></ol><pre><code class="language-julia hljs">using Plots
+
+# Solve distributed system
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+b = Vec_uniform([1.0, 2.0])
+x = A \ b
+
+# Convert for plotting (small vector, so conversion is cheap)
+x_julia = Vector(x)
+plot(x_julia, label=&quot;Solution&quot;)
+savefig(io0(), &quot;solution.png&quot;)  # Only rank 0 saves</code></pre><p><strong>When to avoid:</strong></p><ol><li><strong>Large datasets</strong>: Conversion gathers all data to all ranks (expensive!)</li><li><strong>Intermediate computations</strong>: Keep data in PETSc format for efficiency</li><li><strong>Repeated access</strong>: Don&#39;t convert in loops</li></ol><pre><code class="language-julia hljs"># ❌ BAD - Expensive conversion in loop
+for i in 1:1000
+    v_julia = Vector(v)  # Wasteful! Gathers data every iteration
+    process(v_julia[1])
+end
+
+# ✓ BETTER - Convert once if needed
+v_julia = Vector(v)
+for i in 1:1000
+    process(v_julia[1])
+end
+
+# ✓ BEST - Don&#39;t convert at all if possible
+# Use PETSc operations directly instead</code></pre><h3 id="Performance-Considerations"><a class="docs-heading-anchor" href="#Performance-Considerations">Performance Considerations</a><a id="Performance-Considerations-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Considerations" title="Permalink"></a></h3><p>Conversion performance scales with:</p><ul><li><strong>Data size</strong>: Larger vectors/matrices take longer to gather</li><li><strong>Rank count</strong>: More ranks means more communication</li><li><strong>Network</strong>: Collective operations require all-to-all communication</li></ul><pre><code class="language-julia hljs"># Small: fast conversion (&lt; 1ms)
+v_small = Vec_uniform(ones(100))
+v_julia = Vector(v_small)
+
+# Large: expensive conversion (can be seconds!)
+v_large = Vec_uniform(ones(10_000_000))
+v_julia = Vector(v_large)  # All 10M elements sent to all ranks</code></pre><h3 id="Working-with-Converted-Data"><a class="docs-heading-anchor" href="#Working-with-Converted-Data">Working with Converted Data</a><a id="Working-with-Converted-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Working-with-Converted-Data" title="Permalink"></a></h3><p>After conversion, you have standard Julia arrays:</p><pre><code class="language-julia hljs">using LinearAlgebra
+using Statistics
+
+# Convert PETSc objects
+x = Vec_uniform([1.0, 2.0, 3.0, 4.0])
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+
+x_julia = Vector(x)
+A_julia = Matrix(A)
+
+# Use with any Julia package
+μ = mean(x_julia)           # Statistics
+σ = std(x_julia)
+λ = eigvals(A_julia)        # LinearAlgebra
+det_A = det(A_julia)
+
+println(io0(), &quot;Mean: $μ, Std: $σ&quot;)
+println(io0(), &quot;Eigenvalues: &quot;, λ)</code></pre><h3 id="Sparse-Matrix-Conversion"><a class="docs-heading-anchor" href="#Sparse-Matrix-Conversion">Sparse Matrix Conversion</a><a id="Sparse-Matrix-Conversion-1"></a><a class="docs-heading-anchor-permalink" href="#Sparse-Matrix-Conversion" title="Permalink"></a></h3><p>For sparse matrices, use <code>sparse()</code> to preserve sparsity:</p><pre><code class="language-julia hljs">using SparseArrays
+
+# Create large sparse matrix
+n = 10_000
+I = [1:n; 1:n-1; 2:n]
+J = [1:n; 2:n; 1:n-1]
+V = [2.0*ones(n); -ones(n-1); -ones(n-1)]
+A = Mat_sum(sparse(I, J, V, n, n))
+
+# Convert to CSC format (preserves sparsity)
+A_csc = sparse(A)  # SparseMatrixCSC - efficient!
+
+# Don&#39;t use Matrix() for sparse matrices!
+A_dense = Matrix(A)  # Creates 10000×10000 dense array - wasteful!
+
+# Work with sparse format
+nnz_A = nnz(A_csc)
+println(io0(), &quot;Nonzeros: $nnz_A out of $(n^2) entries&quot;)</code></pre><h3 id="Example:-Data-Export"><a class="docs-heading-anchor" href="#Example:-Data-Export">Example: Data Export</a><a id="Example:-Data-Export-1"></a><a class="docs-heading-anchor-permalink" href="#Example:-Data-Export" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SafePETSc
+using MPI
+using SparseArrays
+using DelimitedFiles  # For writedlm
+
+SafePETSc.Init()
+
+# Solve system
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+b = Vec_uniform([1.0, 2.0])
+x = A \ b
+
+# Convert to Julia arrays (collective operation)
+x_julia = Vector(x)
+A_julia = Matrix(A)
+
+# Write to files (only rank 0)
+open(&quot;solution.txt&quot;, &quot;w&quot;) do f
+    writedlm(io0(f), x_julia)
+end
+
+open(&quot;matrix.txt&quot;, &quot;w&quot;) do f
+    writedlm(io0(f), A_julia)
+end
+
+println(io0(), &quot;Data exported to solution.txt and matrix.txt&quot;)</code></pre><h2 id="Advanced-IO-Patterns"><a class="docs-heading-anchor" href="#Advanced-IO-Patterns">Advanced IO Patterns</a><a id="Advanced-IO-Patterns-1"></a><a class="docs-heading-anchor-permalink" href="#Advanced-IO-Patterns" title="Permalink"></a></h2><h3 id="Per-Rank-Output-Files"><a class="docs-heading-anchor" href="#Per-Rank-Output-Files">Per-Rank Output Files</a><a id="Per-Rank-Output-Files-1"></a><a class="docs-heading-anchor-permalink" href="#Per-Rank-Output-Files" title="Permalink"></a></h3><p>Sometimes you want each rank to write its own file:</p><pre><code class="language-julia hljs">comm = MPI.COMM_WORLD
+rank = MPI.Comm_rank(comm)
+
+# Each rank writes to its own file - don&#39;t use io0()!
+open(&quot;output_rank_$rank.txt&quot;, &quot;w&quot;) do f
+    println(f, &quot;Output from rank $rank&quot;)
+    println(f, &quot;Local data: &quot;, get_local_data())
+end</code></pre><p>In this case, <strong>don&#39;t use <code>io0()</code></strong> because you want all ranks to write.</p><h3 id="Debugging-Output"><a class="docs-heading-anchor" href="#Debugging-Output">Debugging Output</a><a id="Debugging-Output-1"></a><a class="docs-heading-anchor-permalink" href="#Debugging-Output" title="Permalink"></a></h3><p>For debugging, you might temporarily want output from all ranks:</p><pre><code class="language-julia hljs"># Debugging: show output from all ranks
+comm = MPI.COMM_WORLD
+rank = MPI.Comm_rank(comm)
+println(&quot;Rank $rank: x = &quot;, x)  # All ranks print (useful for debugging)
+
+# Production: only rank 0
+println(io0(), &quot;Solution: &quot;, x)  # Only rank 0 prints</code></pre><h2 id="Best-Practices"><a class="docs-heading-anchor" href="#Best-Practices">Best Practices</a><a id="Best-Practices-1"></a><a class="docs-heading-anchor-permalink" href="#Best-Practices" title="Permalink"></a></h2><ol><li><strong>Use <code>io0()</code> for normal output</strong>: Always use <code>println(io0(), ...)</code> for user-facing output</li><li><strong>Show vectors and matrices with io0()</strong>: <code>println(io0(), x)</code> not <code>println(x)</code></li><li><strong>Per-rank files don&#39;t need io0()</strong>: When each rank writes its own file, write directly</li><li><strong>Debugging is the exception</strong>: Temporarily allowing all-rank output is fine for debugging</li><li><strong>File IO works with io0()</strong>: <code>open(&quot;file.txt&quot;, &quot;w&quot;) do f; println(io0(f), ...) end</code></li></ol><h2 id="Example:-Complete-IO-Pattern"><a class="docs-heading-anchor" href="#Example:-Complete-IO-Pattern">Example: Complete IO Pattern</a><a id="Example:-Complete-IO-Pattern-1"></a><a class="docs-heading-anchor-permalink" href="#Example:-Complete-IO-Pattern" title="Permalink"></a></h2><pre><code class="language-julia hljs">using SafePETSc
+using MPI
+using LinearAlgebra
+
+SafePETSc.Init()
+
+comm = MPI.COMM_WORLD
+rank = MPI.Comm_rank(comm)
+nranks = MPI.Comm_size(comm)
+
+# Setup and solve
+A = Mat_uniform([2.0 1.0; 1.0 3.0])
+b = Vec_uniform([1.0, 2.0])
+x = A \ b
+
+# Standard output (rank 0 only)
+println(io0(), &quot;=&quot;^60)
+println(io0(), &quot;Parallel Linear Solve Complete&quot;)
+println(io0(), &quot;  MPI ranks: &quot;, nranks)
+println(io0(), &quot;  System size: &quot;, length(b))
+println(io0(), &quot;=&quot;^60)
+
+# Display results
+println(io0(), &quot;\nSolution vector:&quot;)
+println(io0(), x)
+
+println(io0(), &quot;\nResidual norm: &quot;, norm(A*x - b))
+
+# Write detailed results to file (rank 0 only)
+open(&quot;results.txt&quot;, &quot;w&quot;) do f
+    println(io0(f), &quot;Detailed Results&quot;)
+    println(io0(f), &quot;=&quot;^60)
+    println(io0(f), &quot;\nMatrix A:&quot;)
+    println(io0(f), A)
+    println(io0(f), &quot;\nRight-hand side b:&quot;)
+    println(io0(f), b)
+    println(io0(f), &quot;\nSolution x:&quot;)
+    println(io0(f), x)
+end
+
+println(io0(), &quot;\nResults written to results.txt&quot;)</code></pre><p>This pattern provides clean, professional output without duplication across MPI ranks.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../strumpack/">« STRUMPACK Support</a><a class="docs-footer-nextpage" href="../mpi_programming/">MPI Programming »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Saturday 29 November 2025 19:18">Saturday 29 November 2025</span>. Using Julia version 1.12.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
