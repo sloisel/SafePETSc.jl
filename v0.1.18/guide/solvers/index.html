@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Linear Solvers · SafePETSc.jl 0.1.18</title><meta name="title" content="Linear Solvers · SafePETSc.jl 0.1.18"/><meta property="og:title" content="Linear Solvers · SafePETSc.jl 0.1.18"/><meta property="twitter:title" content="Linear Solvers · SafePETSc.jl 0.1.18"/><meta name="description" content="Documentation for SafePETSc.jl 0.1.18."/><meta property="og:description" content="Documentation for SafePETSc.jl 0.1.18."/><meta property="twitter:description" content="Documentation for SafePETSc.jl 0.1.18."/><meta property="og:url" content="https://sloisel.github.io/SafePETSc.jl/guide/solvers/"/><meta property="twitter:url" content="https://sloisel.github.io/SafePETSc.jl/guide/solvers/"/><link rel="canonical" href="https://sloisel.github.io/SafePETSc.jl/guide/solvers/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">SafePETSc.jl 0.1.18</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../vectors/">Vectors</a></li><li><a class="tocitem" href="../matrices/">Matrices</a></li><li class="is-active"><a class="tocitem" href>Linear Solvers</a><ul class="internal"><li><a class="tocitem" href="#Basic-Usage"><span>Basic Usage</span></a></li><li><a class="tocitem" href="#Reusable-Solvers-with-inv(A)"><span>Reusable Solvers with inv(A)</span></a></li><li><a class="tocitem" href="#In-Place-Operations"><span>In-Place Operations</span></a></li><li><a class="tocitem" href="#Right-Division"><span>Right Division</span></a></li><li><a class="tocitem" href="#Examples"><span>Examples</span></a></li><li><a class="tocitem" href="#Performance-Tips"><span>Performance Tips</span></a></li><li><a class="tocitem" href="#KSP-Properties"><span>KSP Properties</span></a></li><li><a class="tocitem" href="#Troubleshooting"><span>Troubleshooting</span></a></li><li><a class="tocitem" href="#See-Also"><span>See Also</span></a></li></ul></li><li><a class="tocitem" href="../io/">Input/Output and Display</a></li><li><a class="tocitem" href="../mpi_programming/">MPI Programming</a></li><li><a class="tocitem" href="../distributed_refs/">Distributed Reference Management</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/safempi/">SafeMPI</a></li><li><a class="tocitem" href="../../api/vectors/">Vectors</a></li><li><a class="tocitem" href="../../api/matrices/">Matrices</a></li><li><a class="tocitem" href="../../api/solvers/">Solvers</a></li></ul></li><li><a class="tocitem" href="../../developer/">Developer Guide</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">User Guide</a></li><li class="is-active"><a href>Linear Solvers</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Linear Solvers</a></li></ul></nav><div class="docs-right"><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Linear-Solvers"><a class="docs-heading-anchor" href="#Linear-Solvers">Linear Solvers</a><a id="Linear-Solvers-1"></a><a class="docs-heading-anchor-permalink" href="#Linear-Solvers" title="Permalink"></a></h1><p>SafePETSc provides linear solver functionality through PETSc&#39;s KSP interface, using direct (sparse LU factorization) solvers.</p><div class="admonition is-info" id="Direct-Solvers-e508c85c42b0f675"><header class="admonition-header">Direct Solvers<a class="admonition-anchor" href="#Direct-Solvers-e508c85c42b0f675" title="Permalink"></a></header><div class="admonition-body"><p>SafePETSc uses <strong>direct solvers</strong> (sparse LU factorization), not iterative methods. This means:</p><ul><li>No convergence parameters to tune</li><li>No preconditioner selection needed</li><li>Exact solutions (up to floating-point precision)</li><li>The coefficient matrix <code>A</code> should be sparse (MPIAIJ prefix, which is the default)</li></ul></div></div><h2 id="Basic-Usage"><a class="docs-heading-anchor" href="#Basic-Usage">Basic Usage</a><a id="Basic-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage" title="Permalink"></a></h2><h3 id="Direct-Solve"><a class="docs-heading-anchor" href="#Direct-Solve">Direct Solve</a><a id="Direct-Solve-1"></a><a class="docs-heading-anchor-permalink" href="#Direct-Solve" title="Permalink"></a></h3><p>The simplest way to solve a linear system:</p><pre><code class="language-julia hljs"># Solve Ax = b
+x = A \ b
+
+# Solve A^T x = b
+x = A&#39; \ b</code></pre><p>This creates a solver internally, solves the system, and cleans up automatically.</p><h3 id="Multiple-Right-Hand-Sides"><a class="docs-heading-anchor" href="#Multiple-Right-Hand-Sides">Multiple Right-Hand Sides</a><a id="Multiple-Right-Hand-Sides-1"></a><a class="docs-heading-anchor-permalink" href="#Multiple-Right-Hand-Sides" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Matrix RHS: solve AX = B
+X = A \ B
+
+# Transpose: solve A^T X = B
+X = A&#39; \ B</code></pre><div class="admonition is-warning" id="Dense-RHS-Required-cf63e40519c0e176"><header class="admonition-header">Dense RHS Required<a class="admonition-anchor" href="#Dense-RHS-Required-cf63e40519c0e176" title="Permalink"></a></header><div class="admonition-body"><p>For matrix right-hand sides, <code>B</code> must be a dense matrix (created with <code>Prefix=MPIDENSE</code>). The coefficient matrix <code>A</code> should be sparse (default MPIAIJ).</p></div></div><h2 id="Reusable-Solvers-with-inv(A)"><a class="docs-heading-anchor" href="#Reusable-Solvers-with-inv(A)">Reusable Solvers with inv(A)</a><a id="Reusable-Solvers-with-inv(A)-1"></a><a class="docs-heading-anchor-permalink" href="#Reusable-Solvers-with-inv(A)" title="Permalink"></a></h2><p>For multiple solves with the same matrix, use <code>inv(A)</code> to get a reusable solver:</p><pre><code class="language-julia hljs"># Create solver with factorization
+Ainv = inv(A)            # Factorization happens here
+
+# Solve multiple systems efficiently
+x1 = Ainv * b1           # Solve A*x1 = b1 (reuses factorization)
+x2 = Ainv * b2           # Solve A*x2 = b2 (reuses factorization)
+
+# Transpose solves
+Aitinv = inv(A&#39;)         # Solver for transpose
+y = Aitinv * c           # Solve A&#39;*y = c
+
+# Right-hand side multiplication
+xt = b&#39; * Ainv           # Solve x&#39;*A = b&#39; (returns row vector)
+X = B * Ainv             # Solve X*A = B</code></pre><p>The <code>inv(A)</code> function returns a <code>KSP</code> solver object that represents the &quot;inverse&quot; of <code>A</code>. The expensive factorization or preconditioner setup happens once when <code>inv(A)</code> is called, and all subsequent multiplications reuse this work.</p><h3 id="Supported-Operations"><a class="docs-heading-anchor" href="#Supported-Operations">Supported Operations</a><a id="Supported-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Supported-Operations" title="Permalink"></a></h3><table><tr><th style="text-align: right">Operation</th><th style="text-align: right">Solves</th><th style="text-align: right">Returns</th></tr><tr><td style="text-align: right"><code>inv(A) * b</code></td><td style="text-align: right">Ax = b</td><td style="text-align: right">Vec x</td></tr><tr><td style="text-align: right"><code>inv(A) * B</code></td><td style="text-align: right">AX = B</td><td style="text-align: right">Mat X</td></tr><tr><td style="text-align: right"><code>inv(A&#39;) * b</code></td><td style="text-align: right">A&#39;x = b</td><td style="text-align: right">Vec x</td></tr><tr><td style="text-align: right"><code>inv(A&#39;) * B</code></td><td style="text-align: right">A&#39;X = B</td><td style="text-align: right">Mat X</td></tr><tr><td style="text-align: right"><code>b&#39; * inv(A)</code></td><td style="text-align: right">x&#39;A = b&#39;</td><td style="text-align: right">Adjoint Vec</td></tr><tr><td style="text-align: right"><code>B * inv(A)</code></td><td style="text-align: right">XA = B</td><td style="text-align: right">Mat X</td></tr><tr><td style="text-align: right"><code>B&#39; * inv(A)</code></td><td style="text-align: right">XA = B&#39;</td><td style="text-align: right">Mat X</td></tr></table><h3 id="Benefits-of-Reuse"><a class="docs-heading-anchor" href="#Benefits-of-Reuse">Benefits of Reuse</a><a id="Benefits-of-Reuse-1"></a><a class="docs-heading-anchor-permalink" href="#Benefits-of-Reuse" title="Permalink"></a></h3><ul><li><strong>Performance</strong>: Avoids repeated factorization/preconditioner setup</li><li><strong>Memory</strong>: Single solver object instead of multiple temporary solvers</li><li><strong>Configuration</strong>: Set PETSc options once</li></ul><h3 id="Alternative:-KSP-Constructor"><a class="docs-heading-anchor" href="#Alternative:-KSP-Constructor">Alternative: KSP Constructor</a><a id="Alternative:-KSP-Constructor-1"></a><a class="docs-heading-anchor-permalink" href="#Alternative:-KSP-Constructor" title="Permalink"></a></h3><p>You can also create a reusable solver directly with the <code>KSP</code> constructor:</p><pre><code class="language-julia hljs"># Create solver once
+ksp = KSP(A)
+
+# Solve multiple systems
+x1 = zeros_like(b1)
+ldiv!(ksp, x1, b1)
+
+x2 = zeros_like(b2)
+ldiv!(ksp, x2, b2)
+
+# KSP is cleaned up automatically when ksp goes out of scope</code></pre><h2 id="In-Place-Operations"><a class="docs-heading-anchor" href="#In-Place-Operations">In-Place Operations</a><a id="In-Place-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#In-Place-Operations" title="Permalink"></a></h2><p>For pre-allocated result vectors/matrices:</p><pre><code class="language-julia hljs"># Vector solve
+x = zeros_like(b)
+ldiv!(x, A, b)  # x = A \ b (creates solver internally)
+
+# With reusable solver
+ldiv!(ksp, x, b)  # Reuse solver
+
+# Matrix solve
+X = zeros_like(B)
+ldiv!(X, A, B)  # Solve AX = B
+ldiv!(ksp, X, B)  # With reusable solver</code></pre><h2 id="Right-Division"><a class="docs-heading-anchor" href="#Right-Division">Right Division</a><a id="Right-Division-1"></a><a class="docs-heading-anchor-permalink" href="#Right-Division" title="Permalink"></a></h2><p>Solve systems where the unknown is on the left:</p><pre><code class="language-julia hljs"># Solve x^T A = b^T (equivalent to A^T x = b)
+x_adj = b&#39; / A  # Returns adjoint vector
+
+# Solve XA = B
+X = B / A
+
+# Transpose: solve XA^T = B
+X = B / A&#39;</code></pre><p>Note: <code>B</code> and <code>X</code> must be dense matrices.</p><h2 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h2><h3 id="Basic-Linear-System"><a class="docs-heading-anchor" href="#Basic-Linear-System">Basic Linear System</a><a id="Basic-Linear-System-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Linear-System" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SafePETSc
+using MPI
+
+SafePETSc.Init()
+
+# Create a simple system
+n = 100
+A_dense = zeros(n, n)
+for i in 1:n
+    A_dense[i, i] = 2.0
+    if i &gt; 1
+        A_dense[i, i-1] = -1.0
+    end
+    if i &lt; n
+        A_dense[i, i+1] = -1.0
+    end
+end
+
+A = Mat_uniform(A_dense)
+b = Vec_uniform(ones(n))
+
+# Solve
+x = A \ b
+
+# Check residual
+r = b - A * x
+# (In practice, use PETSc&#39;s built-in convergence monitoring)</code></pre><h3 id="Multiple-Solves"><a class="docs-heading-anchor" href="#Multiple-Solves">Multiple Solves</a><a id="Multiple-Solves-1"></a><a class="docs-heading-anchor-permalink" href="#Multiple-Solves" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SafePETSc
+
+SafePETSc.Init()
+
+# System matrix
+A = Mat_uniform(...)
+
+# Create solver once
+ksp = KSP(A)
+
+# Solve many RHS vectors
+for i in 1:100
+    b = Vec_uniform(rhs_data[i])
+    x = zeros_like(b)
+    ldiv!(ksp, x, b)
+    results[i] = extract_result(x)
+end
+
+# KSP automatically cleaned up</code></pre><h3 id="Block-Solves"><a class="docs-heading-anchor" href="#Block-Solves">Block Solves</a><a id="Block-Solves-1"></a><a class="docs-heading-anchor-permalink" href="#Block-Solves" title="Permalink"></a></h3><pre><code class="language-julia hljs">using SafePETSc
+
+SafePETSc.Init()
+
+# System matrix
+A = Mat_uniform(...)
+
+# Multiple right-hand sides as columns of a dense matrix
+B = Mat_uniform(rhs_matrix)  # Must be dense
+
+# Solve all systems at once
+X = A \ B
+
+# Each column of X is a solution</code></pre><h2 id="Performance-Tips"><a class="docs-heading-anchor" href="#Performance-Tips">Performance Tips</a><a id="Performance-Tips-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Tips" title="Permalink"></a></h2><ol><li><p><strong>Reuse Factorizations</strong>: Use <code>inv(A)</code> or <code>KSP(A)</code> when solving multiple systems with the same matrix. The expensive factorization happens once and is reused for each solve.</p></li><li><p><strong>Use Sparse Matrices</strong>: Direct solvers are designed for sparse matrices. Dense coefficient matrices will be slow and memory-intensive.</p></li></ol><h2 id="KSP-Properties"><a class="docs-heading-anchor" href="#KSP-Properties">KSP Properties</a><a id="KSP-Properties-1"></a><a class="docs-heading-anchor-permalink" href="#KSP-Properties" title="Permalink"></a></h2><p>Check solver dimensions:</p><pre><code class="language-julia hljs">ksp = KSP(A)
+
+m, n = size(ksp)  # Matrix dimensions
+m = size(ksp, 1)  # Rows
+n = size(ksp, 2)  # Columns</code></pre><h2 id="Troubleshooting"><a class="docs-heading-anchor" href="#Troubleshooting">Troubleshooting</a><a id="Troubleshooting-1"></a><a class="docs-heading-anchor-permalink" href="#Troubleshooting" title="Permalink"></a></h2><h3 id="Singular-Matrix"><a class="docs-heading-anchor" href="#Singular-Matrix">Singular Matrix</a><a id="Singular-Matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Singular-Matrix" title="Permalink"></a></h3><p>If the direct solver fails, the matrix may be singular or nearly singular. Check:</p><ul><li>Matrix has full rank</li><li>No zero rows or columns</li><li>Appropriate scaling</li></ul><h3 id="Dimension-Mismatch"><a class="docs-heading-anchor" href="#Dimension-Mismatch">Dimension Mismatch</a><a id="Dimension-Mismatch-1"></a><a class="docs-heading-anchor-permalink" href="#Dimension-Mismatch" title="Permalink"></a></h3><p>Ensure:</p><ul><li>Matrix <code>A</code> is square for <code>\</code> operator</li><li>Vector <code>b</code> has same row partition as <code>A</code></li><li>For <code>inv(A) * B</code>, columns of <code>B</code> match rows of <code>A</code></li></ul><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="../../api/solvers/#SafePETSc.KSP"><code>SafePETSc.KSP</code></a></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../matrices/">« Matrices</a><a class="docs-footer-nextpage" href="../io/">Input/Output and Display »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Wednesday 3 December 2025 14:36">Wednesday 3 December 2025</span>. Using Julia version 1.12.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
