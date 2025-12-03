@@ -113,6 +113,28 @@ w = v' * A                             # Adjoint-vector times matrix
 LinearAlgebra.mul!(w, v', A)           # In-place
 ```
 
+### Reductions
+
+All reduction operations are **collective** - all ranks must call them.
+
+```@docs
+Base.sum(::SafePETSc.Vec)
+Base.maximum(::SafePETSc.Vec)
+Base.minimum(::SafePETSc.Vec)
+```
+
+#### Norms and Dot Products
+
+```julia
+# Vector norms
+n2 = norm(v)        # 2-norm (default)
+n1 = norm(v, 1)     # 1-norm
+ninf = norm(v, Inf) # Infinity norm
+
+# Dot product
+d = dot(v, w)       # Or: v' * w
+```
+
 ### Properties
 
 ```julia

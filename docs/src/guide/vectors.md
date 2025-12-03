@@ -99,6 +99,29 @@ x_adj = x'
 result = x' * A  # Returns adjoint vector
 ```
 
+### Reductions
+
+Compute scalar values from distributed vectors. All reduction operations are **collective** - all ranks must call them and receive the same result.
+
+```julia
+# Sum of all elements
+s = sum(v)
+
+# Maximum and minimum values
+max_val = maximum(v)
+min_val = minimum(v)
+
+# Norms
+n2 = norm(v)       # 2-norm (Euclidean), default
+n1 = norm(v, 1)    # 1-norm (sum of absolute values)
+ninf = norm(v, Inf) # Infinity norm (maximum absolute value)
+
+# Dot product
+d = dot(v, w)      # Or equivalently: v' * w
+```
+
+These operations use PETSc's efficient parallel implementations internally.
+
 ### Concatenation
 
 Vectors can be concatenated to form new vectors or matrices:

@@ -664,6 +664,46 @@ function Base.sum(v::Vec{T}) where {T}
     return result
 end
 
+"""
+    Base.maximum(v::Vec{T}) -> Real
+
+**MPI Collective**
+
+Compute the maximum element in a distributed PETSc vector.
+
+This is a collective operation - all ranks must call it and will receive the same result.
+Uses PETSc's VecMax function internally.
+
+# Example
+```julia
+v = Vec_uniform([1.0, 4.0, 2.0, 3.0])
+m = maximum(v)  # Returns 4.0 on all ranks
+```
+"""
+function Base.maximum(v::Vec{T}) where {T}
+    return _vec_max(v.obj.v)
+end
+
+"""
+    Base.minimum(v::Vec{T}) -> Real
+
+**MPI Collective**
+
+Compute the minimum element in a distributed PETSc vector.
+
+This is a collective operation - all ranks must call it and will receive the same result.
+Uses PETSc's VecMin function internally.
+
+# Example
+```julia
+v = Vec_uniform([1.0, 4.0, 2.0, 3.0])
+m = minimum(v)  # Returns 1.0 on all ranks
+```
+"""
+function Base.minimum(v::Vec{T}) where {T}
+    return _vec_min(v.obj.v)
+end
+
 # Norm of a vector: norm(v, p) (returns scalar)
 # Implements LinearAlgebra.norm to support standard Julia syntax
 """
@@ -787,6 +827,22 @@ PETSc.@for_libpetsc begin
         PETSc.@chk ccall((:VecNorm, $libpetsc), PETSc.PetscErrorCode,
                          (PETSc.CVec, PETSc.NormType, Ptr{$PetscReal}),
                          v, PETSc.NORM_INFINITY, result)
+        return result[]
+    end
+
+    function _vec_max(v::PETSc.Vec{$PetscScalar})
+        result = Ref{$PetscReal}()
+        PETSc.@chk ccall((:VecMax, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CVec, Ptr{Cvoid}, Ptr{$PetscReal}),
+                         v, C_NULL, result)
+        return result[]
+    end
+
+    function _vec_min(v::PETSc.Vec{$PetscScalar})
+        result = Ref{$PetscReal}()
+        PETSc.@chk ccall((:VecMin, $libpetsc), PETSc.PetscErrorCode,
+                         (PETSc.CVec, Ptr{Cvoid}, Ptr{$PetscReal}),
+                         v, C_NULL, result)
         return result[]
     end
 end
